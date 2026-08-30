@@ -146,6 +146,80 @@ impl Ast {
     pub fn nodes(&self) -> &[AstNode] {
         &self.nodes
     }
+
+    /// Extract the subtree rooted at `root` into a fresh standalone [`Ast`].
+    ///
+    /// Collects `root` plus every transitively-referenced descendant (via
+    /// `payload["children"]` arena indices) and reindexes them into a new
+    /// arena. Children indices in each node's payload are remapped to the
+    /// new arena. The new arena is laid out post-order (children before
+    /// parents), so `root` is the last node — matching the Pratt convention
+    /// used by the eval engines. Shared children are deduplicated (a node
+    /// is copied at most once).
+    ///
+    /// This is used by `Scheme::Vau` to bind an unevaluated child to a
+    /// self-contained [`Ast`] value that the meta `eval` host function can
+    /// evaluate (ADR-0041 §6, ADR-0045).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LangError::AstIndexOutOfBounds`] if any referenced child
+    /// index is out of bounds.
+    pub fn subtree(&self, root: AstRef) -> Result<Ast, LangError> {
+        use std::collections::HashMap;
+        // old arena index -> new arena index.
+        let mut map: HashMap<usize, usize> = HashMap::new();
+        let mut new_nodes: Vec<AstNode> = Vec::new();
+        self.subtree_into(root, &mut map, &mut new_nodes)?;
+        let mut out = Ast::new();
+        // `subtree_into` already appended in post-order; rebuild via push to
+        // keep arena indices identical to `new_nodes` positions.
+        for n in new_nodes {
+            out.push(n);
+        }
+        Ok(out)
+    }
+
+    /// Recursive post-order helper for [`subtree`](Self::subtree).
+    fn subtree_into(
+        &self,
+        root: AstRef,
+        map: &mut std::collections::HashMap<usize, usize>,
+        new_nodes: &mut Vec<AstNode>,
+    ) -> Result<(), LangError> {
+        let idx = root.index();
+        if map.contains_key(&idx) {
+            return Ok(());
+        }
+        let node = self.at(root)?;
+        // Visit children first (post-order: children appended before parent).
+        let mut child_new_indices: Vec<u64> = Vec::new();
+        if let Some(children) = node.payload.get("children").and_then(|c| c.as_array()) {
+            for child_ref in children {
+                if let Some(cidx) = child_ref.as_u64() {
+                    self.subtree_into(AstRef::new(cidx as usize), map, new_nodes)?;
+                    child_new_indices.push(*map.get(&(cidx as usize)).unwrap() as u64);
+                }
+            }
+        }
+        // Build the remapped node.
+        let mut new_payload = node.payload.clone();
+        if let Some(children) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+            for (i, new_idx) in child_new_indices.iter().enumerate() {
+                if let Some(slot) = children.get_mut(i) {
+                    *slot = Value::from(*new_idx);
+                }
+            }
+        }
+        let new_idx = new_nodes.len();
+        map.insert(idx, new_idx);
+        new_nodes.push(AstNode {
+            kind: node.kind.clone(),
+            span: node.span,
+            payload: new_payload,
+        });
+        Ok(())
+    }
 }
 
 impl std::ops::Index<AstRef> for Ast {
@@ -244,5 +318,35 @@ mod tests {
         let j = serde_json::to_string(&ast).unwrap();
         let back: Ast = serde_json::from_str(&j).unwrap();
         assert_eq!(ast, back);
+    }
+
+    #[test]
+    fn subtree_extracts_rooted_subtree() {
+        // 0: lit(2), 1: lit(3), 2: binary.add {children:[0,1]}
+        let mut ast = Ast::new();
+        ast.push(AstNode::new("lit").with_payload(Value::from(2)));
+        ast.push(AstNode::new("lit").with_payload(Value::from(3)));
+        ast.push(
+            AstNode::new("binary.add").with_payload(serde_json::json!({"children": [0, 1]})),
+        );
+        let sub = ast.subtree(AstRef::new(2)).unwrap();
+        // Root is the last node.
+        assert_eq!(sub.len(), 3);
+        assert_eq!(sub.nodes()[2].kind, "binary.add");
+        // Children indices remapped to the new arena.
+        let children = sub.nodes()[2].payload.get("children").unwrap().as_array().unwrap();
+        assert_eq!(children[0], Value::from(0));
+        assert_eq!(children[1], Value::from(1));
+        assert_eq!(sub.nodes()[0].payload, Value::from(2));
+        assert_eq!(sub.nodes()[1].payload, Value::from(3));
+    }
+
+    #[test]
+    fn subtree_single_node() {
+        let mut ast = Ast::new();
+        ast.push(AstNode::new("lit").with_payload(Value::from(42)));
+        let sub = ast.subtree(AstRef::new(0)).unwrap();
+        assert_eq!(sub.len(), 1);
+        assert_eq!(sub.nodes()[0].payload, Value::from(42));
     }
 }

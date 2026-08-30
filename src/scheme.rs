@@ -62,6 +62,26 @@ pub enum Scheme {
         /// The argument schemes.
         args: Vec<Scheme>,
     },
+    /// A vau (fexpr) scheme — the `ArrowApply` escape (ADR-0041 §6,
+    /// ADR-0045).
+    ///
+    /// Unlike every other combinator, `Vau` does **not** evaluate its
+    /// children. Instead, it binds each parameter name to the
+    /// **unevaluated** child expression (the child `AstNode` plus its
+    /// descendants, serialized as a tagged `__ast__` value — see
+    /// [`crate::ast_value`]) in a new scope, and evaluates `body` in that
+    /// extended environment. The body can call `eval(self, ast)` (the meta
+    /// `eval` host function) to evaluate a bound expression on demand, or
+    /// inspect/transform it without evaluating. This is the opt-in escape
+    /// hatch from structured compositional evaluation.
+    Vau {
+        /// The parameter names for the unevaluated child expressions.
+        /// `params[i]` is bound to the `i`-th child's unevaluated subtree.
+        params: Vec<String>,
+        /// The body: a scheme evaluated in a scope extended with the
+        /// `params` → unevaluated-child bindings.
+        body: Box<Scheme>,
+    },
 }
 
 impl Scheme {
@@ -93,6 +113,14 @@ impl Scheme {
         Scheme::Foreign {
             name: name.into(),
             args,
+        }
+    }
+
+    /// Convenience constructor for a vau (fexpr) scheme.
+    pub fn vau(params: Vec<String>, body: Scheme) -> Self {
+        Scheme::Vau {
+            params,
+            body: Box::new(body),
         }
     }
 }
@@ -172,6 +200,14 @@ mod tests {
     fn foreign_constructs_and_roundtrips() {
         let s = Scheme::foreign("print", vec![Scheme::child(0)]);
         assert_eq!(s, roundtrip(&s));
+    }
+
+    #[test]
+    fn vau_constructs_and_roundtrips() {
+        let s = Scheme::vau(vec!["a".into(), "b".into()], Scheme::lit(42));
+        assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Vau\""));
     }
 
     #[test]

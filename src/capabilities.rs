@@ -49,6 +49,9 @@ fn collect_foreign(scheme: &Scheme, out: &mut BTreeSet<String>) {
                 collect_foreign(a, out);
             }
         }
+        Scheme::Vau { body, .. } => {
+            collect_foreign(body, out);
+        }
     }
 }
 
