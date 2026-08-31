@@ -189,10 +189,7 @@ mod tests {
 
     #[test]
     fn prim_constructs_and_roundtrips() {
-        let s = Scheme::prim(
-            "add",
-            vec![Scheme::child(0), Scheme::child(1)],
-        );
+        let s = Scheme::prim("add", vec![Scheme::child(0), Scheme::child(1)]);
         assert_eq!(s, roundtrip(&s));
     }
 

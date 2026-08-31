@@ -94,8 +94,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let t = TokenKindDef::new("token.string")
-            .with_replaces(vec!["token.text".into()]);
+        let t = TokenKindDef::new("token.string").with_replaces(vec!["token.text".into()]);
         let j = serde_json::to_string(&t).unwrap();
         let back: TokenKindDef = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);
@@ -103,14 +102,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        assert_eq!(
-            TokenKindDef::new("a"),
-            TokenKindDef::new("a")
-        );
-        assert_ne!(
-            TokenKindDef::new("a"),
-            TokenKindDef::new("b")
-        );
+        assert_eq!(TokenKindDef::new("a"), TokenKindDef::new("a"));
+        assert_ne!(TokenKindDef::new("a"), TokenKindDef::new("b"));
     }
 
     #[test]
@@ -140,6 +133,9 @@ mod tests {
         set.merge(second).expect("duplicate merge is idempotent");
         assert_eq!(set.len(), 1);
         // The first declaration is kept.
-        assert_eq!(set.get_by_id("token.lparen").unwrap().label.as_deref(), Some("("));
+        assert_eq!(
+            set.get_by_id("token.lparen").unwrap().label.as_deref(),
+            Some("(")
+        );
     }
 }

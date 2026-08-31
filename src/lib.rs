@@ -41,7 +41,7 @@ pub mod version;
 
 pub use ast::{Ast, AstNode, AstRef, Span};
 pub use capabilities::{capabilities, foreign_names, subset_of};
-pub use desugar::{desugar, DesugarRule};
+pub use desugar::{DesugarRule, desugar};
 pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
@@ -51,7 +51,7 @@ pub use fragments::{
 };
 pub use language::Language;
 pub use scheme::Scheme;
-pub use staged::{eval, lex, parse, run, Source, Token, Tokens, ValueOut};
+pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use version::SchemeVersion;
 
 /// The value type used throughout the crate: a re-export of `serde_json::Value`.

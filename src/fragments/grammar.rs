@@ -271,12 +271,7 @@ mod tests {
         let back: GrammarRow = serde_json::from_str(&j).unwrap();
         assert_eq!(row, back);
         assert!(j.contains("\"delimited\""));
-        let plain = GrammarRow::new(
-            "g",
-            "t",
-            GrammarPosition::Infix,
-            AstShapeRef::new("k", 1),
-        );
+        let plain = GrammarRow::new("g", "t", GrammarPosition::Infix, AstShapeRef::new("k", 1));
         let pj = serde_json::to_string(&plain).unwrap();
         assert!(!pj.contains("delimited"));
     }

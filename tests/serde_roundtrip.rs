@@ -2,14 +2,16 @@
 //! deserializes to an equal `Language`.
 
 use handl_language::{
-    AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow,
-    Language, Scheme, SchemeVersion, TokenKindDef,
+    AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow, Language,
+    Scheme, SchemeVersion, TokenKindDef,
 };
 use serde_json::Value;
 
 fn nontrivial_language() -> Language {
     let mut lang = Language::new();
-    lang.tokens.merge(TokenKindDef::new("token.num").with_label("number")).unwrap();
+    lang.tokens
+        .merge(TokenKindDef::new("token.num").with_label("number"))
+        .unwrap();
     lang.tokens.merge(TokenKindDef::new("token.plus")).unwrap();
     lang.grammar
         .merge(
@@ -45,7 +47,9 @@ fn nontrivial_language() -> Language {
             Scheme::foreign("fs.read", vec![Scheme::child(0)]),
         ))
         .unwrap();
-    lang.caps.merge(CapabilityDecl::new("net.connect").with_description("network")).unwrap();
+    lang.caps
+        .merge(CapabilityDecl::new("net.connect").with_description("network"))
+        .unwrap();
     lang
 }
 

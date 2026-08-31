@@ -152,9 +152,7 @@ mod tests {
         let r = LexerRuleDef::new(
             "lex.plus",
             "token.plus",
-            LexerPattern::Literal {
-                text: "+".into(),
-            },
+            LexerPattern::Literal { text: "+".into() },
             20,
         );
         assert_eq!(r.id(), "lex.plus");
@@ -207,9 +205,7 @@ mod tests {
         let r = LexerRuleDef::new(
             "lex.eqeq",
             "token.eqeq",
-            LexerPattern::Literal {
-                text: "==".into(),
-            },
+            LexerPattern::Literal { text: "==".into() },
             10,
         )
         .with_replaces(vec!["lex.eq".into()])
@@ -267,12 +263,18 @@ mod tests {
     #[test]
     fn merge_same_id_is_idempotent() {
         let mut set: FragmentSet<LexerRuleDef> = FragmentSet::new();
-        let first = LexerRuleDef::new("lex.plus", "token.plus", LexerPattern::Literal {
-            text: "+".into(),
-        }, 20);
-        let second = LexerRuleDef::new("lex.plus", "token.plus", LexerPattern::Literal {
-            text: "+".into(),
-        }, 99);
+        let first = LexerRuleDef::new(
+            "lex.plus",
+            "token.plus",
+            LexerPattern::Literal { text: "+".into() },
+            20,
+        );
+        let second = LexerRuleDef::new(
+            "lex.plus",
+            "token.plus",
+            LexerPattern::Literal { text: "+".into() },
+            99,
+        );
         set.merge(first.clone()).expect("first merge ok");
         // Merging a second declaration with the same id is a no-op (union),
         // NOT a collision.
@@ -290,15 +292,21 @@ mod tests {
         set.merge(LexerRuleDef::new(
             "lex.bool.true",
             "token.bool",
-            LexerPattern::Literal { text: "true".into() },
+            LexerPattern::Literal {
+                text: "true".into(),
+            },
             15,
-        )).unwrap();
+        ))
+        .unwrap();
         set.merge(LexerRuleDef::new(
             "lex.bool.false",
             "token.bool",
-            LexerPattern::Literal { text: "false".into() },
+            LexerPattern::Literal {
+                text: "false".into(),
+            },
             15,
-        )).unwrap();
+        ))
+        .unwrap();
         assert_eq!(set.len(), 2);
     }
 }

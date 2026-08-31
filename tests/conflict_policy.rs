@@ -15,9 +15,11 @@ fn token_duplicate_same_id_is_idempotent() {
     // facts ("this token exists"), so merging a duplicate is a no-op, not a
     // collision.
     let mut set: FragmentSet<TokenKindDef> = FragmentSet::new();
-    set.merge(TokenKindDef::new("token.num").with_label("first")).unwrap();
+    set.merge(TokenKindDef::new("token.num").with_label("first"))
+        .unwrap();
     // Same id, different content → idempotent (first wins), NOT a collision.
-    set.merge(TokenKindDef::new("token.num").with_label("other")).unwrap();
+    set.merge(TokenKindDef::new("token.num").with_label("other"))
+        .unwrap();
     assert_eq!(set.len(), 1);
     assert_eq!(
         set.get_by_id("token.num").unwrap().label.as_deref(),
@@ -113,10 +115,18 @@ fn grammar_override_succeeds() {
 #[test]
 fn eval_collision_same_node_kind_errors() {
     let mut set: FragmentSet<EvalSchemeDef> = FragmentSet::new();
-    set.merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
-        .unwrap();
+    set.merge(EvalSchemeDef::new(
+        "e1",
+        "binary.add",
+        Scheme::lit(Value::Null),
+    ))
+    .unwrap();
     let err = set
-        .merge(EvalSchemeDef::new("e2", "binary.add", Scheme::lit(Value::Null)))
+        .merge(EvalSchemeDef::new(
+            "e2",
+            "binary.add",
+            Scheme::lit(Value::Null),
+        ))
         .unwrap_err();
     assert_eq!(
         err,
@@ -130,8 +140,12 @@ fn eval_collision_same_node_kind_errors() {
 #[test]
 fn eval_override_succeeds() {
     let mut set: FragmentSet<EvalSchemeDef> = FragmentSet::new();
-    set.merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
-        .unwrap();
+    set.merge(EvalSchemeDef::new(
+        "e1",
+        "binary.add",
+        Scheme::lit(Value::Null),
+    ))
+    .unwrap();
     set.merge(
         EvalSchemeDef::new("e2", "binary.add", Scheme::lit(Value::from(1)))
             .with_replaces(vec!["e1".into()]),
@@ -225,10 +239,7 @@ fn option_override_succeeds() {
 fn requires_absent_errors_negative() {
     let mut set: FragmentSet<TokenKindDef> = FragmentSet::new();
     let err = set
-        .merge(
-            TokenKindDef::new("token.call")
-                .with_requires(vec!["token.lparen".into()]),
-        )
+        .merge(TokenKindDef::new("token.call").with_requires(vec!["token.lparen".into()]))
         .unwrap_err();
     assert_eq!(
         err,
@@ -242,11 +253,8 @@ fn requires_absent_errors_negative() {
 fn requires_present_positive() {
     let mut set: FragmentSet<TokenKindDef> = FragmentSet::new();
     set.merge(TokenKindDef::new("token.lparen")).unwrap();
-    set.merge(
-        TokenKindDef::new("token.call")
-            .with_requires(vec!["token.lparen".into()]),
-    )
-    .unwrap();
+    set.merge(TokenKindDef::new("token.call").with_requires(vec!["token.lparen".into()]))
+        .unwrap();
     assert_eq!(set.len(), 2);
 }
 
@@ -275,6 +283,8 @@ fn unknown_replace_errors() {
         .unwrap_err();
     assert_eq!(
         err,
-        LangError::UnknownReplace { missing: "ghost".into() }
+        LangError::UnknownReplace {
+            missing: "ghost".into()
+        }
     );
 }

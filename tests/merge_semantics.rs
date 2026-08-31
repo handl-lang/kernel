@@ -5,8 +5,8 @@
 //! asserts the resulting `Language` matches expectations.
 
 use handl_language::{
-    capabilities, AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet,
-    GrammarPosition, GrammarRow, Language, Scheme, SchemeVersion, TokenKindDef,
+    AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
+    GrammarRow, Language, Scheme, SchemeVersion, TokenKindDef, capabilities,
 };
 use serde_json::Value;
 
@@ -28,7 +28,9 @@ fn add_lang() -> Language {
         )
         .unwrap();
     // AST shape for binary.add.
-    lang.ast.merge(AstShapeDef::new("ast.binary.add", "binary.add")).unwrap();
+    lang.ast
+        .merge(AstShapeDef::new("ast.binary.add", "binary.add"))
+        .unwrap();
     // Eval scheme for binary.add.
     lang.eval
         .merge(EvalSchemeDef::new(
@@ -112,13 +114,17 @@ fn five_fragments_with_overrides_and_excludes() {
 
     // The override chain recorded the grammar and eval overrides.
     let grammar_chain = lang.grammar.override_chain();
-    assert!(grammar_chain
-        .iter()
-        .any(|(n, r)| n == "grammar.add.infix.v2" && r == "grammar.add.infix"));
+    assert!(
+        grammar_chain
+            .iter()
+            .any(|(n, r)| n == "grammar.add.infix.v2" && r == "grammar.add.infix")
+    );
     let eval_chain = lang.eval.override_chain();
-    assert!(eval_chain
-        .iter()
-        .any(|(n, r)| n == "eval.binary.add.v2" && r == "eval.binary.add"));
+    assert!(
+        eval_chain
+            .iter()
+            .any(|(n, r)| n == "eval.binary.add.v2" && r == "eval.binary.add")
+    );
 
     // The overridden grammar row is gone; the new one is present.
     assert!(lang.grammar.get_by_id("grammar.add.infix").is_none());

@@ -126,12 +126,7 @@ impl<T: Fragment> FragmentSet<T> {
 
     /// Compute the ids from `requires` that would be missing after merging
     /// `id` (with the given `replaces`).
-    fn missing_requires(
-        &self,
-        id: &str,
-        replaces: &[String],
-        requires: &[String],
-    ) -> Vec<String> {
+    fn missing_requires(&self, id: &str, replaces: &[String], requires: &[String]) -> Vec<String> {
         let mut post_ids: BTreeSet<String> = self.id_index.keys().cloned().collect();
         for rid in replaces {
             post_ids.remove(rid);
@@ -158,8 +153,7 @@ impl<T: Fragment> FragmentSet<T> {
             .extend(replaces.iter().cloned());
 
         let mut visited: BTreeSet<String> = BTreeSet::new();
-        let mut stack: Vec<(String, Vec<String>)> =
-            vec![(id.to_string(), vec![id.to_string()])];
+        let mut stack: Vec<(String, Vec<String>)> = vec![(id.to_string(), vec![id.to_string()])];
         while let Some((node, path)) = stack.pop() {
             if let Some(neighbors) = adj.get(&node) {
                 for n in neighbors {
@@ -181,9 +175,7 @@ impl<T: Fragment> FragmentSet<T> {
 
     /// Look up a fragment by its `id`.
     pub fn get_by_id(&self, id: &str) -> Option<&T> {
-        self.id_index
-            .get(id)
-            .and_then(|key| self.by_key.get(key))
+        self.id_index.get(id).and_then(|key| self.by_key.get(key))
     }
 
     /// Look up a fragment by its **identity key** (see ADR-0044 §5).
@@ -229,9 +221,9 @@ impl<T: Fragment> FragmentSet<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{CapabilityDecl, EvalSchemeDef, GrammarRow, OptionSchema, TokenKindDef};
     use crate::scheme::Scheme;
-    use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use serde_json::Value;
 
     #[test]
@@ -269,15 +261,15 @@ mod tests {
     fn declared_override_records_chain() {
         let mut set: FragmentSet<TokenKindDef> = FragmentSet::new();
         set.merge(TokenKindDef::new("token.num")).unwrap();
-        set.merge(
-            TokenKindDef::new("token.num2")
-                .with_replaces(vec!["token.num".into()]),
-        )
-        .unwrap();
+        set.merge(TokenKindDef::new("token.num2").with_replaces(vec!["token.num".into()]))
+            .unwrap();
         assert_eq!(set.len(), 1);
         assert!(set.get_by_id("token.num").is_none());
         assert!(set.get_by_id("token.num2").is_some());
-        assert_eq!(set.override_chain(), &[("token.num2".into(), "token.num".into())]);
+        assert_eq!(
+            set.override_chain(),
+            &[("token.num2".into(), "token.num".into())]
+        );
     }
 
     #[test]
@@ -287,7 +279,8 @@ mod tests {
         // and AstShapeDef are now union types, so they can't demonstrate the
         // collision path.)
         let mut set: FragmentSet<EvalSchemeDef> = FragmentSet::new();
-        set.merge(EvalSchemeDef::new("eval.x", "x", Scheme::child(0))).unwrap();
+        set.merge(EvalSchemeDef::new("eval.x", "x", Scheme::child(0)))
+            .unwrap();
         // Same identity key (node_kind "x"), different id/content → collision.
         let err = set
             .merge(EvalSchemeDef::new("eval.x2", "x", Scheme::child(1)))
@@ -310,7 +303,12 @@ mod tests {
         let err = set
             .merge(TokenKindDef::new("a").with_replaces(vec!["ghost".into()]))
             .unwrap_err();
-        assert_eq!(err, LangError::UnknownReplace { missing: "ghost".into() });
+        assert_eq!(
+            err,
+            LangError::UnknownReplace {
+                missing: "ghost".into()
+            }
+        );
     }
 
     #[test]
@@ -358,10 +356,7 @@ mod tests {
         set.merge(CapabilityDecl::new("fs.read")).unwrap();
         // Same id (union, occupied) but incoming requires an absent id.
         let err = set
-            .merge(
-                CapabilityDecl::new("fs.read")
-                    .with_requires(vec!["fs.open".into()]),
-            )
+            .merge(CapabilityDecl::new("fs.read").with_requires(vec!["fs.open".into()]))
             .unwrap_err();
         assert_eq!(
             err,
@@ -429,10 +424,18 @@ mod tests {
     #[test]
     fn eval_scheme_identity_key_is_node_kind() {
         let mut set: FragmentSet<EvalSchemeDef> = FragmentSet::new();
-        set.merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
-            .unwrap();
+        set.merge(EvalSchemeDef::new(
+            "e1",
+            "binary.add",
+            Scheme::lit(Value::Null),
+        ))
+        .unwrap();
         let err = set
-            .merge(EvalSchemeDef::new("e2", "binary.add", Scheme::lit(Value::Null)))
+            .merge(EvalSchemeDef::new(
+                "e2",
+                "binary.add",
+                Scheme::lit(Value::Null),
+            ))
             .unwrap_err();
         assert_eq!(
             err,
@@ -463,10 +466,7 @@ mod tests {
     fn requires_absent_errors() {
         let mut set: FragmentSet<TokenKindDef> = FragmentSet::new();
         let err = set
-            .merge(
-                TokenKindDef::new("token.call")
-                    .with_requires(vec!["token.lparen".into()]),
-            )
+            .merge(TokenKindDef::new("token.call").with_requires(vec!["token.lparen".into()]))
             .unwrap_err();
         assert_eq!(
             err,
@@ -565,8 +565,12 @@ mod tests {
     #[test]
     fn get_by_identity_resolves_identity_key() {
         let mut set: FragmentSet<EvalSchemeDef> = FragmentSet::new();
-        set.merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
-            .unwrap();
+        set.merge(EvalSchemeDef::new(
+            "e1",
+            "binary.add",
+            Scheme::lit(Value::Null),
+        ))
+        .unwrap();
         // Identity key for EvalSchemeDef is node_kind, not id.
         assert!(set.get_by_identity("binary.add").is_some());
         assert!(set.get_by_identity("e1").is_none());

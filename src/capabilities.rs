@@ -128,9 +128,7 @@ mod tests {
                 Scheme::foreign("fs.read", vec![Scheme::child(0)]),
             ))
             .unwrap();
-        lang.caps
-            .merge(CapabilityDecl::new("net.connect"))
-            .unwrap();
+        lang.caps.merge(CapabilityDecl::new("net.connect")).unwrap();
         let caps = capabilities(&lang);
         assert!(caps.contains("fs.read"));
         assert!(caps.contains("net.connect"));

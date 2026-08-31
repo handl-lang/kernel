@@ -141,12 +141,10 @@ mod tests {
     fn merge_same_node_kind_is_idempotent() {
         use crate::FragmentSet;
         let mut set: FragmentSet<AstShapeDef> = FragmentSet::new();
-        let first =
-            AstShapeDef::new("ast.binary.add", "binary.add")
-                .with_payload_schema(serde_json::json!({"first": true}));
-        let second =
-            AstShapeDef::new("ast.binary.add.dup", "binary.add")
-                .with_payload_schema(serde_json::json!({"first": false}));
+        let first = AstShapeDef::new("ast.binary.add", "binary.add")
+            .with_payload_schema(serde_json::json!({"first": true}));
+        let second = AstShapeDef::new("ast.binary.add.dup", "binary.add")
+            .with_payload_schema(serde_json::json!({"first": false}));
         set.merge(first.clone()).expect("first merge ok");
         // Merging a second shape for the same node_kind is a no-op (union),
         // NOT a collision — even though the ids differ.

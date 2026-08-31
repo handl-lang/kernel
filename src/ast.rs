@@ -204,7 +204,10 @@ impl Ast {
         }
         // Build the remapped node.
         let mut new_payload = node.payload.clone();
-        if let Some(children) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+        if let Some(children) = new_payload
+            .get_mut("children")
+            .and_then(|c| c.as_array_mut())
+        {
             for (i, new_idx) in child_new_indices.iter().enumerate() {
                 if let Some(slot) = children.get_mut(i) {
                     *slot = Value::from(*new_idx);
@@ -326,15 +329,18 @@ mod tests {
         let mut ast = Ast::new();
         ast.push(AstNode::new("lit").with_payload(Value::from(2)));
         ast.push(AstNode::new("lit").with_payload(Value::from(3)));
-        ast.push(
-            AstNode::new("binary.add").with_payload(serde_json::json!({"children": [0, 1]})),
-        );
+        ast.push(AstNode::new("binary.add").with_payload(serde_json::json!({"children": [0, 1]})));
         let sub = ast.subtree(AstRef::new(2)).unwrap();
         // Root is the last node.
         assert_eq!(sub.len(), 3);
         assert_eq!(sub.nodes()[2].kind, "binary.add");
         // Children indices remapped to the new arena.
-        let children = sub.nodes()[2].payload.get("children").unwrap().as_array().unwrap();
+        let children = sub.nodes()[2]
+            .payload
+            .get("children")
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert_eq!(children[0], Value::from(0));
         assert_eq!(children[1], Value::from(1));
         assert_eq!(sub.nodes()[0].payload, Value::from(2));

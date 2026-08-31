@@ -115,7 +115,9 @@ mod tests {
         assert_eq!(
             format!(
                 "{}",
-                LangError::UnknownReplace { missing: "x".into() }
+                LangError::UnknownReplace {
+                    missing: "x".into()
+                }
             ),
             "unknown replace target: x"
         );
@@ -138,10 +140,7 @@ mod tests {
             "cyclic replace chain: [\"a\", \"b\", \"a\"]"
         );
         assert_eq!(
-            format!(
-                "{}",
-                LangError::AstIndexOutOfBounds { index: 5 }
-            ),
+            format!("{}", LangError::AstIndexOutOfBounds { index: 5 }),
             "ast index out of bounds: 5"
         );
         assert_eq!(
@@ -153,10 +152,7 @@ mod tests {
             "engine error: nope"
         );
         assert_eq!(
-            format!(
-                "{}",
-                LangError::UnknownVariable { name: "x".into() }
-            ),
+            format!("{}", LangError::UnknownVariable { name: "x".into() }),
             "unknown variable: x"
         );
         assert_eq!(

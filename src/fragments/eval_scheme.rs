@@ -93,11 +93,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let def = EvalSchemeDef::new(
-            "eval.lit",
-            "lit",
-            Scheme::Lit(Value::from(42)),
-        );
+        let def = EvalSchemeDef::new("eval.lit", "lit", Scheme::Lit(Value::from(42)));
         let j = serde_json::to_string(&def).unwrap();
         let back: EvalSchemeDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);

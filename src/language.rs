@@ -126,7 +126,8 @@ mod tests {
         let mut base = Language::new();
         let mut other = Language::new();
         other.tokens.merge(TokenKindDef::new("token.num")).unwrap();
-        other.grammar
+        other
+            .grammar
             .merge(GrammarRow::new(
                 "g1",
                 "token.plus",
@@ -134,10 +135,18 @@ mod tests {
                 AstShapeRef::new("binary.add", 2),
             ))
             .unwrap();
-        other.eval
-            .merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
+        other
+            .eval
+            .merge(EvalSchemeDef::new(
+                "e1",
+                "binary.add",
+                Scheme::lit(Value::Null),
+            ))
             .unwrap();
-        other.ast.merge(AstShapeDef::new("a1", "binary.add")).unwrap();
+        other
+            .ast
+            .merge(AstShapeDef::new("a1", "binary.add"))
+            .unwrap();
         other.caps.merge(CapabilityDecl::new("fs.read")).unwrap();
         other.options.merge(OptionSchema::new("opt.x")).unwrap();
         base.merge(other).unwrap();
@@ -158,12 +167,21 @@ mod tests {
         // This token merges fine.
         other.tokens.merge(TokenKindDef::new("token.str")).unwrap();
         // This eval collides: base already has "binary.add".
-        other.eval
-            .merge(EvalSchemeDef::new("e1", "binary.add", Scheme::lit(Value::Null)))
+        other
+            .eval
+            .merge(EvalSchemeDef::new(
+                "e1",
+                "binary.add",
+                Scheme::lit(Value::Null),
+            ))
             .unwrap();
         // Set up the base to collide on the eval set.
         base.eval
-            .merge(EvalSchemeDef::new("e0", "binary.add", Scheme::lit(Value::Null)))
+            .merge(EvalSchemeDef::new(
+                "e0",
+                "binary.add",
+                Scheme::lit(Value::Null),
+            ))
             .unwrap();
         let snapshot = base.clone();
 
