@@ -55,6 +55,13 @@ pub enum LexerPattern {
         /// blocks). Used for line comments where close is `\n` but EOF also
         /// terminates.
         close_at_eof: bool,
+        /// When set, the scanner tracks nesting depth: each occurrence of
+        /// this string increments the depth, and the `close` delimiter only
+        /// terminates the block when depth returns to zero. Used for
+        /// brace-balanced blocks like `json{...}` where inner `{` / `}`
+        /// pairs must not prematurely close the token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        nesting_open: Option<String>,
     },
 }
 
@@ -188,6 +195,7 @@ mod tests {
                 escape: true,
                 interpolation: false,
                 close_at_eof: false,
+                nesting_open: None,
             },
             40,
         );
@@ -222,6 +230,7 @@ mod tests {
                 escape: false,
                 interpolation: false,
                 close_at_eof: true,
+                nesting_open: None,
             },
             5,
         );
