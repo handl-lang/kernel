@@ -1,4 +1,4 @@
-//! Eval scheme fragment definitions.
+//! Eval scheme fragment definitions (arrow-calculus kernel, ADR-0052).
 
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,9 @@ use crate::fragment::Fragment;
 use crate::scheme::Scheme;
 
 /// A mapping from an AST node kind to its evaluation [`Scheme`].
+///
+/// Holds an arrow-calculus [`Scheme`] (the six arrow primitives). Used by
+/// engines that consume schemes directly.
 ///
 /// Identity key: `node_kind` (see ADR-0044 §5). Collision without `replaces`
 /// is an error.
@@ -68,8 +71,6 @@ impl Fragment for EvalSchemeDef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstRef;
-    use crate::scheme::Scheme;
     use serde_json::Value;
 
     #[test]
@@ -77,10 +78,13 @@ mod tests {
         let def = EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::Prim {
-                op: "add".into(),
-                args: vec![Scheme::Child(AstRef::new(0)), Scheme::Child(AstRef::new(1))],
-            },
+            Scheme::arr_native(
+                "add",
+                vec![
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                ],
+            ),
         )
         .with_replaces(vec!["eval.add.old".into()])
         .with_requires(vec!["token.plus".into()]);
@@ -93,7 +97,11 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let def = EvalSchemeDef::new("eval.lit", "lit", Scheme::Lit(Value::from(42)));
+        let def = EvalSchemeDef::new(
+            "eval.lit",
+            "lit",
+            Scheme::arr_native_lit("const", vec![], Value::from(42)),
+        );
         let j = serde_json::to_string(&def).unwrap();
         let back: EvalSchemeDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);
@@ -101,8 +109,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        let a = EvalSchemeDef::new("a", "k", Scheme::Lit(Value::Null));
-        let b = EvalSchemeDef::new("a", "k", Scheme::Lit(Value::Null));
+        let a = EvalSchemeDef::new("a", "k", Scheme::arr_native("id", vec![]));
+        let b = EvalSchemeDef::new("a", "k", Scheme::arr_native("id", vec![]));
         assert_eq!(a, b);
     }
 }

@@ -1,126 +1,216 @@
-//! The `Scheme` combinator set — the eval equivalent of grammar rows.
+//! The arrow-calculus `Scheme` kernel (ADR-0052).
 //!
-//! A `Scheme` is an engine-agnostic description of *what* to evaluate for a
-//! given AST node kind, not *how*. Engines (tree-walk, bytecode, cranelift)
-//! interpret schemes; the scheme itself is pure data. The combinator set is
-//! deliberately small (8 variants, see ADR-0044 §4): surface constructs are
-//! expressed as [`DesugarRule`]s, not new variants.
+//! `Scheme` is the arrow-calculus evaluation kernel: the six arrow
+//! primitives — `arr`, `>>>` (`Seq`), `first`, `Choice`, `Loop`, and `app`
+//! — plus an `ArrSource` discipline on `arr` that keeps the capability
+//! boundary structural. A `Scheme` is an engine-agnostic description of
+//! *what* to evaluate for a given AST node kind, not *how*. Engines
+//! (tree-walk, bytecode, cranelift) interpret schemes; the scheme itself is
+//! pure data. Surface constructs are expressed as [`DesugarRule`]s, not new
+//! variants.
 //!
 //! `Value` here is [`serde_json::Value`] — no new value type is invented.
+//!
+//! # The `lit` payload
+//!
+//! `Arr::args` is `Vec<Scheme>` — a literal value is not a sub-scheme. Literal
+//! operands (the value of a `const`, the name of a `proj_env`, the index of a
+//! `proj_child`) ride on `Arr`'s optional `lit: Option<Value>` payload, while
+//! `args` stays a pure list of sub-schemes. The field serializes only when
+//! present (`skip_serializing_if = "Option::is_none"`, `default`), so
+//! foreign/prim arrows without a literal payload round-trip cleanly.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ast::AstRef;
-
-/// A semantic combinator describing how to evaluate a node kind.
+/// The arrow-calculus kernel: six primitives as data (ADR-0052).
+///
+/// Mirrors the ADR-0052 §"Kernel representation" enum. Arrows are
+/// first-class computational descriptions; handlers provide
+/// interpretations of those descriptions. Every variant *constructs* a
+/// new arrow description; none *execute*.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Scheme {
-    /// A literal value.
-    Lit(Value),
-    /// A variable reference by name.
-    Var(String),
-    /// Evaluate the child at the given arena index.
-    Child(AstRef),
-    /// Bind a name to a value within a body.
-    Bind {
-        /// The name to bind.
-        name: String,
-        /// The value to bind.
-        value: Box<Scheme>,
-        /// The body evaluated in the extended scope.
-        body: Box<Scheme>,
-    },
-    /// Apply a callee to arguments.
-    App {
-        /// The function/callee scheme.
-        callee: Box<Scheme>,
-        /// The argument schemes.
-        args: Vec<Scheme>,
-    },
-    /// Conditional branching.
-    Branch {
-        /// The condition.
-        cond: Box<Scheme>,
-        /// The then-branch.
-        #[serde(rename = "then")]
-        then_: Box<Scheme>,
-        /// The else-branch.
-        else_: Box<Scheme>,
-    },
-    /// A primitive operation.
-    Prim {
-        /// The primitive operator name (e.g. `"add"`).
-        op: String,
-        /// The argument schemes.
-        args: Vec<Scheme>,
-    },
-    /// A foreign (host) function call — capability-tracked.
-    Foreign {
-        /// The registered host function name.
-        name: String,
-        /// The argument schemes.
-        args: Vec<Scheme>,
-    },
-    /// A vau (fexpr) scheme — the `ArrowApply` escape (ADR-0041 §6,
-    /// ADR-0045).
+    /// `arr f` — lift a named pure function over the arrow's input.
     ///
-    /// Unlike every other combinator, `Vau` does **not** evaluate its
-    /// children. Instead, it binds each parameter name to the
-    /// **unevaluated** child expression (the child `AstNode` plus its
-    /// descendants, serialized as a tagged `__ast__` value — see
-    /// [`crate::ast_value`]) in a new scope, and evaluates `body` in that
-    /// extended environment. The body can call `eval(self, ast)` (the meta
-    /// `eval` host function) to evaluate a bound expression on demand, or
-    /// inspect/transform it without evaluating. This is the opt-in escape
-    /// hatch from structured compositional evaluation.
-    Vau {
-        /// The parameter names for the unevaluated child expressions.
-        /// `params[i]` is bound to the `i`-th child's unevaluated subtree.
-        params: Vec<String>,
-        /// The body: a scheme evaluated in a scope extended with the
-        /// `params` → unevaluated-child bindings.
+    /// Sub-schemes feed the function's arguments. Replaces the former v1
+    /// `Lit`, `Var`, `Child`, `Prim`, `Foreign`. `arr` describes a pure
+    /// step; interpretation is the handler's job. The `lit` payload
+    /// carries an inline literal operand for ops like `const` (the
+    /// value), `proj_env` (the name string), and `proj_child` (the index
+    /// number); it is `None` for ordinary pure/foreign ops whose operands
+    /// are sub-schemes.
+    Arr {
+        /// The operator name (e.g. `"add"`, `"const"`, `"proj_env"`).
+        op: String,
+        /// The argument sub-schemes feeding the op.
+        args: Vec<Scheme>,
+        /// Whether this is a native pure op or a foreign (host) call.
+        source: ArrSource,
+        /// An inline literal operand for ops that take a literal value
+        /// rather than a sub-scheme (`const`, `proj_env`, `proj_child`).
+        /// `None` for ordinary ops. Literal operands ride here so `args`
+        /// stays a pure list of sub-schemes.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        lit: Option<Value>,
+    },
+
+    /// `>>>` — sequential composition.
+    ///
+    /// Constructs a new arrow whose output of `fst` feeds `snd`. This
+    /// *composes* arrows; it does **not execute** them. The composed
+    /// arrow is a description; a handler interprets it.
+    Seq {
+        /// The first arrow; its output feeds `snd`.
+        fst: Box<Scheme>,
+        /// The second arrow; fed by `fst`'s output.
+        snd: Box<Scheme>,
+    },
+
+    /// `first` — fan-out: run `inner` on the first component of a pair,
+    /// carry the second component through unchanged.
+    ///
+    /// Constructs a new arrow; does not execute.
+    First {
+        /// The arrow to run on the first component.
+        inner: Box<Scheme>,
+    },
+
+    /// `ArrowChoice` — route on `Either`: `l` handles `Left`, `r` handles
+    /// `Right`.
+    ///
+    /// Constructs a routing arrow; does not execute.
+    Choice {
+        /// The arrow handling the `Left` case.
+        l: Box<Scheme>,
+        /// The arrow handling the `Right` case.
+        r: Box<Scheme>,
+    },
+
+    /// `ArrowLoop` — feedback (NOT iteration).
+    ///
+    /// `body` has shape `(In, State) ~> (Out, State)`; `Loop` hides
+    /// `State` in a feedback channel, exposing `In ~> Out`. Recursion,
+    /// `while`, `for`, state machines are derived patterns over `Loop`
+    /// + `Choice`. The feedback semantics (causal/strict vs
+    /// lazy/fixpoint) are specified separately — `Loop` in the kernel is
+    /// the *description* of a feedback channel; the interpretation
+    /// strategy is the handler's concern.
+    Loop {
+        /// The feedback body: `(In, State) ~> (Out, State)`.
         body: Box<Scheme>,
+    },
+
+    /// `app` / `ArrowApply` — dynamic/higher-order arrow application.
+    ///
+    /// Given `f : A ~> B` and `x : A`, `app(f, x)` invokes `f` on `x`.
+    /// Required for higher-order arrows (an arrow received as runtime
+    /// data). Distinct from external interpretation: `app` is a calculus
+    /// operation *within* an arrow; `handle H program` interprets an
+    /// entire arrow from outside.
+    App {
+        /// The callee arrow.
+        callee: Box<Scheme>,
+        /// The argument arrows.
+        args: Vec<Scheme>,
     },
 }
 
+/// Whether an `Arr` op is a native pure function or a foreign host call.
+///
+/// `Foreign(name)` keeps the capability boundary structural: the
+/// typechecker and load-time capability audit match on `source`, not on
+/// a string prefix.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ArrSource {
+    /// A native pure op (`add`, `proj_env`, `const`, `id`, …).
+    Native,
+    /// A foreign (host) function call — capability-tracked. The `name` is
+    /// the registered host-function name (e.g. `"fs.read"`).
+    Foreign(String),
+}
+
 impl Scheme {
-    /// Convenience constructor for a literal.
-    pub fn lit(value: impl Into<Value>) -> Self {
-        Scheme::Lit(value.into())
-    }
-
-    /// Convenience constructor for a variable.
-    pub fn var(name: impl Into<String>) -> Self {
-        Scheme::Var(name.into())
-    }
-
-    /// Convenience constructor for a child reference.
-    pub fn child(idx: usize) -> Self {
-        Scheme::Child(AstRef::new(idx))
-    }
-
-    /// Convenience constructor for a primitive.
-    pub fn prim(op: impl Into<String>, args: Vec<Scheme>) -> Self {
-        Scheme::Prim {
+    /// Convenience constructor for a native `arr` with no literal payload.
+    pub fn arr_native(op: impl Into<String>, args: Vec<Scheme>) -> Self {
+        Scheme::Arr {
             op: op.into(),
             args,
+            source: ArrSource::Native,
+            lit: None,
         }
     }
 
-    /// Convenience constructor for a foreign call.
-    pub fn foreign(name: impl Into<String>, args: Vec<Scheme>) -> Self {
-        Scheme::Foreign {
-            name: name.into(),
+    /// Convenience constructor for a foreign `arr`.
+    ///
+    /// The host function `name` is used both as the op and as the
+    /// `Foreign(name)` source, matching ADR-0052's lowering of
+    /// `Foreign { name, args }`.
+    pub fn arr_foreign(name: impl Into<String>, args: Vec<Scheme>) -> Self {
+        let name = name.into();
+        Scheme::Arr {
+            op: name.clone(),
             args,
+            source: ArrSource::Foreign(name),
+            lit: None,
         }
     }
 
-    /// Convenience constructor for a vau (fexpr) scheme.
-    pub fn vau(params: Vec<String>, body: Scheme) -> Self {
-        Scheme::Vau {
-            params,
+    /// Convenience constructor for a native `arr` carrying a literal
+    /// payload (e.g. `const`, `proj_env`, `proj_child`).
+    pub fn arr_native_lit(
+        op: impl Into<String>,
+        args: Vec<Scheme>,
+        lit: impl Into<Value>,
+    ) -> Self {
+        Scheme::Arr {
+            op: op.into(),
+            args,
+            source: ArrSource::Native,
+            lit: Some(lit.into()),
+        }
+    }
+
+    /// Convenience constructor for `>>>` (sequential composition).
+    pub fn seq(fst: Scheme, snd: Scheme) -> Self {
+        Scheme::Seq {
+            fst: Box::new(fst),
+            snd: Box::new(snd),
+        }
+    }
+
+    /// Convenience constructor for `first` (fan-out on the first
+    /// component of a pair).
+    pub fn first(inner: Scheme) -> Self {
+        Scheme::First {
+            inner: Box::new(inner),
+        }
+    }
+
+    /// Convenience constructor for `ArrowChoice` routing.
+    pub fn choice(l: Scheme, r: Scheme) -> Self {
+        Scheme::Choice {
+            l: Box::new(l),
+            r: Box::new(r),
+        }
+    }
+
+    /// Convenience constructor for `ArrowLoop` feedback.
+    ///
+    /// Named `loop_feedback` rather than `loop` (a reserved word) to keep
+    /// the constructor name clear and non-raw.
+    pub fn loop_feedback(body: Scheme) -> Self {
+        Scheme::Loop {
             body: Box::new(body),
+        }
+    }
+
+    /// Convenience constructor for `app` / `ArrowApply` (dynamic
+    /// higher-order arrow application).
+    pub fn app(callee: Scheme, args: Vec<Scheme>) -> Self {
+        Scheme::App {
+            callee: Box::new(callee),
+            args,
         }
     }
 }
@@ -128,6 +218,7 @@ impl Scheme {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     fn roundtrip(s: &Scheme) -> Scheme {
         let j = serde_json::to_string(s).unwrap();
@@ -135,94 +226,120 @@ mod tests {
     }
 
     #[test]
-    fn lit_constructs_and_roundtrips() {
-        let s = Scheme::lit(42);
+    fn arr_native_constructs_and_roundtrips() {
+        let s = Scheme::arr_native("add", vec![Scheme::arr_native_lit("proj_child", vec![], 0)]);
         assert_eq!(s, roundtrip(&s));
-        assert_eq!(s, Scheme::Lit(Value::from(42)));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Arr\""));
+        assert!(j.contains("\"Native\""));
+        // The outer arr has no lit; the inner proj_child does.
+        match s {
+            Scheme::Arr { lit, .. } => assert_eq!(lit, None),
+            other => panic!("expected Arr, got {other:?}"),
+        }
     }
 
     #[test]
-    fn var_constructs_and_roundtrips() {
-        let s = Scheme::var("x");
+    fn arr_foreign_constructs_and_roundtrips() {
+        let s = Scheme::arr_foreign("fs.read", vec![Scheme::arr_native_lit("proj_child", vec![], 0)]);
+        assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Foreign\""));
+        assert!(j.contains("\"fs.read\""));
+    }
+
+    #[test]
+    fn arr_lit_present_roundtrips() {
+        let s = Scheme::arr_native_lit("const", vec![], Value::from(42));
+        assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"lit\""));
+        assert!(j.contains("42"));
+    }
+
+    #[test]
+    fn arr_lit_absent_omitted() {
+        let s = Scheme::arr_native("id", vec![]);
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(!j.contains("\"lit\""));
         assert_eq!(s, roundtrip(&s));
     }
 
     #[test]
-    fn child_constructs_and_roundtrips() {
-        let s = Scheme::child(3);
+    fn seq_constructs_and_roundtrips() {
+        let s = Scheme::seq(Scheme::arr_native("id", vec![]), Scheme::arr_native("id", vec![]));
         assert_eq!(s, roundtrip(&s));
-        assert_eq!(s, Scheme::Child(AstRef::new(3)));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Seq\""));
     }
 
     #[test]
-    fn bind_constructs_and_roundtrips() {
-        let s = Scheme::Bind {
-            name: "x".into(),
-            value: Box::new(Scheme::lit(1)),
-            body: Box::new(Scheme::var("x")),
-        };
+    fn first_constructs_and_roundtrips() {
+        let s = Scheme::first(Scheme::arr_native("id", vec![]));
         assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"First\""));
+    }
+
+    #[test]
+    fn choice_constructs_and_roundtrips() {
+        let s = Scheme::choice(Scheme::arr_native("id", vec![]), Scheme::arr_native("id", vec![]));
+        assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Choice\""));
+        assert!(j.contains("\"l\""));
+        assert!(j.contains("\"r\""));
+    }
+
+    #[test]
+    fn loop_feedback_constructs_and_roundtrips() {
+        let s = Scheme::loop_feedback(Scheme::arr_native("id", vec![]));
+        assert_eq!(s, roundtrip(&s));
+        let j = serde_json::to_string(&s).unwrap();
+        assert!(j.contains("\"Loop\""));
     }
 
     #[test]
     fn app_constructs_and_roundtrips() {
-        let s = Scheme::App {
-            callee: Box::new(Scheme::var("f")),
-            args: vec![Scheme::lit(1), Scheme::lit(2)],
-        };
-        assert_eq!(s, roundtrip(&s));
-    }
-
-    #[test]
-    fn branch_constructs_and_roundtrips() {
-        let s = Scheme::Branch {
-            cond: Box::new(Scheme::var("c")),
-            then_: Box::new(Scheme::lit(1)),
-            else_: Box::new(Scheme::lit(2)),
-        };
-        let back = roundtrip(&s);
-        assert_eq!(s, back);
-        // Verify the serde rename to "then".
-        let j = serde_json::to_string(&s).unwrap();
-        assert!(j.contains("\"then\""));
-    }
-
-    #[test]
-    fn prim_constructs_and_roundtrips() {
-        let s = Scheme::prim("add", vec![Scheme::child(0), Scheme::child(1)]);
-        assert_eq!(s, roundtrip(&s));
-    }
-
-    #[test]
-    fn foreign_constructs_and_roundtrips() {
-        let s = Scheme::foreign("print", vec![Scheme::child(0)]);
-        assert_eq!(s, roundtrip(&s));
-    }
-
-    #[test]
-    fn vau_constructs_and_roundtrips() {
-        let s = Scheme::vau(vec!["a".into(), "b".into()], Scheme::lit(42));
+        let s = Scheme::app(
+            Scheme::arr_native_lit("proj_env", vec![], "f"),
+            vec![Scheme::arr_native_lit("const", vec![], 1)],
+        );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
-        assert!(j.contains("\"Vau\""));
+        assert!(j.contains("\"App\""));
+    }
+
+    #[test]
+    fn arr_source_native_roundtrips() {
+        let src = ArrSource::Native;
+        let j = serde_json::to_string(&src).unwrap();
+        assert_eq!(j, "\"Native\"");
+        let back: ArrSource = serde_json::from_str(&j).unwrap();
+        assert_eq!(src, back);
+    }
+
+    #[test]
+    fn arr_source_foreign_roundtrips() {
+        let src = ArrSource::Foreign("fs.read".into());
+        let j = serde_json::to_string(&src).unwrap();
+        assert!(j.contains("\"Foreign\""));
+        let back: ArrSource = serde_json::from_str(&j).unwrap();
+        assert_eq!(src, back);
     }
 
     #[test]
     fn nested_scheme_roundtrips() {
-        let s = Scheme::Branch {
-            cond: Box::new(Scheme::Prim {
-                op: "lt".into(),
-                args: vec![Scheme::child(0), Scheme::lit(10)],
-            }),
-            then_: Box::new(Scheme::App {
-                callee: Box::new(Scheme::var("f")),
-                args: vec![Scheme::child(1)],
-            }),
-            else_: Box::new(Scheme::Foreign {
-                name: "panic".into(),
-                args: vec![Scheme::lit("too big")],
-            }),
-        };
+        let s = Scheme::seq(
+            Scheme::arr_native("id", vec![]),
+            Scheme::choice(
+                Scheme::loop_feedback(Scheme::arr_foreign("fs.read", vec![])),
+                Scheme::app(
+                    Scheme::arr_native_lit("proj_env", vec![], "f"),
+                    vec![Scheme::arr_native_lit("const", vec![], Value::Bool(true))],
+                ),
+            ),
+        );
         assert_eq!(s, roundtrip(&s));
     }
 }

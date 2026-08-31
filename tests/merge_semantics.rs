@@ -36,7 +36,13 @@ fn add_lang() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::prim("add", vec![Scheme::child(0), Scheme::child(1)]),
+            Scheme::arr_native(
+                "add",
+                vec![
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                ],
+            ),
         ))
         .unwrap();
     lang
@@ -49,7 +55,7 @@ fn base_language_has_expected_fragments() {
     assert_eq!(lang.grammar.len(), 1);
     assert_eq!(lang.ast.len(), 1);
     assert_eq!(lang.eval.len(), 1);
-    assert_eq!(lang.scheme_version, SchemeVersion::v1());
+    assert_eq!(lang.scheme_version, SchemeVersion::v2());
 }
 
 #[test]
@@ -92,7 +98,13 @@ fn five_fragments_with_overrides_and_excludes() {
             EvalSchemeDef::new(
                 "eval.binary.add.v2",
                 "binary.add",
-                Scheme::prim("add_checked", vec![Scheme::child(0), Scheme::child(1)]),
+                Scheme::arr_native(
+                    "add_checked",
+                    vec![
+                        Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                        Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    ],
+                ),
             )
             .with_replaces(vec!["eval.binary.add".into()]),
         )
@@ -156,5 +168,5 @@ fn empty_fragment_set_default() {
 
 #[test]
 fn lit_value_in_scheme() {
-    let _ = Scheme::Lit(Value::from(42));
+    let _ = Scheme::arr_native_lit("const", vec![], Value::from(42));
 }

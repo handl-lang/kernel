@@ -157,9 +157,9 @@ impl Ast {
     /// used by the eval engines. Shared children are deduplicated (a node
     /// is copied at most once).
     ///
-    /// This is used by `Scheme::Vau` to bind an unevaluated child to a
-    /// self-contained [`Ast`] value that the meta `eval` host function can
-    /// evaluate (ADR-0041 §6, ADR-0045).
+    /// This is used to bind an unevaluated child to a self-contained
+    /// [`Ast`] value that the meta `eval` host function can evaluate
+    /// (ADR-0041 §6).
     ///
     /// # Errors
     ///

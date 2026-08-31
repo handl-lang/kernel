@@ -11,29 +11,26 @@ use serde::{Deserialize, Serialize};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
-    AstShapeDef, CapabilityDecl, EvalSchemeDef, EvalSchemeDefV2, GrammarRow, LexerRuleDef,
+    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef,
     OptionSchema, TokenKindDef,
 };
 use crate::version::SchemeVersion;
 
 /// A language definition as pure serializable data.
 ///
-/// Built by merging fragments into six typed fragment sets. The
+/// Built by merging fragments into typed fragment sets. The
 /// `scheme_version` field (ADR-0044 §7) declares which `Scheme` combinator
-/// version the language targets.
+/// version the language targets; the canonical version is `"v2"` (the
+/// arrow-calculus kernel, ADR-0052).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Language {
     /// Token kind definitions.
     pub tokens: FragmentSet<TokenKindDef>,
     /// Grammar table rows.
     pub grammar: FragmentSet<GrammarRow>,
-    /// Eval scheme definitions mapping node kinds to [`Scheme`](crate::Scheme)s.
+    /// Eval scheme definitions mapping node kinds to
+    /// [`Scheme`](crate::Scheme)s (arrow-calculus kernel, ADR-0052).
     pub eval: FragmentSet<EvalSchemeDef>,
-    /// v2 eval scheme definitions mapping node kinds to
-    /// [`SchemeV2`](crate::SchemeV2)s (ADR-0052). Additive alongside
-    /// [`eval`](Self::eval); v2 engines consume these directly without
-    /// v1→v2 lowering at runtime. Empty by default for v1 languages.
-    pub eval_v2: FragmentSet<EvalSchemeDefV2>,
     /// AST node shape definitions.
     pub ast: FragmentSet<AstShapeDef>,
     /// Capability declarations.
@@ -54,24 +51,23 @@ impl Default for Language {
 }
 
 impl Language {
-    /// Create a new empty language targeting `SchemeVersion::v1()`.
+    /// Create a new empty language targeting `SchemeVersion::v2()`.
     pub fn new() -> Self {
         Self {
             tokens: FragmentSet::new(),
             grammar: FragmentSet::new(),
             eval: FragmentSet::new(),
-            eval_v2: FragmentSet::new(),
             ast: FragmentSet::new(),
             caps: FragmentSet::new(),
             options: FragmentSet::new(),
             lexer_rules: FragmentSet::new(),
-            scheme_version: SchemeVersion::v1(),
+            scheme_version: SchemeVersion::v2(),
         }
     }
 
     /// Merge another `Language` into this one, set by set.
     ///
-    /// All six fragment sets are merged independently. On any failure, **no
+    /// All fragment sets are merged independently. On any failure, **no
     /// partial state is committed**: the merge is performed into a clone and
     /// only swapped in on full success (atomic rollback).
     ///
@@ -88,9 +84,6 @@ impl Language {
         }
         for frag in other.eval.fragments().cloned() {
             clone.eval.merge(frag)?;
-        }
-        for frag in other.eval_v2.fragments().cloned() {
-            clone.eval_v2.merge(frag)?;
         }
         for frag in other.ast.fragments().cloned() {
             clone.ast.merge(frag)?;
@@ -114,24 +107,23 @@ mod tests {
     use super::*;
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::scheme::Scheme;
-    use serde_json::Value;
 
     #[test]
-    fn new_is_empty_with_v1() {
+    fn new_is_empty_with_v2() {
         let lang = Language::new();
         assert!(lang.tokens.is_empty());
-        assert_eq!(lang.scheme_version, SchemeVersion::v1());
+        assert_eq!(lang.scheme_version, SchemeVersion::v2());
     }
 
     #[test]
-    fn default_is_empty_with_v1() {
+    fn default_is_empty_with_v2() {
         let lang = Language::default();
         assert!(lang.tokens.is_empty());
-        assert_eq!(lang.scheme_version, SchemeVersion::v1());
+        assert_eq!(lang.scheme_version, SchemeVersion::v2());
     }
 
     #[test]
-    fn merge_all_six_sets() {
+    fn merge_all_sets() {
         let mut base = Language::new();
         let mut other = Language::new();
         other.tokens.merge(TokenKindDef::new("token.num")).unwrap();
@@ -149,7 +141,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Scheme::lit(Value::Null),
+                Scheme::arr_native("add", vec![]),
             ))
             .unwrap();
         other
@@ -181,7 +173,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Scheme::lit(Value::Null),
+                Scheme::arr_native("add", vec![]),
             ))
             .unwrap();
         // Set up the base to collide on the eval set.
@@ -189,7 +181,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e0",
                 "binary.add",
-                Scheme::lit(Value::Null),
+                Scheme::arr_native("add", vec![]),
             ))
             .unwrap();
         let snapshot = base.clone();
@@ -222,8 +214,8 @@ mod tests {
     fn scheme_version_serializes() {
         let lang = Language::new();
         let j = serde_json::to_string(&lang).unwrap();
-        assert!(j.contains("\"v1\""));
+        assert!(j.contains("\"v2\""));
         let back: Language = serde_json::from_str(&j).unwrap();
-        assert_eq!(back.scheme_version, SchemeVersion::v1());
+        assert_eq!(back.scheme_version, SchemeVersion::v2());
     }
 }

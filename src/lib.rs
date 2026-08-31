@@ -32,29 +32,26 @@ pub mod fragment_set;
 pub mod fragments;
 /// The `Language` struct.
 pub mod language;
-/// The `Scheme` combinator set.
+/// The arrow-calculus `Scheme` kernel (ADR-0052).
 pub mod scheme;
-/// The v2 arrow-calculus `SchemeV2` kernel (ADR-0052).
-pub mod scheme_v2;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
 pub mod staged;
 /// Scheme combinator versioning.
 pub mod version;
 
 pub use ast::{Ast, AstNode, AstRef, Span};
-pub use capabilities::{capabilities, foreign_names, foreign_names_v2, subset_of};
+pub use capabilities::{capabilities, foreign_names, subset_of};
 pub use desugar::{DesugarRule, desugar};
 pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
 pub use fragments::{
-    AstShapeDef, AstShapeRef, CapabilityDecl, DelimitedShape, EvalSchemeDef, EvalSchemeDefV2,
+    AstShapeDef, AstShapeRef, CapabilityDecl, DelimitedShape, EvalSchemeDef,
     GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef, OptionSchema, PairShape,
     TokenKindDef,
 };
 pub use language::Language;
-pub use scheme::Scheme;
-pub use scheme_v2::{ArrSource, SchemeV2, lower_v1_to_v2};
+pub use scheme::{ArrSource, Scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use version::SchemeVersion;
 

@@ -40,33 +40,32 @@ pub fn desugar(rules: &[DesugarRule], node_kind: &str) -> Option<Scheme> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::AstRef;
     use serde_json::Value;
 
     #[test]
     fn rule_matches_and_produces() {
-        let rules = vec![DesugarRule::new(
-            "ternary",
-            Scheme::Branch {
-                cond: Box::new(Scheme::Child(AstRef::new(0))),
-                then_: Box::new(Scheme::Child(AstRef::new(1))),
-                else_: Box::new(Scheme::Child(AstRef::new(2))),
-            },
-        )];
-        let produced = desugar(&rules, "ternary").unwrap();
-        assert_eq!(
-            produced,
-            Scheme::Branch {
-                cond: Box::new(Scheme::Child(AstRef::new(0))),
-                then_: Box::new(Scheme::Child(AstRef::new(1))),
-                else_: Box::new(Scheme::Child(AstRef::new(2))),
-            }
+        // ternary: cond >>> arr(tag) >>> Choice(then, else)
+        let produced_scheme = Scheme::seq(
+            Scheme::seq(
+                Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                Scheme::arr_native("tag", vec![]),
+            ),
+            Scheme::choice(
+                Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                Scheme::arr_native_lit("proj_child", vec![], Value::from(2u64)),
+            ),
         );
+        let rules = vec![DesugarRule::new("ternary", produced_scheme.clone())];
+        let produced = desugar(&rules, "ternary").unwrap();
+        assert_eq!(produced, produced_scheme);
     }
 
     #[test]
     fn unmatched_kind_returns_none() {
-        let rules = vec![DesugarRule::new("ternary", Scheme::lit(Value::Null))];
+        let rules = vec![DesugarRule::new(
+            "ternary",
+            Scheme::arr_native_lit("const", vec![], Value::Null),
+        )];
         assert!(desugar(&rules, "binary.add").is_none());
     }
 
@@ -78,10 +77,13 @@ mod tests {
     #[test]
     fn first_match_wins() {
         let rules = vec![
-            DesugarRule::new("k", Scheme::lit(1)),
-            DesugarRule::new("k", Scheme::lit(2)),
+            DesugarRule::new("k", Scheme::arr_native_lit("const", vec![], Value::from(1))),
+            DesugarRule::new("k", Scheme::arr_native_lit("const", vec![], Value::from(2))),
         ];
         let produced = desugar(&rules, "k").unwrap();
-        assert_eq!(produced, Scheme::lit(1));
+        assert_eq!(
+            produced,
+            Scheme::arr_native_lit("const", vec![], Value::from(1))
+        );
     }
 }

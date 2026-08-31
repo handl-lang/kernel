@@ -34,17 +34,23 @@ fn nontrivial_language() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::Prim {
-                op: "add".into(),
-                args: vec![Scheme::child(0), Scheme::child(1)],
-            },
+            Scheme::arr_native(
+                "add",
+                vec![
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                ],
+            ),
         ))
         .unwrap();
     lang.eval
         .merge(EvalSchemeDef::new(
             "eval.io",
             "io",
-            Scheme::foreign("fs.read", vec![Scheme::child(0)]),
+            Scheme::arr_foreign(
+                "fs.read",
+                vec![Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64))],
+            ),
         ))
         .unwrap();
     lang.caps
@@ -66,9 +72,9 @@ fn json_contains_version_field() {
     let lang = nontrivial_language();
     let j = serde_json::to_string(&lang).unwrap();
     assert!(j.contains("\"scheme_version\""));
-    assert!(j.contains("\"v1\""));
+    assert!(j.contains("\"v2\""));
     let back: Language = serde_json::from_str(&j).unwrap();
-    assert_eq!(back.scheme_version, SchemeVersion::v1());
+    assert_eq!(back.scheme_version, SchemeVersion::v2());
 }
 
 #[test]
@@ -86,17 +92,23 @@ fn scheme_with_nested_foreign_roundtrips_through_language() {
         .merge(EvalSchemeDef::new(
             "eval.complex",
             "complex",
-            Scheme::Branch {
-                cond: Box::new(Scheme::Foreign {
-                    name: "fs.stat".into(),
-                    args: vec![Scheme::lit(Value::from("/x"))],
-                }),
-                then_: Box::new(Scheme::App {
-                    callee: Box::new(Scheme::var("f")),
-                    args: vec![Scheme::child(0)],
-                }),
-                else_: Box::new(Scheme::lit(Value::Null)),
-            },
+            // cond >>> arr(tag) >>> Choice(then, else)
+            Scheme::seq(
+                Scheme::seq(
+                    Scheme::arr_foreign(
+                        "fs.stat",
+                        vec![Scheme::arr_native_lit("const", vec![], Value::from("/x"))],
+                    ),
+                    Scheme::arr_native("tag", vec![]),
+                ),
+                Scheme::choice(
+                    Scheme::app(
+                        Scheme::arr_native_lit("proj_env", vec![], Value::String("f".into())),
+                        vec![Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64))],
+                    ),
+                    Scheme::arr_native_lit("const", vec![], Value::Bool(false)),
+                ),
+            ),
         ))
         .unwrap();
     let j = serde_json::to_string(&lang).unwrap();
