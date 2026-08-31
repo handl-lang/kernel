@@ -31,6 +31,51 @@ pub struct AstShapeRef {
     pub node_kind: String,
     /// The number of children the produced node expects.
     pub arity: usize,
+    /// When set, the **last** child of this shape is a delimited block (e.g.
+    /// the `{ arms }` of `match x { ... }`). The first `arity - 1` children
+    /// are parsed as ordinary expressions; the final child is parsed by the
+    /// [`DelimitedShape`] descriptor. This generalizes the Pratt engine's
+    /// delimited-group support beyond the hardcoded `call(...)` case.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delimited: Option<DelimitedShape>,
+}
+
+/// Describes how to parse a delimited block child (the last child of an
+/// [`AstShapeRef`] whose `delimited` field is set).
+///
+/// A delimited block is opened by `open`, contains zero or more elements
+/// separated by `separator`, and is closed by `close`. The block is emitted
+/// as a container node of `container_kind` whose `children` array holds the
+/// parsed element node indices.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DelimitedShape {
+    /// The token kind that opens the block (e.g. `token.lbrace`).
+    pub open: String,
+    /// The token kind that closes the block (e.g. `token.rbrace`).
+    pub close: String,
+    /// The token kind separating elements (e.g. `token.comma`). When `None`,
+    /// elements are not separated. A trailing separator before `close` is
+    /// tolerated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub separator: Option<String>,
+    /// The node kind of the container holding the elements (e.g. `block`).
+    pub container_kind: String,
+    /// When set, each element is a *pair* `<expr> <pair separator> <expr>`
+    /// (e.g. a match arm `pattern : body`), emitted as a node of
+    /// [`PairShape::node_kind`] with `children = [lhs, rhs]`. When `None`,
+    /// each element is a single expression collected directly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pair: Option<PairShape>,
+}
+
+/// Describes a pair element inside a delimited block (e.g. a match arm).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PairShape {
+    /// The token kind separating the pair's left and right operands (e.g.
+    /// `token.colon` for `pattern : body`).
+    pub separator: String,
+    /// The node kind emitted for each pair (e.g. `arm`).
+    pub node_kind: String,
 }
 
 impl AstShapeRef {
@@ -39,7 +84,14 @@ impl AstShapeRef {
         Self {
             node_kind: node_kind.into(),
             arity,
+            delimited: None,
         }
+    }
+
+    /// Attach a delimited-block descriptor to the last child.
+    pub fn with_delimited(mut self, delimited: DelimitedShape) -> Self {
+        self.delimited = Some(delimited);
+        self
     }
 }
 
@@ -195,5 +247,37 @@ mod tests {
         assert_eq!(j, "\"Prefix\"");
         let back: GrammarPosition = serde_json::from_str(&j).unwrap();
         assert_eq!(back, GrammarPosition::Prefix);
+    }
+
+    #[test]
+    fn delimited_shape_roundtrip() {
+        let shape = AstShapeRef::new("match", 2).with_delimited(DelimitedShape {
+            open: "token.lbrace".into(),
+            close: "token.rbrace".into(),
+            separator: Some("token.comma".into()),
+            container_kind: "block".into(),
+            pair: Some(PairShape {
+                separator: "token.colon".into(),
+                node_kind: "arm".into(),
+            }),
+        });
+        let row = GrammarRow::new(
+            "grammar.match.prefix",
+            "token.keyword.match",
+            GrammarPosition::Prefix,
+            shape,
+        );
+        let j = serde_json::to_string(&row).unwrap();
+        let back: GrammarRow = serde_json::from_str(&j).unwrap();
+        assert_eq!(row, back);
+        assert!(j.contains("\"delimited\""));
+        let plain = GrammarRow::new(
+            "g",
+            "t",
+            GrammarPosition::Infix,
+            AstShapeRef::new("k", 1),
+        );
+        let pj = serde_json::to_string(&plain).unwrap();
+        assert!(!pj.contains("delimited"));
     }
 }

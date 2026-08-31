@@ -22,7 +22,7 @@ pub mod lexer_rule;
 pub use ast_shape::AstShapeDef;
 pub use capability::CapabilityDecl;
 pub use eval_scheme::EvalSchemeDef;
-pub use grammar::{AstShapeRef, GrammarPosition, GrammarRow};
+pub use grammar::{AstShapeRef, DelimitedShape, GrammarPosition, GrammarRow, PairShape};
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;
 pub use token_kind::TokenKindDef;
