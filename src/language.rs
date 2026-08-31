@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
-    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, OptionSchema,
-    TokenKindDef,
+    AstShapeDef, CapabilityDecl, EvalSchemeDef, EvalSchemeDefV2, GrammarRow, LexerRuleDef,
+    OptionSchema, TokenKindDef,
 };
 use crate::version::SchemeVersion;
 
@@ -29,6 +29,11 @@ pub struct Language {
     pub grammar: FragmentSet<GrammarRow>,
     /// Eval scheme definitions mapping node kinds to [`Scheme`](crate::Scheme)s.
     pub eval: FragmentSet<EvalSchemeDef>,
+    /// v2 eval scheme definitions mapping node kinds to
+    /// [`SchemeV2`](crate::SchemeV2)s (ADR-0052). Additive alongside
+    /// [`eval`](Self::eval); v2 engines consume these directly without
+    /// v1→v2 lowering at runtime. Empty by default for v1 languages.
+    pub eval_v2: FragmentSet<EvalSchemeDefV2>,
     /// AST node shape definitions.
     pub ast: FragmentSet<AstShapeDef>,
     /// Capability declarations.
@@ -55,6 +60,7 @@ impl Language {
             tokens: FragmentSet::new(),
             grammar: FragmentSet::new(),
             eval: FragmentSet::new(),
+            eval_v2: FragmentSet::new(),
             ast: FragmentSet::new(),
             caps: FragmentSet::new(),
             options: FragmentSet::new(),
@@ -82,6 +88,9 @@ impl Language {
         }
         for frag in other.eval.fragments().cloned() {
             clone.eval.merge(frag)?;
+        }
+        for frag in other.eval_v2.fragments().cloned() {
+            clone.eval_v2.merge(frag)?;
         }
         for frag in other.ast.fragments().cloned() {
             clone.ast.merge(frag)?;

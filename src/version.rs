@@ -21,6 +21,14 @@ impl SchemeVersion {
         Self::new("v1")
     }
 
+    /// The v2 arrow-calculus kernel version (ADR-0052).
+    ///
+    /// A v2 engine accepts v1 languages backward-compatibly (see
+    /// [`supports`](Self::supports)); the reverse is a compile-time error.
+    pub fn v2() -> Self {
+        Self::new("v2")
+    }
+
     /// The version string.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -29,11 +37,13 @@ impl SchemeVersion {
     /// Whether an engine declaring support for `self` accepts a language
     /// targeting `lang_version`.
     ///
-    /// For Phase 1 this is exact string equality. (A future versioning scheme
-    /// may allow backward-compatible acceptance, e.g. a `v2` engine accepting
-    /// `v1` languages.)
+    /// Exact string equality, with one backward-compatibility exception
+    /// per ADR-0052: a `v2` engine accepts `v1` languages (v1 `Language`
+    /// values run on a v2 engine backward-compatibly; v2 on v1 is a
+    /// compile-time error). All other version pairs require exact
+    /// equality.
     pub fn supports(&self, lang_version: &SchemeVersion) -> bool {
-        self.0 == lang_version.0
+        self.0 == lang_version.0 || (self.0 == "v2" && lang_version.0 == "v1")
     }
 }
 
@@ -62,8 +72,36 @@ mod tests {
     }
 
     #[test]
-    fn supports_rejects_different_version() {
-        let engine = SchemeVersion::new("v2");
+    fn v2_constructs() {
+        let v = SchemeVersion::v2();
+        assert_eq!(v.as_str(), "v2");
+        assert_eq!(v.to_string(), "v2");
+    }
+
+    #[test]
+    fn v2_engine_accepts_v1_lang() {
+        let engine = SchemeVersion::v2();
+        let lang = SchemeVersion::v1();
+        assert!(engine.supports(&lang));
+    }
+
+    #[test]
+    fn v2_engine_accepts_v2_lang() {
+        let engine = SchemeVersion::v2();
+        let lang = SchemeVersion::v2();
+        assert!(engine.supports(&lang));
+    }
+
+    #[test]
+    fn v1_engine_rejects_v2_lang() {
+        let engine = SchemeVersion::v1();
+        let lang = SchemeVersion::v2();
+        assert!(!engine.supports(&lang));
+    }
+
+    #[test]
+    fn supports_rejects_unrelated_version() {
+        let engine = SchemeVersion::new("v3");
         let lang = SchemeVersion::v1();
         assert!(!engine.supports(&lang));
     }

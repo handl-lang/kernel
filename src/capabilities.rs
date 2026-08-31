@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use crate::fragment::Fragment;
 use crate::language::Language;
 use crate::scheme::Scheme;
+use crate::scheme_v2::{ArrSource, SchemeV2};
 
 /// Recursively walk a [`Scheme`] and collect every `Foreign(name)` name.
 pub fn foreign_names(scheme: &Scheme) -> BTreeSet<String> {
@@ -64,6 +65,52 @@ pub fn capabilities(lang: &Language) -> BTreeSet<String> {
         .flat_map(|scheme| foreign_names(&scheme.scheme))
         .chain(lang.caps.iter().map(|c| c.id().to_string()))
         .collect()
+}
+
+/// Recursively walk a [`SchemeV2`] and collect every `Foreign(name)`
+/// source name (ADR-0052).
+///
+/// In the v2 kernel the capability boundary is structural: an `Arr` with
+/// `source: Foreign(name)` is capability-tracked. This walks every
+/// `SchemeV2` node (recursing into `args`, `Seq`, `First`, `Choice`,
+/// `Loop`, and `App` children) and collects each foreign name.
+pub fn foreign_names_v2(scheme: &SchemeV2) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    collect_foreign_v2(scheme, &mut out);
+    out
+}
+
+fn collect_foreign_v2(scheme: &SchemeV2, out: &mut BTreeSet<String>) {
+    match scheme {
+        SchemeV2::Arr { args, source, .. } => {
+            if let ArrSource::Foreign(name) = source {
+                out.insert(name.clone());
+            }
+            for a in args {
+                collect_foreign_v2(a, out);
+            }
+        }
+        SchemeV2::Seq { fst, snd } => {
+            collect_foreign_v2(fst, out);
+            collect_foreign_v2(snd, out);
+        }
+        SchemeV2::First { inner } => {
+            collect_foreign_v2(inner, out);
+        }
+        SchemeV2::Choice { l, r } => {
+            collect_foreign_v2(l, out);
+            collect_foreign_v2(r, out);
+        }
+        SchemeV2::Loop { body } => {
+            collect_foreign_v2(body, out);
+        }
+        SchemeV2::App { callee, args } => {
+            collect_foreign_v2(callee, out);
+            for a in args {
+                collect_foreign_v2(a, out);
+            }
+        }
+    }
 }
 
 /// Whether every capability in `needed` is contained in `allowed`.
@@ -193,5 +240,50 @@ mod tests {
         let names = foreign_names(&s);
         assert!(names.contains("fs.write"));
         assert!(names.contains("fs.read"));
+    }
+
+    // --- v2 capability tests ---
+
+    #[test]
+    fn foreign_names_v2_collects_recursively() {
+        let s = SchemeV2::Choice {
+            l: Box::new(SchemeV2::Arr {
+                op: "fs.read".into(),
+                args: vec![SchemeV2::arr_foreign("fs.open", vec![])],
+                source: ArrSource::Foreign("fs.read".into()),
+                lit: None,
+            }),
+            r: Box::new(SchemeV2::App {
+                callee: Box::new(SchemeV2::arr_foreign("net.send", vec![])),
+                args: vec![SchemeV2::arr_native("id", vec![])],
+            }),
+        };
+        let names = foreign_names_v2(&s);
+        assert!(names.contains("fs.read"));
+        assert!(names.contains("fs.open"));
+        assert!(names.contains("net.send"));
+        assert_eq!(names.len(), 3);
+    }
+
+    #[test]
+    fn foreign_names_v2_no_foreign_returns_empty() {
+        let s = SchemeV2::arr_native("add", vec![SchemeV2::arr_native("id", vec![])]);
+        assert!(foreign_names_v2(&s).is_empty());
+    }
+
+    #[test]
+    fn foreign_names_v2_nested_seq_loop() {
+        let s = SchemeV2::Seq {
+            fst: Box::new(SchemeV2::Loop {
+                body: Box::new(SchemeV2::arr_foreign("fs.read", vec![])),
+            }),
+            snd: Box::new(SchemeV2::First {
+                inner: Box::new(SchemeV2::arr_foreign("net.send", vec![])),
+            }),
+        };
+        let names = foreign_names_v2(&s);
+        assert!(names.contains("fs.read"));
+        assert!(names.contains("net.send"));
+        assert_eq!(names.len(), 2);
     }
 }

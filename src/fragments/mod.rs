@@ -10,6 +10,8 @@ pub mod ast_shape;
 pub mod capability;
 /// Eval scheme fragment definitions.
 pub mod eval_scheme;
+/// Eval scheme fragment definitions (v2 arrow-calculus kernel, ADR-0052).
+pub mod eval_scheme_v2;
 /// Grammar row fragment definitions.
 pub mod grammar;
 /// Lexer rule fragment definitions.
@@ -22,6 +24,7 @@ pub mod token_kind;
 pub use ast_shape::AstShapeDef;
 pub use capability::CapabilityDecl;
 pub use eval_scheme::EvalSchemeDef;
+pub use eval_scheme_v2::EvalSchemeDefV2;
 pub use grammar::{AstShapeRef, DelimitedShape, GrammarPosition, GrammarRow, PairShape};
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;
