@@ -4,6 +4,50 @@ use serde::{Deserialize, Serialize};
 
 use crate::fragment::Fragment;
 
+/// How a token's text is interpreted into a payload [`crate::Value`] by the
+/// Pratt parser's `atom_payload` (ADR-0053).
+///
+/// Replaces the former `kind_id.contains("number")` / `contains("bool")` /
+/// `contains("null")` / `contains("string")` substring heuristics with typed
+/// dispatch. Adding a new literal form is a new variant + a token row, not a
+/// parser edit.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub enum LiteralKind {
+    /// Integer (fallback: float). Replaces `contains("number")`.
+    Number,
+    /// `"true"` → true, anything else → false. Replaces `contains("bool")`.
+    Bool,
+    /// Always `Value::Null`. Replaces `contains("null")`.
+    Null,
+    /// Strip `delim_chars` from each end, apply the escape table.
+    /// Replaces the hardcoded quote-strip + `\\n`/`\\t`/`\\\"`/`\\\\` table.
+    String {
+        /// Number of delimiter characters to strip from each end (e.g. 1 for
+        /// `"..."`).
+        delim_chars: usize,
+        /// Escape pairs: each `(from, to)` replacement applied in order.
+        escapes: Vec<(String, String)>,
+    },
+    /// Strip a fixed prefix and suffix, optionally wrap the remainder.
+    /// Covers `json{...}`: prefix `"json{"`, suffix `"}"`, wrap `Some(("{", "}"))`.
+    StripAffix {
+        /// The prefix to strip from the start of the token text.
+        prefix: String,
+        /// The suffix to strip from the end of the token text.
+        suffix: String,
+        /// When set, wrap the stripped remainder with `(open, close)`.
+        wrap: Option<(String, String)>,
+    },
+    /// Use the token text verbatim. The default for identifiers and keywords.
+    Raw,
+}
+
+impl Default for LiteralKind {
+    fn default() -> Self {
+        Self::Raw
+    }
+}
+
 /// A definition of one token kind in a language.
 ///
 /// Identity key: `id` (see ADR-0044 §5). Token kind declarations are
@@ -18,6 +62,11 @@ pub struct TokenKindDef {
     pub id: String,
     /// Optional human-readable label.
     pub label: Option<String>,
+    /// How the parser interprets this token's text into a payload value
+    /// (ADR-0053). When `None`, the parser uses [`LiteralKind::Raw`]
+    /// (verbatim text as a string).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub literal: Option<LiteralKind>,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -32,6 +81,7 @@ impl TokenKindDef {
         Self {
             id: id.into(),
             label: None,
+            literal: None,
             replaces: Vec::new(),
             requires: Vec::new(),
         }
@@ -40,6 +90,12 @@ impl TokenKindDef {
     /// Attach a label.
     pub fn with_label(mut self, label: impl Into<String>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    /// Attach a literal kind for typed atom dispatch (ADR-0053).
+    pub fn with_literal(mut self, literal: LiteralKind) -> Self {
+        self.literal = Some(literal);
         self
     }
 
@@ -112,6 +168,45 @@ mod tests {
         let j = serde_json::to_string(&t).unwrap();
         assert!(!j.contains("replaces"));
         assert!(!j.contains("requires"));
+        assert!(!j.contains("literal"));
+    }
+
+    #[test]
+    fn literal_kind_serde_roundtrip() {
+        let t = TokenKindDef::new("token.number")
+            .with_literal(LiteralKind::Number);
+        let j = serde_json::to_string(&t).unwrap();
+        let back: TokenKindDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(t, back);
+        assert!(j.contains("literal"));
+    }
+
+    #[test]
+    fn literal_kind_string_roundtrip() {
+        let t = TokenKindDef::new("token.string").with_literal(LiteralKind::String {
+            delim_chars: 1,
+            escapes: vec![
+                ("\\n".into(), "\n".into()),
+                ("\\t".into(), "\t".into()),
+                ("\\\"".into(), "\"".into()),
+                ("\\\\".into(), "\\".into()),
+            ],
+        });
+        let j = serde_json::to_string(&t).unwrap();
+        let back: TokenKindDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(t, back);
+    }
+
+    #[test]
+    fn literal_kind_strip_affix_roundtrip() {
+        let t = TokenKindDef::new("token.json").with_literal(LiteralKind::StripAffix {
+            prefix: "json{".into(),
+            suffix: "}".into(),
+            wrap: Some(("{".into(), "}".into())),
+        });
+        let j = serde_json::to_string(&t).unwrap();
+        let back: TokenKindDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(t, back);
     }
 
     #[test]

@@ -38,6 +38,24 @@ pub struct AstShapeRef {
     /// delimited-group support beyond the hardcoded `call(...)` case.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delimited: Option<DelimitedShape>,
+    /// Separators consumed between consecutive children (ADR-0053). The
+    /// prefix/infix loop, after parsing child `i` and before child `i+1`,
+    /// consumes `child_separators[i]` if present. Replaces the hardcoded
+    /// `if/then/else` and `x = y in body` separator handling.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub child_separators: Vec<ChildSeparator>,
+}
+
+/// Describes a separator token consumed between two children of an
+/// [`AstShapeRef`] (ADR-0053).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ChildSeparator {
+    /// The next token must have this kind; it is consumed.
+    Required(String),
+    /// If the next token has this kind, it is consumed; otherwise skipped.
+    Optional(String),
+    /// The next token must have one of these kinds; the match is consumed.
+    OneOf(Vec<String>),
 }
 
 /// Describes how to parse a delimited block child (the last child of an
@@ -66,6 +84,26 @@ pub struct DelimitedShape {
     /// each element is a single expression collected directly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pair: Option<PairShape>,
+    /// When true, the open delimiter is the prefix/infix token itself (already
+    /// consumed by the caller's `cursor.advance()`), so `parse_delimited_block`
+    /// skips the open-consume step and begins at element parsing (ADR-0053).
+    /// Covers `array`/`object`/`paren`/`call` where the operator token (`[` /
+    /// `{` / `(`) IS the opening delimiter.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub open_is_operator_token: bool,
+    /// When true, `parse_delimited_block` does **not** emit a container node —
+    /// instead, the parsed element indices are spliced directly into the
+    /// parent node's `children` array (ADR-0053). Resolves the `call` AST-shape
+    /// problem: `call { children: [callee, arg1, arg2, ...] }` is preserved
+    /// without a nested `args` container node.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub flatten: bool,
+    /// When set, if the next token matches this kind, `parse_delimited_block`
+    /// parses a bare expression (via `expression_inner`) instead of a pair,
+    /// and pushes it as a regular element (ADR-0053). Replaces the
+    /// `token.ellipsis` special case inside object/array loops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rest_token: Option<String>,
 }
 
 /// Describes a pair element inside a delimited block (e.g. a match arm).
@@ -85,12 +123,20 @@ impl AstShapeRef {
             node_kind: node_kind.into(),
             arity,
             delimited: None,
+            child_separators: Vec::new(),
         }
     }
 
     /// Attach a delimited-block descriptor to the last child.
     pub fn with_delimited(mut self, delimited: DelimitedShape) -> Self {
         self.delimited = Some(delimited);
+        self
+    }
+
+    /// Attach child separators consumed between consecutive children
+    /// (ADR-0053).
+    pub fn with_child_separators(mut self, separators: Vec<ChildSeparator>) -> Self {
+        self.child_separators = separators;
         self
     }
 }
@@ -260,6 +306,9 @@ mod tests {
                 separator: "token.colon".into(),
                 node_kind: "arm".into(),
             }),
+            open_is_operator_token: false,
+            flatten: false,
+            rest_token: None,
         });
         let row = GrammarRow::new(
             "grammar.match.prefix",

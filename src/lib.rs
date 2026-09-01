@@ -46,9 +46,9 @@ pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
 pub use fragments::{
-    AstShapeDef, AstShapeRef, CapabilityDecl, DelimitedShape, EvalSchemeDef,
-    GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef, OptionSchema, PairShape,
-    TokenKindDef,
+    AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator, DelimitedShape, EvalSchemeDef,
+    GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef, LiteralKind, OptionSchema,
+    PairShape, TokenKindDef,
 };
 pub use language::Language;
 pub use scheme::{ArrSource, Scheme};
