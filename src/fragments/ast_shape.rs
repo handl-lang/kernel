@@ -36,6 +36,13 @@ pub enum AstDesugarChild {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         children: Vec<AstDesugarChild>,
     },
+    /// Keep all children from the given index onward (ADR-0060). Unlike
+    /// `Keep(i)` which keeps a single child, `KeepRest(N)` expands to all
+    /// children from index `N` to the end, each remapped into the output
+    /// arena. Used by desugar rules that need to preserve a variable-length
+    /// tail of children (e.g. `json{...}(args)` → `json` node with all
+    /// original children kept).
+    KeepRest(usize),
 }
 
 /// A condition that guards whether a desugar rule applies (ADR-0058).

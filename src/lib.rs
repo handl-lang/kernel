@@ -48,7 +48,7 @@ pub use fragment_set::FragmentSet;
 pub use fragments::{
     AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator,
     DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef,
-    LiteralKind, OptionSchema, PairShape, TokenKindDef, TypeRuleDef,
+    LiteralKind, OptionSchema, PairShape, PayloadTokenSpec, TokenKindDef, TypeRuleDef,
 };
 pub use language::Language;
 pub use scheme::{ArrSource, Scheme};

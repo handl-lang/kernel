@@ -23,6 +23,26 @@ impl GrammarPosition {
     }
 }
 
+/// A specification for a token to consume and optionally extract into the
+/// node's payload before parsing children (ADR-0053 §7b — payload extraction).
+///
+/// Some prefix forms (e.g. `let x = 42 in x`) need to consume non-expression
+/// tokens (the binding name `x`, the `=` sign) and store the name's text in
+/// the node's payload so that type rules can access it via `payload_field`.
+/// Each [`PayloadTokenSpec`] specifies a `token` kind to consume and an
+/// optional `field` name. When `field` is `Some`, the token's text is stored
+/// in the payload under that key; when `None`, the token is consumed but not
+/// stored (e.g. the `=` sign).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PayloadTokenSpec {
+    /// The token kind to consume (e.g. `token.identifier`).
+    pub token: String,
+    /// When set, the token's text is stored in the node's payload under this
+    /// key (e.g. `name`). When `None`, the token is consumed but not stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+}
+
 /// A reference to an [`AstShapeDef`](crate::AstShapeDef) describing the child
 /// shape a grammar row produces.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -44,6 +64,14 @@ pub struct AstShapeRef {
     /// `if/then/else` and `x = y in body` separator handling.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub child_separators: Vec<ChildSeparator>,
+    /// Tokens to consume (and optionally extract into the payload) before
+    /// parsing children (ADR-0053 §7b). Each entry specifies a token kind to
+    /// consume; when `field` is set, the token's text is stored in the node's
+    /// payload under that key. This enables forms like `let x = 42 in x`
+    /// where the binding name `x` is an identifier token (not a child
+    /// expression) that must be stored in the payload for type rules.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub payload_tokens: Vec<PayloadTokenSpec>,
 }
 
 /// Describes a separator token consumed between two children of an
@@ -124,6 +152,7 @@ impl AstShapeRef {
             arity,
             delimited: None,
             child_separators: Vec::new(),
+            payload_tokens: Vec::new(),
         }
     }
 
@@ -137,6 +166,13 @@ impl AstShapeRef {
     /// (ADR-0053).
     pub fn with_child_separators(mut self, separators: Vec<ChildSeparator>) -> Self {
         self.child_separators = separators;
+        self
+    }
+
+    /// Attach payload tokens to consume before parsing children
+    /// (ADR-0053 §7b — payload extraction).
+    pub fn with_payload_tokens(mut self, tokens: Vec<PayloadTokenSpec>) -> Self {
+        self.payload_tokens = tokens;
         self
     }
 }
