@@ -128,6 +128,12 @@ pub enum ArrSource {
     /// A foreign (host) function call — capability-tracked. The `name` is
     /// the registered host-function name (e.g. `"fs.read"`).
     Foreign(String),
+    /// A typecheck judgment op (ADR-0054 §1, §2). The op name is a
+    /// judgment op (`synth_child`, `check_child`, `unify`, `extend`,
+    /// `fresh_meta`, `solve_meta`, `lookup`, `quote`, `normalize`,
+    /// `construct`, `match_type`). Judgment ops are interpreted by the
+    /// typecheck engine, not the eval engines.
+    Judgment,
 }
 
 impl Scheme {
@@ -167,6 +173,32 @@ impl Scheme {
             op: op.into(),
             args,
             source: ArrSource::Native,
+            lit: Some(lit.into()),
+        }
+    }
+
+    /// Convenience constructor for a typecheck judgment `arr` (ADR-0054
+    /// §1, §2) with no literal payload.
+    pub fn arr_judgment(op: impl Into<String>, args: Vec<Scheme>) -> Self {
+        Scheme::Arr {
+            op: op.into(),
+            args,
+            source: ArrSource::Judgment,
+            lit: None,
+        }
+    }
+
+    /// Convenience constructor for a typecheck judgment `arr` (ADR-0054
+    /// §1, §2) carrying a literal payload.
+    pub fn arr_judgment_lit(
+        op: impl Into<String>,
+        args: Vec<Scheme>,
+        lit: impl Into<Value>,
+    ) -> Self {
+        Scheme::Arr {
+            op: op.into(),
+            args,
+            source: ArrSource::Judgment,
             lit: Some(lit.into()),
         }
     }

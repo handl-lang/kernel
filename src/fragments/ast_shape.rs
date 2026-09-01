@@ -5,6 +5,44 @@ use serde_json::Value;
 
 use crate::fragment::Fragment;
 
+/// A specification for a single child of a desugar replacement node
+/// (ADR-0053 §7 — data-driven desugar pass).
+///
+/// A child is either [`AstDesugarChild::Keep`] (reuse the original node's
+/// child at the given index, remapped into the output arena) or
+/// [`AstDesugarChild::Create`] (allocate a fresh node, optionally with its
+/// own children — the rewrite is recursive).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AstDesugarChild {
+    /// Reuse the original node's child at the given index.
+    Keep(usize),
+    /// Allocate a new node with the given `kind`, optional `payload`, and
+    /// nested `children` (themselves [`AstDesugarChild`]s).
+    Create {
+        /// The AST node kind of the created node.
+        kind: String,
+        /// Optional payload for the created node.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        payload: Option<Value>,
+        /// Nested children of the created node.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        children: Vec<AstDesugarChild>,
+    },
+}
+
+/// A data-driven desugar rule (ADR-0053 §7).
+///
+/// Specifies the `target_kind` to rewrite a node into, plus the list of
+/// [`AstDesugarChild`]s that become the rewritten node's children. Attached
+/// to an [`AstShapeDef`] via [`AstShapeDef::with_desugar`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AstDesugarRule {
+    /// The AST node kind to rewrite into.
+    pub target_kind: String,
+    /// The children of the rewritten node.
+    pub children: Vec<AstDesugarChild>,
+}
+
 /// A definition of an AST node kind and its payload shape.
 ///
 /// Identity key: `node_kind` (see ADR-0044 §5). The `payload_schema` is a
@@ -26,6 +64,11 @@ pub struct AstShapeDef {
     /// An opaque description of the payload shape (e.g. a JSON Schema).
     #[serde(default = "Value::default", skip_serializing_if = "is_payload_null")]
     pub payload_schema: Value,
+    /// Optional data-driven desugar rule (ADR-0053 §7). When present, the
+    /// desugar pass rewrites nodes of this kind into `desugar.target_kind`
+    /// with the specified children before evaluation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub desugar: Option<AstDesugarRule>,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -45,6 +88,7 @@ impl AstShapeDef {
             id: id.into(),
             node_kind: node_kind.into(),
             payload_schema: Value::Null,
+            desugar: None,
             replaces: Vec::new(),
             requires: Vec::new(),
         }
@@ -53,6 +97,12 @@ impl AstShapeDef {
     /// Attach a payload schema.
     pub fn with_payload_schema(mut self, schema: Value) -> Self {
         self.payload_schema = schema;
+        self
+    }
+
+    /// Attach a data-driven desugar rule (ADR-0053 §7).
+    pub fn with_desugar(mut self, rule: AstDesugarRule) -> Self {
+        self.desugar = Some(rule);
         self
     }
 

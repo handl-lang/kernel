@@ -12,7 +12,7 @@ use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
     AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef,
-    OptionSchema, TokenKindDef,
+    OptionSchema, TokenKindDef, TypeRuleDef,
 };
 use crate::version::SchemeVersion;
 
@@ -31,6 +31,9 @@ pub struct Language {
     /// Eval scheme definitions mapping node kinds to
     /// [`Scheme`](crate::Scheme)s (arrow-calculus kernel, ADR-0052).
     pub eval: FragmentSet<EvalSchemeDef>,
+    /// Type rule definitions: node kind → synth/check `Scheme`
+    /// (ADR-0054 — Generic Typecheck Engine).
+    pub types: FragmentSet<TypeRuleDef>,
     /// AST node shape definitions.
     pub ast: FragmentSet<AstShapeDef>,
     /// Capability declarations.
@@ -57,6 +60,7 @@ impl Language {
             tokens: FragmentSet::new(),
             grammar: FragmentSet::new(),
             eval: FragmentSet::new(),
+            types: FragmentSet::new(),
             ast: FragmentSet::new(),
             caps: FragmentSet::new(),
             options: FragmentSet::new(),
@@ -85,6 +89,9 @@ impl Language {
         for frag in other.eval.fragments().cloned() {
             clone.eval.merge(frag)?;
         }
+        for frag in other.types.fragments().cloned() {
+            clone.types.merge(frag)?;
+        }
         for frag in other.ast.fragments().cloned() {
             clone.ast.merge(frag)?;
         }
@@ -106,6 +113,7 @@ impl Language {
 mod tests {
     use super::*;
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
+    use crate::fragments::TypeRuleDef;
     use crate::scheme::Scheme;
 
     #[test]
@@ -145,6 +153,14 @@ mod tests {
             ))
             .unwrap();
         other
+            .types
+            .merge(TypeRuleDef::new(
+                "t1",
+                "lit",
+                Scheme::arr_judgment("synth_child", vec![]),
+            ))
+            .unwrap();
+        other
             .ast
             .merge(AstShapeDef::new("a1", "binary.add"))
             .unwrap();
@@ -154,6 +170,7 @@ mod tests {
         assert_eq!(base.tokens.len(), 1);
         assert_eq!(base.grammar.len(), 1);
         assert_eq!(base.eval.len(), 1);
+        assert_eq!(base.types.len(), 1);
         assert_eq!(base.ast.len(), 1);
         assert_eq!(base.caps.len(), 1);
         assert_eq!(base.options.len(), 1);

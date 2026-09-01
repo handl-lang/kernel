@@ -48,7 +48,7 @@ pub use fragment_set::FragmentSet;
 pub use fragments::{
     AstDesugarChild, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator,
     DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef,
-    LiteralKind, OptionSchema, PairShape, TokenKindDef,
+    LiteralKind, OptionSchema, PairShape, TokenKindDef, TypeRuleDef,
 };
 pub use language::Language;
 pub use scheme::{ArrSource, Scheme};
@@ -153,6 +153,18 @@ pub fn is_ast_value(value: &Value) -> bool {
 /// read its tag name, and [`is_tag_value`] to test for it.
 pub const TAG_VALUE_KEY: &str = "__tag__";
 
+/// The sentinel object key marking a [`Value`] as carrying the **host type
+/// registry** identity of a type value (ADR-0054 — Generic Typecheck Engine).
+///
+/// A type value minted by a host type registry is a JSON object
+/// `{"__tag__": <tag_name>, "__registry__": <registry_id>, ...payload}`.
+/// The `__registry__` key records which registry minted the type value, so
+/// equality and matching can be scoped to a single registry (ADR-0054
+/// §"construct"). Like `__tag__`, this key is **reserved**: user object
+/// literals cannot produce it, so a type value's registry identity is
+/// unforgeable.
+pub const REGISTRY_VALUE_KEY: &str = "__registry__";
+
 /// Mint a tagged value (ADR-0055).
 ///
 /// Returns `{"__tag__": tag_name, ...payload}`. The `payload` object's fields
@@ -196,15 +208,17 @@ pub fn is_tag_value(value: &Value) -> bool {
 /// literals must not produce (ADR-0055 §"Negative — A reserved key").
 ///
 /// The reserved keys are the double-underscore-prefixed host sentinels:
-/// `__tag__` (ADR-0055), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6),
-/// and `__arrow__` (ADR-0052 closure values). These are minted by host
-/// primitives (`tag_value`, `language_value`, `ast_value`, the `closure`
-/// op), never by user object literals. The eval engines call this to reject
-/// such keys at object-construction time, making the sentinels unforgeable.
+/// `__tag__` (ADR-0055), `__registry__` (ADR-0054 — host type registry
+/// identity), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6), and
+/// `__arrow__` (ADR-0052 closure values). These are minted by host
+/// primitives (`tag_value`, the host type registry `construct` op,
+/// `language_value`, `ast_value`, the `closure` op), never by user object
+/// literals. The eval engines call this to reject such keys at
+/// object-construction time, making the sentinels unforgeable.
 pub fn is_reserved_value_key(key: &str) -> bool {
     matches!(
         key,
-        TAG_VALUE_KEY | LANGUAGE_VALUE_KEY | AST_VALUE_KEY | "__arrow__"
+        TAG_VALUE_KEY | REGISTRY_VALUE_KEY | LANGUAGE_VALUE_KEY | AST_VALUE_KEY | "__arrow__"
     )
 }
 
@@ -302,6 +316,7 @@ mod value_tests {
     #[test]
     fn is_reserved_value_key_recognizes_sentinels() {
         assert!(is_reserved_value_key("__tag__"));
+        assert!(is_reserved_value_key("__registry__"));
         assert!(is_reserved_value_key("__language__"));
         assert!(is_reserved_value_key("__ast__"));
         assert!(is_reserved_value_key("__arrow__"));
