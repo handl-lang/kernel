@@ -9,13 +9,21 @@ use crate::fragment::Fragment;
 /// (ADR-0053 §7 — data-driven desugar pass).
 ///
 /// A child is either [`AstDesugarChild::Keep`] (reuse the original node's
-/// child at the given index, remapped into the output arena) or
+/// child at the given index, remapped into the output arena),
+/// [`AstDesugarChild::KeepPath`] (navigate through descendant children by
+/// index path, e.g. `[0, 0]` takes child 0's child 0), or
 /// [`AstDesugarChild::Create`] (allocate a fresh node, optionally with its
 /// own children — the rewrite is recursive).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AstDesugarChild {
     /// Reuse the original node's child at the given index.
     Keep(usize),
+    /// Reuse a descendant node by navigating through children by index path.
+    /// `KeepPath([0, 0])` takes the original node's child 0, then that
+    /// node's child 0, and remaps the final arena index into the output
+    /// arena. Used by ADR-0058 to unwrap bracket-computed-key `array`
+    /// wrappers during desugar.
+    KeepPath(Vec<usize>),
     /// Allocate a new node with the given `kind`, optional `payload`, and
     /// nested `children` (themselves [`AstDesugarChild`]s).
     Create {
@@ -30,17 +38,42 @@ pub enum AstDesugarChild {
     },
 }
 
+/// A condition that guards whether a desugar rule applies (ADR-0058).
+///
+/// When present on an [`AstDesugarRule`], the pass only rewrites nodes whose
+/// child at `child_index` has the AST node kind `child_kind`. Nodes that
+/// don't match pass through unchanged. This lets a single shape carry a
+/// desugar rule that only fires for a specific child variant (e.g. only
+/// `entry` nodes whose key child is an `array`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AstDesugarCondition {
+    /// The index into the original node's `children` array to test.
+    pub child_index: usize,
+    /// The AST node kind the child must have for the rule to fire.
+    pub child_kind: String,
+}
+
 /// A data-driven desugar rule (ADR-0053 §7).
 ///
 /// Specifies the `target_kind` to rewrite a node into, plus the list of
 /// [`AstDesugarChild`]s that become the rewritten node's children. Attached
 /// to an [`AstShapeDef`] via [`AstShapeDef::with_desugar`].
+///
+/// An optional `when` condition (ADR-0058) gates the rewrite: the rule only
+/// fires if the original node's child at `when.child_index` has kind
+/// `when.child_kind`. Without `when`, the rule fires unconditionally (the
+/// ADR-0053 behavior).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AstDesugarRule {
     /// The AST node kind to rewrite into.
     pub target_kind: String,
     /// The children of the rewritten node.
     pub children: Vec<AstDesugarChild>,
+    /// Optional condition gating the rewrite (ADR-0058). When present, the
+    /// rule only fires if the original node's child at `child_index` has
+    /// kind `child_kind`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when: Option<AstDesugarCondition>,
 }
 
 /// A definition of an AST node kind and its payload shape.

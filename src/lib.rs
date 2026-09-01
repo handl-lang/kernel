@@ -46,7 +46,7 @@ pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
 pub use fragments::{
-    AstDesugarChild, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator,
+    AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator,
     DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef,
     LiteralKind, OptionSchema, PairShape, TokenKindDef, TypeRuleDef,
 };
