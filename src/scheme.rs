@@ -134,6 +134,14 @@ pub enum ArrSource {
     /// `construct`, `match_type`). Judgment ops are interpreted by the
     /// typecheck engine, not the eval engines.
     Judgment,
+    /// A dynamic host dispatch op (ADR-0060). The actual host function name
+    /// is not known at scheme-construction time — it arrives as a runtime
+    /// value (e.g. a string callee in a `call` node). The op name is the
+    /// dispatch primitive (e.g. `call_host`); the actual host function name
+    /// is a sub-scheme argument evaluated at runtime. Capability tracking
+    /// for dynamic calls is handled by the engine at the call site, not by
+    /// static `source` inspection.
+    DynamicForeign,
 }
 
 impl Scheme {
