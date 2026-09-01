@@ -46,9 +46,9 @@ pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
 pub use fragments::{
-    AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator, DelimitedShape, EvalSchemeDef,
-    GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef, LiteralKind, OptionSchema,
-    PairShape, TokenKindDef,
+    AstDesugarChild, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildSeparator,
+    DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef,
+    LiteralKind, OptionSchema, PairShape, TokenKindDef,
 };
 pub use language::Language;
 pub use scheme::{ArrSource, Scheme};
@@ -140,10 +140,79 @@ pub fn is_ast_value(value: &Value) -> bool {
     value.get(AST_VALUE_KEY).is_some()
 }
 
+/// The sentinel object key marking a [`Value`] as a **tagged value**
+/// (ADR-0055 — Tagged Values).
+///
+/// A tagged value is a JSON object `{"__tag__": <tag_name>, ...payload}`
+/// minted by the host `tag` capability. The `__tag__` key is **reserved**:
+/// user-constructed object literals cannot produce a `__tag__` key (the eval
+/// engines reject it), so the only way a value acquires a `__tag__` key is
+/// through the host `tag.tag` host function. This is the forgery-prevention
+/// mechanism — tagging is a host capability, not a user-constructible
+/// convention (ADR-0055 §3). Use [`tag_value`] to construct one, [`as_tag`] to
+/// read its tag name, and [`is_tag_value`] to test for it.
+pub const TAG_VALUE_KEY: &str = "__tag__";
+
+/// Mint a tagged value (ADR-0055).
+///
+/// Returns `{"__tag__": tag_name, ...payload}`. The `payload` object's fields
+/// become the tagged value's payload. If `payload` is not an object (or is
+/// `Null`), an empty payload is used. Returns `None` if `payload` already
+/// contains a `__tag__` key — a minted value cannot be re-tagged through the
+/// payload (the host `tag` op always sets the tag; the payload must not
+/// smuggle one in).
+///
+/// This is the host-side minting primitive; user code reaches it via the
+/// `tag.tag` host function exposed by `plugin-lib-tag`.
+pub fn tag_value(tag_name: &str, payload: &Value) -> Option<Value> {
+    let mut obj = match payload {
+        Value::Object(map) => map.clone(),
+        Value::Null => serde_json::Map::new(),
+        _ => return None,
+    };
+    if obj.contains_key(TAG_VALUE_KEY) {
+        return None;
+    }
+    obj.insert(TAG_VALUE_KEY.to_string(), Value::from(tag_name));
+    Some(Value::Object(obj))
+}
+
+/// Read the tag name of a tagged value (ADR-0055).
+///
+/// Returns `Some(name)` if `value` is a tagged value (an object containing a
+/// string `__tag__` key), else `None`. Only values minted by [`tag_value`]
+/// (the host `tag` capability) carry a `__tag__` key — user object literals
+/// cannot forge one (the engines reserve the key).
+pub fn as_tag(value: &Value) -> Option<&str> {
+    value.get(TAG_VALUE_KEY).and_then(|v| v.as_str())
+}
+
+/// Whether `value` is a tagged value (produced by [`tag_value`]).
+pub fn is_tag_value(value: &Value) -> bool {
+    value.get(TAG_VALUE_KEY).and_then(|v| v.as_str()).is_some()
+}
+
+/// Whether `key` is a reserved value-level key that user-constructed object
+/// literals must not produce (ADR-0055 §"Negative — A reserved key").
+///
+/// The reserved keys are the double-underscore-prefixed host sentinels:
+/// `__tag__` (ADR-0055), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6),
+/// and `__arrow__` (ADR-0052 closure values). These are minted by host
+/// primitives (`tag_value`, `language_value`, `ast_value`, the `closure`
+/// op), never by user object literals. The eval engines call this to reject
+/// such keys at object-construction time, making the sentinels unforgeable.
+pub fn is_reserved_value_key(key: &str) -> bool {
+    matches!(
+        key,
+        TAG_VALUE_KEY | LANGUAGE_VALUE_KEY | AST_VALUE_KEY | "__arrow__"
+    )
+}
+
 #[cfg(test)]
 mod value_tests {
     use super::*;
     use crate::fragments::token_kind::TokenKindDef;
+    use serde_json::json;
 
     #[test]
     fn language_value_round_trips() {
@@ -182,5 +251,72 @@ mod value_tests {
         let v = Value::String("x".to_string());
         assert!(!is_ast_value(&v));
         assert_eq!(as_ast(&v), None);
+    }
+
+    #[test]
+    fn tag_value_mints_tagged_object() {
+        let v = tag_value("type.collection", &json!({ "name": "number" }))
+            .expect("mint succeeds");
+        assert!(is_tag_value(&v));
+        assert_eq!(as_tag(&v), Some("type.collection"));
+        assert_eq!(v["name"], json!("number"));
+        assert_eq!(v["__tag__"], json!("type.collection"));
+    }
+
+    #[test]
+    fn tag_value_null_payload_is_empty() {
+        let v = tag_value("unit", &Value::Null).expect("mint succeeds");
+        assert_eq!(as_tag(&v), Some("unit"));
+        assert_eq!(v.as_object().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn tag_value_rejects_non_object_payload() {
+        assert!(tag_value("unit", &json!(5)).is_none());
+        assert!(tag_value("unit", &json!("x")).is_none());
+    }
+
+    #[test]
+    fn tag_value_rejects_smuggled_tag_key() {
+        // A payload that already carries `__tag__` cannot be re-tagged —
+        // the host `tag` op always sets the tag; the payload must not smuggle
+        // one in (forgery prevention, ADR-0055 §3).
+        assert!(tag_value("type.pi", &json!({ "__tag__": "type.collection" })).is_none());
+    }
+
+    #[test]
+    fn plain_string_is_not_a_tag_value() {
+        let v = Value::String("number".to_string());
+        assert!(!is_tag_value(&v));
+        assert_eq!(as_tag(&v), None);
+    }
+
+    #[test]
+    fn tagged_value_with_non_string_tag_is_not_a_tag_value() {
+        // A `__tag__` that isn't a string is not a valid tag (defensive).
+        let v = json!({ "__tag__": 5, "name": "number" });
+        assert!(!is_tag_value(&v));
+        assert_eq!(as_tag(&v), None);
+    }
+
+    #[test]
+    fn is_reserved_value_key_recognizes_sentinels() {
+        assert!(is_reserved_value_key("__tag__"));
+        assert!(is_reserved_value_key("__language__"));
+        assert!(is_reserved_value_key("__ast__"));
+        assert!(is_reserved_value_key("__arrow__"));
+        assert!(!is_reserved_value_key("name"));
+        assert!(!is_reserved_value_key("__proto__"));
+    }
+
+    #[test]
+    fn tagged_values_equal_by_structure() {
+        // ADR-0055 §5: equality is structural (same tag + payload ⇒ equal).
+        let a = tag_value("type.collection", &json!({ "name": "number" })).unwrap();
+        let b = tag_value("type.collection", &json!({ "name": "number" })).unwrap();
+        assert_eq!(a, b);
+        let c = tag_value("type.collection", &json!({ "name": "string" })).unwrap();
+        assert_ne!(a, c);
+        assert_ne!(a, json!("number"));
     }
 }
