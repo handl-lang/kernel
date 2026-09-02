@@ -43,7 +43,7 @@ pub enum LexerPattern {
     Number,
     /// Match a delimited block (string, comment, template).
     Delimited {
-        /// The opening delimiter (e.g. `"\"`, `"//"`, `"/*"`).
+        /// The opening delimiter (e.g. `"\"`, `"--"`, `"/*"`).
         open: String,
         /// The closing delimiter (e.g. `"\"`, `"\n"`, `"*/"`).
         close: String,
@@ -221,7 +221,7 @@ mod tests {
             "lex.comment",
             "token.comment",
             LexerPattern::Delimited {
-                open: "//".into(),
+                open: "--".into(),
                 close: "\n".into(),
                 escape: false,
                 interpolation: false,
