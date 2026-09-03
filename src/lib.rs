@@ -32,6 +32,8 @@ pub mod fragment;
 pub mod fragment_set;
 /// Fragment type definitions.
 pub mod fragments;
+/// Structural law inference over the `Scheme` IR (ADR-0076 OQ#5).
+pub mod law_inference;
 /// The `Language` struct.
 pub mod language;
 /// The arrow-calculus `Scheme` kernel (ADR-0052).
@@ -56,6 +58,10 @@ pub use fragments::{
     LiteralKind, OptionSchema, PairShape, PayloadTokenSpec, TokenKindDef, TypeRuleDef,
 };
 pub use language::Language;
+pub use law_inference::{
+    InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
+    normalize, uses_first,
+};
 pub use scheme::{ArrSource, Scheme, eliminate_all_handlers, eliminate_handler_in_scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use version::SchemeVersion;
