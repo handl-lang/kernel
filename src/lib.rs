@@ -38,6 +38,9 @@ pub mod fragments;
 pub mod law_inference;
 /// The `Language` struct.
 pub mod language;
+/// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Scheme`
+/// IR (ADR-0076 OQ#4).
+pub mod quantified_laws;
 /// The arrow-calculus `Scheme` kernel (ADR-0052).
 pub mod scheme;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
@@ -67,6 +70,10 @@ pub use language::Language;
 pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
     normalize, uses_first,
+};
+pub use quantified_laws::{
+    LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
+    builtin_quantified_laws, check_quantified_law, instantiate,
 };
 pub use scheme::{ArrSource, Scheme, eliminate_all_handlers, eliminate_handler_in_scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
