@@ -22,6 +22,8 @@ pub mod ast;
 pub mod capabilities;
 /// Desugar rules.
 pub mod desugar;
+/// Row polymorphism for effect rows (ADR-0076 OQ#1).
+pub mod effects;
 /// Error types.
 pub mod error;
 /// The `Fragment` trait.
@@ -42,6 +44,9 @@ pub mod version;
 pub use ast::{Ast, AstNode, AstRef, Span};
 pub use capabilities::{capabilities, foreign_names, subset_of};
 pub use desugar::{DesugarRule, desugar};
+pub use effects::{
+    EffectRow, EffectRowError, TypedScheme, eliminate_and_check, infer_effect_row,
+};
 pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
@@ -51,7 +56,7 @@ pub use fragments::{
     LiteralKind, OptionSchema, PairShape, PayloadTokenSpec, TokenKindDef, TypeRuleDef,
 };
 pub use language::Language;
-pub use scheme::{ArrSource, Scheme};
+pub use scheme::{ArrSource, Scheme, eliminate_all_handlers, eliminate_handler_in_scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use version::SchemeVersion;
 
