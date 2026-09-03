@@ -22,6 +22,8 @@ pub mod ast;
 pub mod capabilities;
 /// Desugar rules.
 pub mod desugar;
+/// Dynamic handler law verification over the `Scheme` IR (ADR-0076 OQ#2).
+pub mod dynamic_handlers;
 /// Row polymorphism for effect rows (ADR-0076 OQ#1).
 pub mod effects;
 /// Error types.
@@ -46,6 +48,10 @@ pub mod version;
 pub use ast::{Ast, AstNode, AstRef, Span};
 pub use capabilities::{capabilities, foreign_names, subset_of};
 pub use desugar::{DesugarRule, desugar};
+pub use dynamic_handlers::{
+    DispatchError, RegistrationResult, RuntimeVerification, VerifiedImpl, VerifiedImplStore,
+    dynamic_dispatch, verify_at_runtime, verify_at_runtime_with_builtin,
+};
 pub use effects::{
     EffectRow, EffectRowError, TypedScheme, eliminate_and_check, infer_effect_row,
 };
