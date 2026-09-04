@@ -72,6 +72,17 @@ pub struct AstShapeRef {
     /// expression) that must be stored in the payload for type rules.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub payload_tokens: Vec<PayloadTokenSpec>,
+    /// Child indices that should parse `{` as a graph **block** (semicolon-
+    /// separated, `container_kind: "block"`) rather than an **object**
+    /// (comma-separated, `key: val` pairs). Implements ADR-0074 ID.11
+    /// (contextual `{}` parsing). When the parser is about to parse child
+    /// `i` and `block_children` contains `i` and the next token is
+    /// `token.lbrace`, a block delimited shape is used instead of the
+    /// default `expression_inner` call (which would hit the object prefix
+    /// rule). Empty = no contextual block children (default, backward-
+    /// compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub block_children: Vec<usize>,
 }
 
 /// Describes a separator token consumed between two children of an
@@ -153,6 +164,7 @@ impl AstShapeRef {
             delimited: None,
             child_separators: Vec::new(),
             payload_tokens: Vec::new(),
+            block_children: Vec::new(),
         }
     }
 
