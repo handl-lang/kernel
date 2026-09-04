@@ -195,11 +195,13 @@ pub const REGISTRY_VALUE_KEY: &str = "__registry__";
 /// Mint a tagged value (ADR-0055).
 ///
 /// Returns `{"__tag__": tag_name, ...payload}`. The `payload` object's fields
-/// become the tagged value's payload. If `payload` is not an object (or is
-/// `Null`), an empty payload is used. Returns `None` if `payload` already
-/// contains a `__tag__` key — a minted value cannot be re-tagged through the
-/// payload (the host `tag` op always sets the tag; the payload must not
-/// smuggle one in).
+/// become the tagged value's payload. If `payload` is `Null`, an empty
+/// payload is used. If `payload` is a non-object, non-null value (e.g. a
+/// number or string), it is wrapped in `{value: payload}` so that
+/// `tag.tag("ok", 42)` produces `{"__tag__": "ok", "value": 42}` (ADR-0077).
+/// Returns `None` if `payload` already contains a `__tag__` key — a minted
+/// value cannot be re-tagged through the payload (the host `tag` op always
+/// sets the tag; the payload must not smuggle one in).
 ///
 /// This is the host-side minting primitive; user code reaches it via the
 /// `tag.tag` host function exposed by `plugin-lib-tag`.
@@ -207,7 +209,11 @@ pub fn tag_value(tag_name: &str, payload: &Value) -> Option<Value> {
     let mut obj = match payload {
         Value::Object(map) => map.clone(),
         Value::Null => serde_json::Map::new(),
-        _ => return None,
+        _ => {
+            let mut m = serde_json::Map::new();
+            m.insert("value".to_string(), payload.clone());
+            m
+        }
     };
     if obj.contains_key(TAG_VALUE_KEY) {
         return None;
@@ -312,9 +318,16 @@ mod value_tests {
     }
 
     #[test]
-    fn tag_value_rejects_non_object_payload() {
-        assert!(tag_value("unit", &json!(5)).is_none());
-        assert!(tag_value("unit", &json!("x")).is_none());
+    fn tag_value_wraps_non_object_payload_in_value() {
+        // ADR-0077: non-object payloads are wrapped in {value: ...} so
+        // that tag.tag("ok", 42) produces {"__tag__": "ok", "value": 42}.
+        let v = tag_value("ok", &json!(42)).expect("mint succeeds");
+        assert_eq!(as_tag(&v), Some("ok"));
+        assert_eq!(v["value"], json!(42));
+
+        let v = tag_value("err", &json!("oops")).expect("mint succeeds");
+        assert_eq!(as_tag(&v), Some("err"));
+        assert_eq!(v["value"], json!("oops"));
     }
 
     #[test]
