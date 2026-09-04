@@ -20,10 +20,122 @@
 //!   `{"__arrow__": true, "params": [...], "body": <idx>, "env": {...}}`
 //!   shape used by the arrow-calculus `App` combinator.
 
+use std::ffi::c_void;
+use std::fmt;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rustc_hash::FxHashMap;
 use serde_json::{Map, Number, Value};
+
+// ---------------------------------------------------------------------------
+// ForeignResource — RAII wrapper for opaque C handles (ADR-0083 §2.2)
+// ---------------------------------------------------------------------------
+
+/// An opaque foreign resource tracked by RAII (ADR-0083 §2.2 — finalizable
+/// values, a Phase 4 prerequisite).
+///
+/// Wraps a raw C pointer (`ptr`) and an optional `finalizer` cleanup
+/// function. When the last [`Rc`] reference to a `ForeignResource` drops,
+/// [`Drop`] runs the finalizer exactly once (guarded by the `dropped` flag
+/// to prevent double-free). This is the mechanism that lets opaque
+/// `handle`-typed FFI pointers (file descriptors, mmap regions, socket
+/// handles) get cleaned up automatically when the handl value holding them
+/// goes out of scope — no GC, no manual `close`.
+///
+/// # Safety invariants
+///
+/// - `ptr` must be a valid opaque handle obtained from a C function (e.g. a
+///   file descriptor cast to a pointer, an `mmap` region, a socket handle).
+///   This type never dereferences `ptr` — it only passes it to `finalizer`.
+/// - `finalizer`, when `Some`, must be safe to call with `ptr` exactly once
+///   and must release the underlying resource (e.g. `libc::close`).
+/// - This type is held inside an [`Rc`] (single-threaded), so it is **not**
+///   `Send` or `Sync`. The `dropped` flag uses [`AtomicBool`] to prepare for
+///   a future `Arc` migration that would make resources thread-safe; the
+///   atomic is harmless in the single-threaded case.
+pub struct ForeignResource {
+    /// The opaque C handle (file descriptor, mmap region, socket, …).
+    /// Never dereferenced by this type — only passed to `finalizer`.
+    pub ptr: *mut c_void,
+    /// Optional cleanup function called with `ptr` on drop. When `None`,
+    /// the resource is dropped without any cleanup (the caller is
+    /// responsible for explicit release, matching ADR-0083's short-term
+    /// "explicit close in handl" approach).
+    pub finalizer: Option<unsafe fn(*mut c_void)>,
+    /// Guard preventing double-free. Set to `true` atomically before the
+    /// finalizer runs; a second drop path sees `true` and skips.
+    dropped: AtomicBool,
+}
+
+impl ForeignResource {
+    /// Create a new foreign resource wrapping `ptr` with an optional
+    /// `finalizer`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must uphold the safety invariants documented on
+    /// [`ForeignResource`]: `ptr` is a valid opaque handle and `finalizer`
+    /// (if `Some`) releases it when called with `ptr`.
+    pub unsafe fn new(
+        ptr: *mut c_void,
+        finalizer: Option<unsafe fn(*mut c_void)>,
+    ) -> Self {
+        ForeignResource {
+            ptr,
+            finalizer,
+            dropped: AtomicBool::new(false),
+        }
+    }
+
+    /// Returns the raw opaque pointer without consuming the resource.
+    pub fn ptr(&self) -> *mut c_void {
+        self.ptr
+    }
+
+    /// Returns `true` if the finalizer has already run.
+    pub fn is_dropped(&self) -> bool {
+        self.dropped.load(Ordering::SeqCst)
+    }
+}
+
+impl Drop for ForeignResource {
+    fn drop(&mut self) {
+        // Atomically claim the drop: only the first caller to observe
+        // `false` runs the finalizer, preventing double-free even if the
+        // `Drop` impl is re-entered.
+        if self
+            .dropped
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            if let Some(fin) = self.finalizer {
+                // SAFETY: the constructor's caller guaranteed that `fin` is
+                // safe to call with `ptr` exactly once and releases the
+                // underlying resource.
+                unsafe { fin(self.ptr) };
+            }
+        }
+    }
+}
+
+impl PartialEq for ForeignResource {
+    fn eq(&self, other: &Self) -> bool {
+        // Resource identity is the opaque pointer address; the finalizer
+        // and dropped flag are not part of identity.
+        self.ptr == other.ptr
+    }
+}
+
+impl fmt::Debug for ForeignResource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ForeignResource")
+            .field("ptr", &self.ptr)
+            .field("has_finalizer", &self.finalizer.is_some())
+            .field("dropped", &self.dropped.load(Ordering::SeqCst))
+            .finish()
+    }
+}
 
 /// Fast tagged value representation for eval engines.
 ///
@@ -61,6 +173,14 @@ pub enum TaggedValue {
         body: usize, // AstRef index
         env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
     },
+    /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
+    /// optional finalizer that runs when the last `Rc` reference drops
+    /// (ADR-0083 §2.2 — finalizable values, Phase 4 prerequisite). The
+    /// JSON encoding is `{"__resource__": {"ptr": <address>}}` — a debug
+    /// representation only, since the finalizer (a function pointer)
+    /// cannot be serialized. Decoding from JSON produces a `Resource`
+    /// with `finalizer = None`.
+    Resource(Rc<ForeignResource>),
 }
 
 impl Default for TaggedValue {
@@ -173,6 +293,19 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
         };
         return TaggedValue::Arrow { params, body, env };
     }
+    // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
+    // encoding (ADR-0083 §2.2). The finalizer cannot be serialized, so the
+    // decoded Resource has `finalizer = None`.
+    if let Some(res_val) = o.get("__resource__") {
+        if let Some(ptr_n) = res_val.get("ptr").and_then(|v| v.as_i64()) {
+            let fr = ForeignResource {
+                ptr: ptr_n as *mut c_void,
+                finalizer: None,
+                dropped: AtomicBool::new(false),
+            };
+            return TaggedValue::Resource(Rc::new(fr));
+        }
+    }
     map_to_obj(o)
 }
 
@@ -246,6 +379,13 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
                 "env": Value::Object(env_map),
             })
         }
+        TaggedValue::Resource(r) => {
+            // Debug-only encoding: the finalizer (a function pointer)
+            // cannot be serialized, so only the pointer address is emitted.
+            serde_json::json!({
+                "__resource__": { "ptr": r.ptr as i64 }
+            })
+        }
     }
 }
 
@@ -311,6 +451,15 @@ impl TaggedValue {
         }
     }
 
+    /// Returns the value as a [`ForeignResource`] reference if it is a
+    /// `Resource` (opaque foreign handle, ADR-0083 §2.2).
+    pub fn as_resource(&self) -> Option<&ForeignResource> {
+        match self {
+            TaggedValue::Resource(r) => Some(r),
+            _ => None,
+        }
+    }
+
     /// Indexes an object value by key, mirroring `serde_json::Value::get`
     /// for string keys. Returns `None` for non-objects or missing keys.
     pub fn get(&self, key: &str) -> Option<&TaggedValue> {
@@ -343,6 +492,25 @@ pub fn pair(a: TaggedValue, b: TaggedValue) -> TaggedValue {
 /// Construct a `Bytes` value from a byte buffer.
 pub fn bytes(b: impl Into<Vec<u8>>) -> TaggedValue {
     TaggedValue::Bytes(Rc::new(b.into()))
+}
+
+/// Construct a `Resource` value wrapping an opaque C pointer with an
+/// optional finalizer (ADR-0083 §2.2 — finalizable values).
+///
+/// When the last reference to the returned `Resource` drops, `finalizer`
+/// (if `Some`) is called with `ptr` exactly once, releasing the underlying
+/// resource.
+///
+/// # Safety
+///
+/// The caller must uphold the safety invariants of [`ForeignResource`]:
+/// `ptr` is a valid opaque handle and `finalizer` (if `Some`) releases it
+/// when called with `ptr`.
+pub unsafe fn resource(
+    ptr: *mut c_void,
+    finalizer: Option<unsafe fn(*mut c_void)>,
+) -> TaggedValue {
+    TaggedValue::Resource(Rc::new(ForeignResource::new(ptr, finalizer)))
 }
 
 /// Extract the first component of a pair value, or `None` if not a pair.
@@ -401,6 +569,8 @@ pub fn truthy(v: &TaggedValue) -> bool {
         TaggedValue::Float(f) => *f != 0.0,
         TaggedValue::Str(s) => !s.is_empty(),
         TaggedValue::Bytes(b) => !b.is_empty(),
+        // Resources are always truthy (an opaque handle exists).
+        TaggedValue::Resource(_) => true,
         _ => true,
     }
 }
@@ -548,6 +718,8 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                         .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
                 }
         }
+        // Resources are equal by opaque pointer identity.
+        (TaggedValue::Resource(a), TaggedValue::Resource(b)) => a.ptr == b.ptr,
         _ => false,
     }
 }
