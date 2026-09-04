@@ -114,6 +114,21 @@ pub enum Scheme {
         /// The argument arrows.
         args: Vec<Scheme>,
     },
+
+    /// `handle body with target = impl_` (ADR-0076): declares that `target`
+    /// is a managed capability, with `body` as the handler body and `impl_`
+    /// as the handler implementation. Eliminated at compile time by
+    /// [`Scheme::eliminate_handlers`].
+    Handle {
+        /// The handler body — the program being handled. Bare `arr(target)`
+        /// references within it are replaced by `impl_` during elimination.
+        body: Box<Scheme>,
+        /// The capability name being managed (the handle target).
+        target: String,
+        /// The handler implementation substituted for bare `arr(target)`
+        /// references during elimination.
+        impl_: Box<Scheme>,
+    },
 }
 
 /// Whether an `Arr` op is a native pure function or a foreign host call.
@@ -253,6 +268,137 @@ impl Scheme {
             args,
         }
     }
+
+    /// Construct a `handle body with target = impl_` node (ADR-0076).
+    pub fn handle(body: Scheme, target: impl Into<String>, impl_: Scheme) -> Self {
+        Scheme::Handle {
+            body: Box::new(body),
+            target: target.into(),
+            impl_: Box::new(impl_),
+        }
+    }
+
+    /// Eliminate every [`Scheme::Handle`] node in this scheme (ADR-0076).
+    ///
+    /// For each `handle body with target = impl_`:
+    /// 1. Recursively eliminate handlers in `body` and `impl_`.
+    /// 2. Substitute bare `arr(target)` references in the eliminated body
+    ///    with the eliminated impl.
+    /// 3. Return the substituted body.
+    pub fn eliminate_handlers(&self) -> Scheme {
+        match self {
+            Scheme::Arr { op, args, source, lit } => {
+                let new_args: Vec<Scheme> = args.iter().map(|a| a.eliminate_handlers()).collect();
+                Scheme::Arr {
+                    op: op.clone(),
+                    args: new_args,
+                    source: source.clone(),
+                    lit: lit.clone(),
+                }
+            }
+            Scheme::Seq { fst, snd } => Scheme::Seq {
+                fst: Box::new(fst.eliminate_handlers()),
+                snd: Box::new(snd.eliminate_handlers()),
+            },
+            Scheme::First { inner } => Scheme::First {
+                inner: Box::new(inner.eliminate_handlers()),
+            },
+            Scheme::Choice { l, r } => Scheme::Choice {
+                l: Box::new(l.eliminate_handlers()),
+                r: Box::new(r.eliminate_handlers()),
+            },
+            Scheme::Loop { body } => Scheme::Loop {
+                body: Box::new(body.eliminate_handlers()),
+            },
+            Scheme::App { callee, args } => {
+                let new_args: Vec<Scheme> = args.iter().map(|a| a.eliminate_handlers()).collect();
+                Scheme::App {
+                    callee: Box::new(callee.eliminate_handlers()),
+                    args: new_args,
+                }
+            }
+            Scheme::Handle { body, target, impl_ } => {
+                let elim_body = body.eliminate_handlers();
+                let elim_impl = impl_.eliminate_handlers();
+                substitute_capability(&elim_body, target, &elim_impl)
+            }
+        }
+    }
+}
+
+/// Substitute bare `arr(target)` references in `scheme` with `impl_`.
+///
+/// A bare `arr(target)` reference is an `Arr` node whose `op` equals `target`,
+/// with no sub-scheme arguments and no literal payload. Such a reference may
+/// carry either a [`ArrSource::Native`] source (the common case, as produced
+/// by `arr_native`) or a [`ArrSource::Foreign`] source naming `target`. Both
+/// are recognized and replaced by `impl_`. All other nodes are recursed into
+/// structurally.
+fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Scheme {
+    match scheme {
+        Scheme::Arr { op, args, source, lit } => {
+            // Check if this is a bare `arr(target)` reference:
+            // op == target, no args, no lit. The source may be Native (the
+            // common case from `arr_native`) or Foreign(target).
+            if op == target && args.is_empty() && lit.is_none() {
+                match source {
+                    ArrSource::Native => return impl_.clone(),
+                    ArrSource::Foreign(name) if name == target => return impl_.clone(),
+                    _ => {}
+                }
+            }
+            // Otherwise, recurse into args.
+            let new_args: Vec<Scheme> =
+                args.iter().map(|a| substitute_capability(a, target, impl_)).collect();
+            Scheme::Arr {
+                op: op.clone(),
+                args: new_args,
+                source: source.clone(),
+                lit: lit.clone(),
+            }
+        }
+        Scheme::Seq { fst, snd } => Scheme::Seq {
+            fst: Box::new(substitute_capability(fst, target, impl_)),
+            snd: Box::new(substitute_capability(snd, target, impl_)),
+        },
+        Scheme::First { inner } => Scheme::First {
+            inner: Box::new(substitute_capability(inner, target, impl_)),
+        },
+        Scheme::Choice { l, r } => Scheme::Choice {
+            l: Box::new(substitute_capability(l, target, impl_)),
+            r: Box::new(substitute_capability(r, target, impl_)),
+        },
+        Scheme::Loop { body } => Scheme::Loop {
+            body: Box::new(substitute_capability(body, target, impl_)),
+        },
+        Scheme::App { callee, args } => {
+            let new_args: Vec<Scheme> =
+                args.iter().map(|a| substitute_capability(a, target, impl_)).collect();
+            Scheme::App {
+                callee: Box::new(substitute_capability(callee, target, impl_)),
+                args: new_args,
+            }
+        }
+        Scheme::Handle { body, target: t, impl_: i } => {
+            // Nested handle — should not occur after elimination, but handle
+            // it by recursing into both children.
+            Scheme::Handle {
+                body: Box::new(substitute_capability(body, target, impl_)),
+                target: t.clone(),
+                impl_: Box::new(substitute_capability(i, target, impl_)),
+            }
+        }
+    }
+}
+
+/// Eliminate all handlers in a scheme (free function version).
+pub fn eliminate_all_handlers(scheme: &Scheme) -> Scheme {
+    scheme.eliminate_handlers()
+}
+
+/// Eliminate handlers in a scheme (alias for compatibility).
+pub fn eliminate_handler_in_scheme(scheme: &Scheme) -> Scheme {
+    scheme.eliminate_handlers()
 }
 
 #[cfg(test)]
