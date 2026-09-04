@@ -83,11 +83,40 @@ pub struct AstDesugarRule {
     pub when: Option<AstDesugarCondition>,
 }
 
+/// A named role for a single child position of an AST node (ADR-0081).
+///
+/// Children are referenced by **role** (e.g. `target`, `statements`, `params`)
+/// rather than by positional index. Engines look up the positional index from
+/// the [`AstShapeDef`] at runtime instead of hardcoding `kind ==` shape checks.
+///
+/// `variadic: true` means the role covers all children from its start index to
+/// the end (e.g. `statements` in a `block`). A non-variadic role maps to
+/// exactly one child position.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ChildRoleSpec {
+    /// The role name — meaningful within this shape only (per-shape, not
+    /// global; `target` in `assign` is unrelated to `target` elsewhere).
+    pub role: String,
+    /// Whether the role spans this start index to the end of the children
+    /// array. Absent/`false` = a single child position.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub variadic: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 /// A definition of an AST node kind and its payload shape.
 ///
 /// Identity key: `node_kind` (see ADR-0044 §5). The `payload_schema` is a
 /// `serde_json::Value` describing the payload shape (e.g. a JSON Schema
 /// fragment), kept as opaque data so the crate stays engine-agnostic.
+///
+/// `children`, when present, declares the **named child roles** (ADR-0081).
+/// Absent = opaque node whose children are referenced positionally (backward
+/// compatible). When present, engines resolve child positions by role instead
+/// of hardcoding `kind ==` shape checks.
 ///
 /// AST shape declarations are **structural facts** ("this node kind exists
 /// with this payload shape"), not behavioral definitions: two emitters
@@ -115,6 +144,11 @@ pub struct AstShapeDef {
     /// ids this fragment hard-requires.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires: Vec<String>,
+    /// Optional named child roles (ADR-0081). Absent = opaque, positional
+    /// fallback (backward compatible). When present, engines resolve child
+    /// positions by role instead of hardcoding `kind ==` shape checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<ChildRoleSpec>>,
 }
 
 fn is_payload_null(v: &Value) -> bool {
@@ -131,6 +165,7 @@ impl AstShapeDef {
             desugar: None,
             replaces: Vec::new(),
             requires: Vec::new(),
+            children: None,
         }
     }
 
@@ -156,6 +191,44 @@ impl AstShapeDef {
     pub fn with_requires(mut self, requires: Vec<String>) -> Self {
         self.requires = requires;
         self
+    }
+
+    /// Attach named child roles (ADR-0081).
+    pub fn with_children(mut self, children: Vec<ChildRoleSpec>) -> Self {
+        self.children = Some(children);
+        self
+    }
+
+    /// Resolve a child role to its positional index.
+    ///
+    /// Returns `Some(index)` when the shape declares a role with the given
+    /// name, where `index` is the position of that role's first child.
+    /// Non-variadic roles map to exactly one position (e.g. `target` → 0);
+    /// variadic roles map to their start index. Returns `None` if the shape has
+    /// no `children` declaration or the role is unknown.
+    pub fn role_index(&self, role: &str) -> Option<usize> {
+        let children = self.children.as_ref()?;
+        let mut idx = 0usize;
+        for spec in children {
+            if spec.role == role {
+                return Some(idx);
+            }
+            // Each declared role occupies exactly one slot (variadic or not);
+            // roles are declared in child order, so the next role starts after
+            // this one.
+            idx += 1;
+        }
+        None
+    }
+
+    /// Return the [`ChildRoleSpec`] for a role, if declared.
+    pub fn child_role(&self, role: &str) -> Option<&ChildRoleSpec> {
+        self.children.as_ref()?.iter().find(|s| s.role == role)
+    }
+
+    /// Whether the role spans multiple children (variadic).
+    pub fn role_is_variadic(&self, role: &str) -> bool {
+        self.child_role(role).map(|s| s.variadic).unwrap_or(false)
     }
 }
 
@@ -225,6 +298,65 @@ mod tests {
         // AST shape declarations are structural facts, so they merge
         // idempotently rather than colliding.
         assert!(AstShapeDef::UNION);
+    }
+
+    #[test]
+    fn default_children_is_none() {
+        let def = AstShapeDef::new("ast.assign", "assign");
+        assert!(def.children.is_none());
+        // Positional fallback remains (backward compatible).
+        assert_eq!(def.role_index("target"), None);
+    }
+
+    #[test]
+    fn role_index_resolves_positional_roles() {
+        use crate::ChildRoleSpec;
+        let def = AstShapeDef::new("ast.assign", "assign").with_children(vec![
+            ChildRoleSpec {
+                role: "target".into(),
+                variadic: false,
+            },
+            ChildRoleSpec {
+                role: "value".into(),
+                variadic: false,
+            },
+        ]);
+        assert_eq!(def.role_index("target"), Some(0));
+        assert_eq!(def.role_index("value"), Some(1));
+        assert_eq!(def.role_index("nope"), None);
+        assert!(def.child_role("value").is_some());
+    }
+
+    #[test]
+    fn role_index_resolves_variadic_role() {
+        use crate::ChildRoleSpec;
+        let def = AstShapeDef::new("ast.block", "block").with_children(vec![ChildRoleSpec {
+            role: "statements".into(),
+            variadic: true,
+        }]);
+        // Variadic role resolves to its start index (all children from here).
+        assert_eq!(def.role_index("statements"), Some(0));
+        assert!(def.role_is_variadic("statements"));
+        assert!(!def.role_is_variadic("unknown"));
+    }
+
+    #[test]
+    fn role_serde_roundtrip() {
+        use crate::ChildRoleSpec;
+        let def = AstShapeDef::new("ast.block", "block").with_children(vec![ChildRoleSpec {
+            role: "statements".into(),
+            variadic: true,
+        }]);
+        let j = serde_json::to_string(&def).unwrap();
+        let back: AstShapeDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(def, back);
+        // With children declared, the field round-trips; variadic:false is
+        // skipped on the wire (it is the default), but variadic:true is kept.
+        assert!(j.contains("\"children\""));
+        assert!(j.contains("\"variadic\":true") || j.contains("\"variadic\": true"));
+        let plain = AstShapeDef::new("ast.assign", "assign");
+        let jp = serde_json::to_string(&plain).unwrap();
+        assert!(!jp.contains("\"children\""));
     }
 
     #[test]

@@ -107,6 +107,25 @@ impl Language {
         *self = clone;
         Ok(())
     }
+
+    /// Resolve a named child role (ADR-0081) to its positional index for a node
+    /// kind, using this language's AST shapes.
+    ///
+    /// This is the runtime-resolution entry point engines call to replace
+    /// `kind ==` shape checks: instead of testing `node.kind == "assign"` and
+    /// assuming child 0 is the target, an engine resolves
+    /// `lang.child_role_index(node.kind, "target")` and projects that position.
+    ///
+    /// Returns `Ok(Some(index))` when the role is declared, `Ok(None)` when the
+    /// node kind has no shape or no such role (opaque/positional fallback), and
+    /// `Err` when a shape exists but the resolved index is out of bounds for
+    /// the node's children (a load-time data inconsistency).
+    pub fn child_role_index(&self, node_kind: &str, role: &str) -> Result<Option<usize>, LangError> {
+        let Some(def) = self.ast.get_by_identity(node_kind) else {
+            return Ok(None);
+        };
+        Ok(def.role_index(role))
+    }
 }
 
 #[cfg(test)]

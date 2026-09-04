@@ -48,6 +48,11 @@ impl Default for LiteralKind {
     }
 }
 
+/// Serde helper: skip the `trivia` flag when it is `false` (the default).
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 /// A definition of one token kind in a language.
 ///
 /// Identity key: `id` (see ADR-0044 §5). Token kind declarations are
@@ -67,6 +72,14 @@ pub struct TokenKindDef {
     /// (verbatim text as a string).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub literal: Option<LiteralKind>,
+    /// Whether this token kind is *trivia* — a lexical token that carries no
+    /// syntactic meaning and is skipped by the parser (e.g. comments). The
+    /// lexer still emits trivia tokens (so tooling such as the LSP can surface
+    /// comments / doc-comments), but the Pratt parser filters them out before
+    /// driving the grammar. Marking a token as trivia is a data change, not a
+    /// parser edit (ADR-0044).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub trivia: bool,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -82,6 +95,7 @@ impl TokenKindDef {
             id: id.into(),
             label: None,
             literal: None,
+            trivia: false,
             replaces: Vec::new(),
             requires: Vec::new(),
         }
@@ -96,6 +110,12 @@ impl TokenKindDef {
     /// Attach a literal kind for typed atom dispatch (ADR-0053).
     pub fn with_literal(mut self, literal: LiteralKind) -> Self {
         self.literal = Some(literal);
+        self
+    }
+
+    /// Mark this token kind as trivia (skipped by the parser).
+    pub fn with_trivia(mut self) -> Self {
+        self.trivia = true;
         self
     }
 
@@ -169,6 +189,7 @@ mod tests {
         assert!(!j.contains("replaces"));
         assert!(!j.contains("requires"));
         assert!(!j.contains("literal"));
+        assert!(!j.contains("trivia"));
     }
 
     #[test]

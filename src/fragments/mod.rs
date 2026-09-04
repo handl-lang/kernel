@@ -21,7 +21,7 @@ pub mod token_kind;
 /// Type rule fragment definitions (ADR-0054 — Generic Typecheck Engine).
 pub mod type_rule;
 
-pub use ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef};
+pub use ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, ChildRoleSpec};
 pub use capability::CapabilityDecl;
 pub use eval_scheme::EvalSchemeDef;
 pub use grammar::{AstShapeRef, ChildSeparator, DelimitedShape, GrammarPosition, GrammarRow, PairShape, PayloadTokenSpec};
