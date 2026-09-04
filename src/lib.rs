@@ -47,6 +47,8 @@ pub mod scheme;
 pub mod staged;
 /// Scheme combinator versioning.
 pub mod version;
+/// Proof verdicts for the partial-evaluator typechecker (ADR-0068).
+pub mod verdict;
 
 pub use ast::{Ast, AstNode, AstRef, Span};
 pub use capabilities::{capabilities, foreign_names, subset_of};
@@ -77,6 +79,7 @@ pub use quantified_laws::{
 };
 pub use scheme::{ArrSource, Scheme, eliminate_all_handlers, eliminate_handler_in_scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
+pub use verdict::{Proof, Verdict};
 pub use version::SchemeVersion;
 
 /// The value type used throughout the crate: a re-export of `serde_json::Value`.
