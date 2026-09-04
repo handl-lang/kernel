@@ -20,9 +20,9 @@
 //!   `{"__arrow__": true, "params": [...], "body": <idx>, "env": {...}}`
 //!   shape used by the arrow-calculus `App` combinator.
 
-use std::collections::HashMap;
 use std::rc::Rc;
 
+use rustc_hash::FxHashMap;
 use serde_json::{Map, Number, Value};
 
 /// Fast tagged value representation for eval engines.
@@ -40,7 +40,7 @@ pub enum TaggedValue {
     Float(f64),
     Str(Rc<str>),
     Arr(Rc<[TaggedValue]>),
-    Obj(Rc<HashMap<String, TaggedValue>>),
+    Obj(Rc<FxHashMap<Rc<str>, TaggedValue>>),
     /// Arrow-calculus pair: `(a, b)` — used by `First`/`Loop`.
     Pair(Rc<(TaggedValue, TaggedValue)>),
     /// Arrow-calculus `Either`: `left v` — used by `Choice`/`Loop`.
@@ -52,7 +52,7 @@ pub enum TaggedValue {
     Arrow {
         params: Rc<[String]>,
         body: usize, // AstRef index
-        env: Rc<HashMap<String, TaggedValue>>,
+        env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
     },
 }
 
@@ -139,7 +139,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             Some(Value::Object(env_map)) => {
                 Rc::from(obj_map_to_hashmap(env_map.clone()))
             }
-            _ => Rc::new(HashMap::new()),
+            _ => Rc::new(FxHashMap::default()),
         };
         return TaggedValue::Arrow { params, body, env };
     }
@@ -150,9 +150,9 @@ fn map_to_obj(o: Map<String, Value>) -> TaggedValue {
     TaggedValue::Obj(Rc::new(obj_map_to_hashmap(o)))
 }
 
-fn obj_map_to_hashmap(o: Map<String, Value>) -> HashMap<String, TaggedValue> {
+fn obj_map_to_hashmap(o: Map<String, Value>) -> FxHashMap<Rc<str>, TaggedValue> {
     o.into_iter()
-        .map(|(k, v)| (k, TaggedValue::from(v)))
+        .map(|(k, v)| (Rc::from(k), TaggedValue::from(v)))
         .collect()
 }
 
@@ -183,7 +183,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         TaggedValue::Obj(o) => {
             let mut map = Map::new();
             for (k, val) in o.iter() {
-                map.insert(k.clone(), tagged_to_value(val));
+                map.insert(k.to_string(), tagged_to_value(val));
             }
             Value::Object(map)
         }
@@ -199,7 +199,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         TaggedValue::Arrow { params, body, env } => {
             let mut env_map = Map::new();
             for (k, val) in env.iter() {
-                env_map.insert(k.clone(), tagged_to_value(val));
+                env_map.insert(k.to_string(), tagged_to_value(val));
             }
             serde_json::json!({
                 "__arrow__": true,
@@ -257,8 +257,8 @@ impl TaggedValue {
         }
     }
 
-    /// Returns the value as a `&HashMap` if it is an object.
-    pub fn as_object(&self) -> Option<&HashMap<String, TaggedValue>> {
+    /// Returns the value as a `&FxHashMap` if it is an object.
+    pub fn as_object(&self) -> Option<&FxHashMap<Rc<str>, TaggedValue>> {
         match self {
             TaggedValue::Obj(o) => Some(o),
             _ => None,
@@ -473,7 +473,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
             if x.len() != y.len() {
                 return false;
             }
-            x.iter().all(|(k, v)| y.get(k).map(|w| eq(v, w)).unwrap_or(false))
+            x.iter().all(|(k, v)| y.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
         }
         (TaggedValue::Pair(p1), TaggedValue::Pair(p2)) => {
             eq(&p1.0, &p2.0) && eq(&p1.1, &p2.1)
@@ -492,7 +492,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                         return false;
                     }
                     e1.iter()
-                        .all(|(k, v)| e2.get(k).map(|w| eq(v, w)).unwrap_or(false))
+                        .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
                 }
         }
         _ => false,
@@ -599,10 +599,10 @@ macro_rules! tval {
     // object
     ({$($key:literal : $val:tt),* $(,)?}) => {
         {
-            let mut __map = ::std::collections::HashMap::new();
+            let mut __map = ::rustc_hash::FxHashMap::default();
             $(
                 __map.insert(
-                    ::std::string::String::from($key),
+                    ::std::rc::Rc::from($key),
                     $crate::tval!($val),
                 );
             )*
