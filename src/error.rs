@@ -8,6 +8,8 @@
 
 use thiserror::Error;
 
+use crate::ast::{AstNode, Span};
+
 /// Errors raised by `handl-language` operations.
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LangError {
@@ -53,8 +55,25 @@ pub enum LangError {
     Serde(String),
     /// An engine-reported error (used by later phases; included for API
     /// completeness).
-    #[error("engine error: {0}")]
-    Engine(String),
+    ///
+    /// Carries a human-readable `message`, an optional source `span`, an
+    /// optional `node_kind` for the AST node where the error originated, and a
+    /// pre-formatted `context` suffix appended in `Display`. The `message`
+    /// field is kept pure (no position info) so callers can match on it with
+    /// `.contains(...)`. The structured `span` / `node_kind` fields are
+    /// available for programmatic consumers (LSP, diagnostics).
+    #[error("engine error: {message}{context}")]
+    Engine {
+        /// The core error message (no source position info).
+        message: String,
+        /// Pre-formatted context suffix, e.g. `" at 12..15 in binary.add"`.
+        /// Empty when no source context is available.
+        context: String,
+        /// The byte span in the source where the error originated, if known.
+        span: Option<Span>,
+        /// The kind of the AST node where the error originated, if known.
+        node_kind: Option<String>,
+    },
     /// A variable was referenced but is not bound in the current scope.
     ///
     /// Added in Phase 2 for the tree-walk eval engine, which resolves `Var`
@@ -85,9 +104,73 @@ impl From<serde_json::Error> for LangError {
     }
 }
 
+impl LangError {
+    /// Build an engine error with no source context.
+    ///
+    /// Use this when no `AstNode` or `Span` is available (e.g. dispatch
+    /// machinery, kit assembly, standalone binary loading).
+    pub fn engine(msg: impl Into<String>) -> Self {
+        LangError::Engine {
+            message: msg.into(),
+            context: String::new(),
+            span: None,
+            node_kind: None,
+        }
+    }
+
+    /// Build an engine error with source context from an `AstNode`.
+    ///
+    /// Attaches `node.span` and `node.kind` as structured fields and appends
+    /// a `" at {start}..{end} in {kind}"` suffix to the `Display` output.
+    /// The `message` field itself stays pure for `.contains()` matching.
+    pub fn engine_node(msg: impl Into<String>, node: &AstNode) -> Self {
+        let mut context = String::new();
+        if let Some(span) = node.span {
+            context.push_str(&format!(" at {}..{}", span.start, span.end));
+        }
+        if !node.kind.is_empty() {
+            context.push_str(&format!(" in {}", node.kind));
+        }
+        LangError::Engine {
+            message: msg.into(),
+            context,
+            span: node.span,
+            node_kind: Some(node.kind.clone()),
+        }
+    }
+
+    /// Build an engine error with explicit source context.
+    ///
+    /// Use this when you have a `Span` and/or node kind but not an `AstNode`
+    /// directly (e.g. you have an `AstRef` and an `Ast` arena).
+    pub fn engine_at(
+        msg: impl Into<String>,
+        span: Option<Span>,
+        node_kind: Option<impl Into<String>>,
+    ) -> Self {
+        let node_kind = node_kind.map(|k| k.into());
+        let mut context = String::new();
+        if let Some(s) = span {
+            context.push_str(&format!(" at {}..{}", s.start, s.end));
+        }
+        if let Some(k) = &node_kind {
+            if !k.is_empty() {
+                context.push_str(&format!(" in {}", k));
+            }
+        }
+        LangError::Engine {
+            message: msg.into(),
+            context,
+            span,
+            node_kind,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{AstNode, Span};
 
     #[test]
     fn from_serde_json_error() {
@@ -148,8 +231,29 @@ mod tests {
             "serde error: boom"
         );
         assert_eq!(
-            format!("{}", LangError::Engine("nope".into())),
+            format!("{}", LangError::engine("nope")),
             "engine error: nope"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                LangError::engine_node(
+                    "boom",
+                    &AstNode::new("binary.add").with_span(Span { start: 12, end: 15 })
+                )
+            ),
+            "engine error: boom at 12..15 in binary.add"
+        );
+        assert_eq!(
+            format!("{}", LangError::engine_node("boom", &AstNode::new("lit"))),
+            "engine error: boom in lit"
+        );
+        assert_eq!(
+            format!(
+                "{}",
+                LangError::engine_at("boom", Some(Span { start: 0, end: 3 }), Some("var"))
+            ),
+            "engine error: boom at 0..3 in var"
         );
         assert_eq!(
             format!("{}", LangError::UnknownVariable { name: "x".into() }),
