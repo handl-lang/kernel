@@ -8,8 +8,8 @@ use handl_value::{
     add, div, eq, either_left, either_right, either_value, is_either_left, is_either_right, lt,
     mod_, mul, pair, pair_fst, pair_snd, sub, truthy, tval, tagged_to_value, TaggedValue,
 };
+use rustc_hash::FxHashMap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 // ---------------------------------------------------------------------------
@@ -49,6 +49,33 @@ fn round_trip_float() {
 fn round_trip_string() {
     assert_eq!(round_trip(json!("hello")), json!("hello"));
     assert_eq!(round_trip(json!("")), json!(""));
+}
+
+#[test]
+fn round_trip_bytes() {
+    // Bytes use the {"__bytes__": [n, ...]} JSON encoding (ADR-0083 §2.1).
+    let v = json!({"__bytes__": [0xDE, 0xAD, 0xBE, 0xEF]});
+    assert_eq!(round_trip(v.clone()), v);
+    // Empty buffer round-trips.
+    let empty = json!({"__bytes__": []});
+    assert_eq!(round_trip(empty.clone()), empty);
+    // All byte values survive.
+    let all_bytes: Vec<Value> = (0u8..=255).map(|b| json!(b)).collect();
+    let full = json!({ "__bytes__": Value::Array(all_bytes) });
+    assert_eq!(round_trip(full.clone()), full);
+}
+
+#[test]
+fn bytes_accessor_and_truthiness() {
+    use handl_value::bytes;
+    let bv = bytes(vec![0x00, 0x01, 0xFF]);
+    assert_eq!(bv.as_bytes(), Some(&[0x00u8, 0x01, 0xFF][..]));
+    // Non-empty bytes is truthy; empty bytes is falsy.
+    assert!(truthy(&bv));
+    assert!(!truthy(&bytes(Vec::<u8>::new())));
+    // Equality is structural on the buffer contents.
+    assert!(eq(&bytes(vec![1, 2, 3]), &bytes(vec![1, 2, 3])));
+    assert!(!eq(&bytes(vec![1, 2, 3]), &bytes(vec![1, 2, 4])));
 }
 
 #[test]
@@ -264,8 +291,8 @@ fn truthiness_rules() {
     assert!(truthy(&TaggedValue::Str(Rc::from("x"))));
     // Objects and arrays are truthy (mirrors is_truthy_object_and_array).
     assert!(truthy(&TaggedValue::Arr(Rc::from(Vec::new()))));
-    let mut m = HashMap::new();
-    m.insert("a".to_string(), TaggedValue::Int(1));
+    let mut m = FxHashMap::default();
+    m.insert(Rc::from("a"), TaggedValue::Int(1));
     assert!(truthy(&TaggedValue::Obj(Rc::new(m))));
     // Pairs and Eithers are truthy.
     assert!(truthy(&pair(

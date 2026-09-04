@@ -39,6 +39,13 @@ pub enum TaggedValue {
     Int(i64),
     Float(f64),
     Str(Rc<str>),
+    /// Contiguous byte buffer (`Rc<Vec<u8>>`). Declared as the `Bytes`
+    /// scalar type in `value_types.yaml` (ADR-0078 Phase 2 / ADR-0083
+    /// §2.1). The JSON encoding is `{"__bytes__": [n, ...]}` — an array
+    /// of numbers in `0..=255` — so it round-trips through
+    /// `serde_json::Value` unambiguously (a plain JSON array would be
+    /// indistinguishable from `Arr`).
+    Bytes(Rc<Vec<u8>>),
     Arr(Rc<[TaggedValue]>),
     Obj(Rc<FxHashMap<Rc<str>, TaggedValue>>),
     /// Arrow-calculus pair: `(a, b)` — used by `First`/`Loop`.
@@ -90,7 +97,30 @@ fn number_to_tagged(n: Number) -> TaggedValue {
     }
 }
 
+/// Decode a JSON array of numbers (each in `0..=255`) into a `Vec<u8>`.
+///
+/// Returns `None` if any element is missing, non-integer, or out of byte
+/// range, so that a malformed `{"__bytes__": ...}` payload falls back to
+/// being treated as a plain object rather than silently truncating.
+fn json_array_to_bytes(arr: &[Value]) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(arr.len());
+    for el in arr {
+        let n = el.as_i64()?;
+        let b = u8::try_from(n).ok()?;
+        out.push(b);
+    }
+    Some(out)
+}
+
 fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
+    // Bytes: {"__bytes__": [n, ...]} — a byte buffer (ADR-0083 §2.1).
+    if let Some(bytes_val) = o.get("__bytes__") {
+        if let Some(arr) = bytes_val.as_array() {
+            if let Some(buf) = json_array_to_bytes(arr) {
+                return TaggedValue::Bytes(Rc::new(buf));
+            }
+        }
+    }
     // Pair: {"__pair__": [a, b]}
     if let Some(pair_val) = o.get("__pair__") {
         if let Some(arr) = pair_val.as_array() {
@@ -156,6 +186,13 @@ fn obj_map_to_hashmap(o: Map<String, Value>) -> FxHashMap<Rc<str>, TaggedValue> 
         .collect()
 }
 
+/// Encode a byte buffer as `{"__bytes__": [n, ...]}` — the JSON form of
+/// `TaggedValue::Bytes` (ADR-0083 §2.1).
+fn bytes_to_value(b: &[u8]) -> Value {
+    let arr: Vec<Value> = b.iter().map(|&byte| Value::from(byte as i64)).collect();
+    serde_json::json!({ "__bytes__": arr })
+}
+
 impl From<TaggedValue> for Value {
     fn from(v: TaggedValue) -> Value {
         tagged_to_value(&v)
@@ -177,6 +214,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
                 .unwrap_or(Value::Null)
         }
         TaggedValue::Str(s) => Value::String((*s).to_string()),
+        TaggedValue::Bytes(b) => bytes_to_value(b),
         TaggedValue::Arr(a) => {
             Value::Array(a.iter().map(tagged_to_value).collect())
         }
@@ -241,6 +279,14 @@ impl TaggedValue {
         }
     }
 
+    /// Returns the value as a byte slice if it is a `Bytes` value.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            TaggedValue::Bytes(b) => Some(b),
+            _ => None,
+        }
+    }
+
     /// Returns the value as `bool` if it is a boolean.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
@@ -292,6 +338,11 @@ impl TaggedValue {
 /// Construct a pair value `(a, b)`.
 pub fn pair(a: TaggedValue, b: TaggedValue) -> TaggedValue {
     TaggedValue::Pair(Rc::new((a, b)))
+}
+
+/// Construct a `Bytes` value from a byte buffer.
+pub fn bytes(b: impl Into<Vec<u8>>) -> TaggedValue {
+    TaggedValue::Bytes(Rc::new(b.into()))
 }
 
 /// Extract the first component of a pair value, or `None` if not a pair.
@@ -349,6 +400,7 @@ pub fn truthy(v: &TaggedValue) -> bool {
         TaggedValue::Int(i) => *i != 0,
         TaggedValue::Float(f) => *f != 0.0,
         TaggedValue::Str(s) => !s.is_empty(),
+        TaggedValue::Bytes(b) => !b.is_empty(),
         _ => true,
     }
 }
@@ -466,6 +518,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
             (*x as f64) == *y
         }
         (TaggedValue::Str(x), TaggedValue::Str(y)) => x == y,
+        (TaggedValue::Bytes(x), TaggedValue::Bytes(y)) => x == y,
         (TaggedValue::Arr(x), TaggedValue::Arr(y)) => {
             x.len() == y.len() && x.iter().zip(y.iter()).all(|(a, b)| eq(a, b))
         }
@@ -555,6 +608,18 @@ impl IntoTval for &str {
 impl IntoTval for String {
     fn into_tval(self) -> TaggedValue {
         TaggedValue::Str(Rc::from(self))
+    }
+}
+
+impl IntoTval for Vec<u8> {
+    fn into_tval(self) -> TaggedValue {
+        TaggedValue::Bytes(Rc::new(self))
+    }
+}
+
+impl IntoTval for &[u8] {
+    fn into_tval(self) -> TaggedValue {
+        TaggedValue::Bytes(Rc::new(self.to_vec()))
     }
 }
 
