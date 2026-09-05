@@ -126,6 +126,21 @@ impl Language {
         };
         Ok(def.role_index(role))
     }
+
+    /// Whether `node_kind`'s shape declares any variadic child role (ADR-0081).
+    ///
+    /// Engines use this to replace `kind == "paren" || kind == "array"` shape
+    /// heuristics: a node whose shape declares a variadic role (e.g. `params`
+    /// or `statements`) is a collection-like node, regardless of its surface
+    /// kind name. Returns `false` when the kind has no shape or no variadic
+    /// roles (callers fall back to legacy kind checks for role-less shapes).
+    pub fn has_variadic_role(&self, node_kind: &str) -> bool {
+        self.ast
+            .get_by_identity(node_kind)
+            .and_then(|def| def.children.as_ref())
+            .map(|children| children.iter().any(|spec| spec.variadic))
+            .unwrap_or(false)
+    }
 }
 
 #[cfg(test)]
