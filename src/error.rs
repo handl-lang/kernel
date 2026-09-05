@@ -118,6 +118,93 @@ impl LangError {
         }
     }
 
+    /// Return the source `Span` carried by this error, if any.
+    ///
+    /// Only the `Engine` variant carries structured span info today; all other
+    /// variants return `None`.
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            LangError::Engine { span, .. } => *span,
+            _ => None,
+        }
+    }
+
+    /// Attach a node's span (and kind) to this error, if not already set.
+    ///
+    /// This is a builder-style helper for the common pattern of creating an
+    /// error with [`LangError::engine`] and then attaching source context once
+    /// the responsible `AstNode` is known. If the error already carries a span
+    /// (e.g. it was built with [`LangError::engine_node`] or
+    /// [`LangError::engine_at`]), it is returned unchanged. Non-`Engine`
+    /// variants are also returned unchanged.
+    pub fn with_node(mut self, node: &AstNode) -> Self {
+        if self.span().is_none() {
+            self = match self {
+                LangError::Engine {
+                    message,
+                    span: None,
+                    node_kind: _,
+                    context,
+                } => {
+                    let mut new_context = String::new();
+                    if let Some(s) = node.span {
+                        new_context.push_str(&format!(" at {}..{}", s.start, s.end));
+                    }
+                    if !node.kind.is_empty() {
+                        new_context.push_str(&format!(" in {}", node.kind));
+                    }
+                    // Preserve any pre-existing context that preceded the
+                    // source-location suffix (rare, but keep behaviour stable).
+                    if !context.is_empty() {
+                        new_context.push_str(&context);
+                    }
+                    LangError::Engine {
+                        message,
+                        context: new_context,
+                        span: node.span,
+                        node_kind: Some(node.kind.clone()),
+                    }
+                }
+                // Engine variant already had a span (matched above is None,
+                // so this arm is unreachable for the inner match), or other
+                // variants — return as-is.
+                other => other,
+            };
+        }
+        self
+    }
+
+    /// Attach an explicit span (and optional node kind) to this error, if not
+    /// already set.
+    ///
+    /// See [`LangError::with_node`] for the rationale. Use this when you have a
+    /// `Span` (e.g. from a token) but not an `AstNode` directly.
+    pub fn with_span(mut self, span: Span) -> Self {
+        if self.span().is_none() {
+            self = match self {
+                LangError::Engine {
+                    message,
+                    span: None,
+                    node_kind,
+                    context,
+                } => {
+                    let mut new_context = format!(" at {}..{}", span.start, span.end);
+                    if !context.is_empty() {
+                        new_context.push_str(&context);
+                    }
+                    LangError::Engine {
+                        message,
+                        context: new_context,
+                        span: Some(span),
+                        node_kind,
+                    }
+                }
+                other => other,
+            };
+        }
+        self
+    }
+
     /// Build an engine error with source context from an `AstNode`.
     ///
     /// Attaches `node.span` and `node.kind` as structured fields and appends
@@ -269,5 +356,69 @@ mod tests {
             ),
             "lex error at position 7: unrecognized character"
         );
+    }
+
+    #[test]
+    fn span_accessor_returns_engine_span() {
+        let with_span = LangError::engine_at("boom", Some(Span { start: 1, end: 4 }), Some("x"));
+        assert_eq!(with_span.span(), Some(Span { start: 1, end: 4 }));
+        let without_span = LangError::engine("boom");
+        assert_eq!(without_span.span(), None);
+        // Non-Engine variants never carry a span.
+        assert_eq!(LangError::NotImplemented.span(), None);
+    }
+
+    #[test]
+    fn with_node_attaches_span_and_kind() {
+        let err = LangError::engine("nope");
+        assert!(err.span().is_none());
+        let node = AstNode::new("binary.add").with_span(Span { start: 12, end: 15 });
+        let err = err.with_node(&node);
+        assert_eq!(err.span(), Some(Span { start: 12, end: 15 }));
+        // Display now includes the source-location suffix.
+        assert_eq!(
+            format!("{}", err),
+            "engine error: nope at 12..15 in binary.add"
+        );
+        match err {
+            LangError::Engine {
+                node_kind: Some(ref k),
+                ..
+            } => assert_eq!(k, "binary.add"),
+            other => panic!("expected Engine variant, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn with_node_is_idempotent_when_span_already_set() {
+        let err = LangError::engine_node(
+            "boom",
+            &AstNode::new("lit").with_span(Span { start: 0, end: 1 }),
+        );
+        let original_span = err.span();
+        let other = AstNode::new("binary.add").with_span(Span {
+            start: 99,
+            end: 100,
+        });
+        let err = err.with_node(&other);
+        // Span already set → with_node must not overwrite it.
+        assert_eq!(err.span(), original_span);
+    }
+
+    #[test]
+    fn with_span_attaches_explicit_span() {
+        let err = LangError::engine("nope");
+        let err = err.with_span(Span { start: 5, end: 8 });
+        assert_eq!(err.span(), Some(Span { start: 5, end: 8 }));
+        assert_eq!(format!("{}", err), "engine error: nope at 5..8");
+    }
+
+    #[test]
+    fn with_node_leaves_non_engine_variants_untouched() {
+        let err = LangError::UnknownVariable { name: "x".into() };
+        let node = AstNode::new("var").with_span(Span { start: 0, end: 1 });
+        let err = err.with_node(&node);
+        assert!(matches!(err, LangError::UnknownVariable { .. }));
+        assert_eq!(err.span(), None);
     }
 }

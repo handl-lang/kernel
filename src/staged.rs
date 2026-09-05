@@ -12,18 +12,42 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::ast::Ast;
+use crate::ast::{Ast, Span};
 use crate::error::LangError;
 use crate::language::Language;
 
 /// A unit of source text produced by the lexer. A minimal stub; later phases
 /// may widen this or reuse `handl_plugin_lexer::Token`.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Token {
     /// The token kind id (keyed to `TokenKindDef::id`).
     pub kind: String,
     /// The matched source text.
     pub text: String,
+    /// Inclusive start byte offset of `text` in the source. Populated by the
+    /// lexer; defaults to `0` for hand-built tokens (e.g. in tests) so that
+    /// older serialized token streams still deserialize.
+    #[serde(default)]
+    pub start: usize,
+    /// Exclusive end byte offset of `text` in the source. Populated by the
+    /// lexer; defaults to `0` for hand-built tokens.
+    #[serde(default)]
+    pub end: usize,
+}
+
+impl Token {
+    /// The byte [`Span`] covering this token's source text, or `None` when
+    /// the token carries no position (e.g. hand-built test tokens).
+    pub fn span(&self) -> Option<Span> {
+        if self.end > self.start {
+            Some(Span {
+                start: self.start,
+                end: self.end,
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Source text to be lexed. A newtype around `String`.
@@ -176,6 +200,8 @@ mod tests {
         let t = Token {
             kind: "token.number".into(),
             text: "42".into(),
+            start: 0,
+            end: 2,
         };
         let j = serde_json::to_string(&t).unwrap();
         let back: Token = serde_json::from_str(&j).unwrap();
