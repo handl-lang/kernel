@@ -8,6 +8,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
@@ -140,6 +141,52 @@ impl Language {
             .and_then(|def| def.children.as_ref())
             .map(|children| children.iter().any(|spec| spec.variadic))
             .unwrap_or(false)
+    }
+
+    /// Extract the parameter name from a param node, unwrapping type
+    /// annotations (ADR-0081 data-driven: uses the `subject` child role
+    /// declared by `type-annot`'s `AstShapeDef`, never a `kind ==`
+    /// check).
+    ///
+    /// A bare `var` node has a string payload (the name) and is returned
+    /// directly. A `type-annot` node (e.g. `x: Int`) has a `subject` role
+    /// pointing at the inner `var`; this resolves that child and reads
+    /// its string payload. Returns `Err` if the name cannot be extracted.
+    pub fn param_name(
+        &self,
+        ast: &Ast,
+        param_node: &AstNode,
+    ) -> Result<String, LangError> {
+        // Fast path: the param is a bare `var` with a string payload.
+        if let Some(name) = param_node.payload.as_str() {
+            return Ok(name.to_string());
+        }
+        // Data-driven unwrap: if the node's shape declares a `subject`
+        // role (e.g. `type-annot`), resolve that child and read its
+        // string payload. This is the data-driven equivalent of
+        // "if kind == type-annot, look at child 0" — but it works for
+        // any shape that declares a `subject` role, not just
+        // `type-annot` specifically.
+        if let Ok(Some(subject_idx)) = self.child_role_index(&param_node.kind, "subject") {
+            let children = param_node
+                .payload
+                .get("children")
+                .and_then(|c| c.as_array());
+            if let Some(children) = children {
+                if let Some(child_entry) = children.get(subject_idx) {
+                    if let Some(inner_idx) = child_entry.as_u64() {
+                        let inner = ast.at(AstRef::new(inner_idx as usize))?;
+                        if let Some(name) = inner.payload.as_str() {
+                            return Ok(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        Err(LangError::engine(
+            "closure: param must be a var with string payload (or a type-annot wrapping one)"
+                .to_string(),
+        ))
     }
 }
 
