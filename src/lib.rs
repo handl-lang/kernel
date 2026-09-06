@@ -244,7 +244,7 @@ pub fn is_tag_value(value: &Value) -> bool {
 /// identity), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6),
 /// `__arrow__` (ADR-0052 closure values), and `__home__` (the provenance
 /// frame id stamped on arrow values that cross a runtime boundary — see
-/// `plugin-engine-eval-tree-walk`'s home-frame registry). These are minted
+/// `plugin-engine-exec-tree-walk`'s home-frame registry). These are minted
 /// by host primitives (`tag_value`, the host type registry `construct` op,
 /// `language_value`, `ast_value`, the `closure` op, the `.hnl` module
 /// loader), never by user object literals. The eval engines call this to
