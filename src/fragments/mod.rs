@@ -18,6 +18,9 @@ pub mod lexer_rule;
 pub mod option;
 /// Token kind fragment definitions.
 pub mod token_kind;
+/// Transform rule fragment definitions (ADR-0094 — Generic AST Transform
+/// Engine).
+pub mod transform_def;
 /// Type rule fragment definitions (ADR-0054 — Generic Typecheck Engine).
 pub mod type_rule;
 
@@ -33,4 +36,5 @@ pub use grammar::{
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;
 pub use token_kind::{LiteralKind, TokenKindDef};
+pub use transform_def::{RewriteStep, TransformCondition, TransformDef, TransformRule};
 pub use type_rule::TypeRuleDef;

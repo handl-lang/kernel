@@ -13,7 +13,7 @@ use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
     AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, OptionSchema,
-    TokenKindDef, TypeRuleDef,
+    TokenKindDef, TransformDef, TypeRuleDef,
 };
 use crate::version::SchemeVersion;
 
@@ -37,6 +37,11 @@ pub struct Language {
     pub types: FragmentSet<TypeRuleDef>,
     /// AST node shape definitions.
     pub ast: FragmentSet<AstShapeDef>,
+    /// Transform rule definitions (ADR-0094 — Generic AST Transform Engine):
+    /// the `(pass, node_kind, priority)`-keyed dispatch table transform
+    /// engines read. `AstShapeDef::desugar` rules are **lowered** into this
+    /// set at merge time (pass `"desugar"`).
+    pub transforms: FragmentSet<TransformDef>,
     /// Capability declarations.
     pub caps: FragmentSet<CapabilityDecl>,
     /// Option schemas.
@@ -63,6 +68,7 @@ impl Language {
             eval: FragmentSet::new(),
             types: FragmentSet::new(),
             ast: FragmentSet::new(),
+            transforms: FragmentSet::new(),
             caps: FragmentSet::new(),
             options: FragmentSet::new(),
             lexer_rules: FragmentSet::new(),
@@ -94,7 +100,17 @@ impl Language {
             clone.types.merge(frag)?;
         }
         for frag in other.ast.fragments().cloned() {
-            clone.ast.merge(frag)?;
+            clone.merge_ast_fragment_inner(frag)?;
+        }
+        for frag in other.transforms.fragments().cloned() {
+            // A fragment already present with identical content is a no-op —
+            // in particular, a `transform.desugar.*` rule synthesized by
+            // `AstShapeDef::desugar` lowering above must not collide with
+            // the same synthesized rule carried over in `other.transforms`.
+            if clone.transforms.get_by_id(&frag.id) == Some(&frag) {
+                continue;
+            }
+            clone.transforms.merge(frag)?;
         }
         for frag in other.caps.fragments().cloned() {
             clone.caps.merge(frag)?;
@@ -107,6 +123,88 @@ impl Language {
         }
         *self = clone;
         Ok(())
+    }
+
+    /// Merge a single [`AstShapeDef`] into this language, lowering any
+    /// `desugar` rule it carries into a [`TransformDef`] in the `transforms`
+    /// set (ADR-0094 §6).
+    ///
+    /// This is the merge path every `ast`-fragment loader should use: it
+    /// merges `frag` into `ast` and, when the fragment is actually kept by
+    /// the merge (AST shapes are union fragments — a duplicate declaration
+    /// is dropped, and so is its desugar rule) and declares
+    /// `desugar: Some(..)`, synthesizes a `TransformDef` with
+    /// `id = "transform.desugar.<node_kind>"`, `pass = "desugar"`, and
+    /// `priority = 0`.
+    ///
+    /// The merge is atomic: on failure `self` is left unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`LangError`] if either the shape merge or the synthesized
+    /// transform merge fails.
+    pub fn merge_ast_fragment(&mut self, frag: AstShapeDef) -> Result<(), LangError> {
+        let mut clone = self.clone();
+        clone.merge_ast_fragment_inner(frag)?;
+        *self = clone;
+        Ok(())
+    }
+
+    /// Non-atomic inner merge used by [`Language::merge`] (which already
+    /// merges into a clone) and [`Language::merge_ast_fragment`].
+    fn merge_ast_fragment_inner(&mut self, frag: AstShapeDef) -> Result<(), LangError> {
+        let id = frag.id.clone();
+        let node_kind = frag.node_kind.clone();
+        let desugar = frag.desugar.clone();
+        // `AstShapeDef` merges with union semantics: an incoming shape whose
+        // `node_kind` is already declared is *dropped* (first declaration
+        // wins), and its `desugar` rule is dropped with it. Capture the
+        // shape currently occupying the identity key so we can tell whether
+        // this merge actually installed the incoming fragment.
+        let prior = self.ast.get_by_identity(&node_kind);
+        let prior_id = prior.map(|d| d.id.clone());
+        let prior_had_desugar = prior.map(|d| d.desugar.is_some()).unwrap_or(false);
+        self.ast.merge(frag)?;
+        let kept = self
+            .ast
+            .get_by_identity(&node_kind)
+            .map(|d| d.id == id)
+            .unwrap_or(false);
+        // Union-dropped incoming shape, or an idempotent re-merge of the
+        // fragment already in place: nothing to lower.
+        if !kept || prior_id.as_deref() == Some(id.as_str()) {
+            return Ok(());
+        }
+        // The replaced shape's synthesized desugar rule (if any) is stale —
+        // remove it so `transforms` stays in sync with `ast`. (`replaces`
+        // cannot express this: the synthesized id is deterministic, so the
+        // incoming rule would "replace" itself and trip the cycle check.)
+        let synth_id = format!("transform.desugar.{}", node_kind);
+        if prior_had_desugar {
+            self.transforms.remove_by_id(&synth_id);
+        }
+        if let Some(rule) = desugar {
+            self.transforms
+                .merge(crate::fragments::transform_def::lower_desugar_rule(
+                    &node_kind, &rule,
+                ))?;
+        }
+        Ok(())
+    }
+
+    /// All transform rules declared for `pass` + `node_kind`, sorted by
+    /// `priority` ascending (lower priority fires first).
+    ///
+    /// This is the lookup a transform engine builds its
+    /// `kind → Vec<TransformDef>` dispatch table from (ADR-0094 §4).
+    pub fn transforms_for(&self, pass: &str, node_kind: &str) -> Vec<&TransformDef> {
+        let mut rules: Vec<&TransformDef> = self
+            .transforms
+            .iter()
+            .filter(|d| d.pass == pass && d.node_kind == node_kind)
+            .collect();
+        rules.sort_by_key(|d| d.priority);
+        rules
     }
 
     /// Resolve a named child role (ADR-0081) to its positional index for a node
@@ -238,7 +336,9 @@ impl Language {
 mod tests {
     use super::*;
     use crate::fragments::TypeRuleDef;
+    use crate::fragments::ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule};
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
+    use crate::fragments::{RewriteStep, TransformCondition, TransformRule};
     use crate::scheme::Scheme;
 
     #[test]
@@ -340,6 +440,218 @@ mod tests {
         // base unchanged.
         assert_eq!(base, snapshot);
         assert_eq!(base.tokens.len(), 1);
+    }
+
+    #[test]
+    fn transforms_for_sorts_by_priority() {
+        let mut lang = Language::new();
+        lang.transforms
+            .merge(
+                TransformDef::new("t.hi", "desugar", "x", TransformRule::Native("a".into()))
+                    .with_priority(10),
+            )
+            .unwrap();
+        lang.transforms
+            .merge(
+                TransformDef::new("t.lo", "desugar", "x", TransformRule::Native("b".into()))
+                    .with_priority(-5),
+            )
+            .unwrap();
+        lang.transforms
+            .merge(TransformDef::new(
+                "t.zero",
+                "desugar",
+                "x",
+                TransformRule::Native("c".into()),
+            ))
+            .unwrap();
+        // Other pass / other kind are not returned.
+        lang.transforms
+            .merge(TransformDef::new(
+                "t.other",
+                "lower",
+                "x",
+                TransformRule::Native("d".into()),
+            ))
+            .unwrap();
+        lang.transforms
+            .merge(TransformDef::new(
+                "t.other2",
+                "desugar",
+                "y",
+                TransformRule::Native("e".into()),
+            ))
+            .unwrap();
+
+        let rules = lang.transforms_for("desugar", "x");
+        let ids: Vec<&str> = rules.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, vec!["t.lo", "t.zero", "t.hi"]);
+        assert!(lang.transforms_for("desugar", "nope").is_empty());
+        assert!(lang.transforms_for("nope", "x").is_empty());
+    }
+
+    #[test]
+    fn merge_ast_fragment_lowers_desugar_to_transform() {
+        let mut lang = Language::new();
+        let shape = AstShapeDef::new("ast.nullish", "nullish").with_desugar(AstDesugarRule {
+            target_kind: "if".into(),
+            children: vec![
+                AstDesugarChild::Keep(0),
+                AstDesugarChild::Create {
+                    kind: "lit".into(),
+                    payload: None,
+                    children: vec![],
+                },
+            ],
+            when: Some(AstDesugarCondition {
+                child_index: 0,
+                child_kind: "array".into(),
+            }),
+        });
+        lang.merge_ast_fragment(shape).unwrap();
+
+        let def = lang
+            .transforms
+            .get_by_id("transform.desugar.nullish")
+            .expect("desugar rule lowered to a TransformDef");
+        assert_eq!(def.pass, "desugar");
+        assert_eq!(def.node_kind, "nullish");
+        assert_eq!(def.priority, 0);
+        assert_eq!(
+            def.when,
+            Some(TransformCondition::KindAt {
+                index: Some(0),
+                role: None,
+                kind: "array".into()
+            })
+        );
+        match &def.rule {
+            TransformRule::Declarative {
+                target_kind,
+                children,
+                payload,
+            } => {
+                assert_eq!(target_kind, "if");
+                assert_eq!(*payload, None);
+                assert_eq!(
+                    *children,
+                    vec![
+                        RewriteStep::Keep(0),
+                        RewriteStep::Create {
+                            kind: "lit".into(),
+                            payload: None,
+                            children: vec![],
+                        },
+                    ]
+                );
+            }
+            _ => panic!("expected Declarative rule"),
+        }
+        // Lookup path finds it.
+        assert_eq!(lang.transforms_for("desugar", "nullish").len(), 1);
+    }
+
+    #[test]
+    fn language_merge_lowers_desugar_too() {
+        let mut base = Language::new();
+        let mut other = Language::new();
+        other
+            .ast
+            .merge(AstShapeDef::new("ast.x", "x").with_desugar(AstDesugarRule {
+                target_kind: "y".into(),
+                children: vec![AstDesugarChild::KeepRest(1)],
+                when: None,
+            }))
+            .unwrap();
+        base.merge(other).unwrap();
+        let def = base.transforms.get_by_id("transform.desugar.x").unwrap();
+        assert_eq!(def.pass, "desugar");
+        assert!(def.when.is_none());
+        match &def.rule {
+            TransformRule::Declarative { children, .. } => {
+                assert_eq!(*children, vec![RewriteStep::KeepRest(1)]);
+            }
+            _ => panic!("expected Declarative rule"),
+        }
+    }
+
+    #[test]
+    fn ast_union_drop_does_not_lower() {
+        // A second shape declaring the same node_kind is a union no-op; its
+        // desugar rule must be dropped with it.
+        let mut lang = Language::new();
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
+            AstDesugarRule {
+                target_kind: "y".into(),
+                children: vec![],
+                when: None,
+            },
+        ))
+        .unwrap();
+        // Union-dropped duplicate — different id, same node_kind.
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x.dup", "x").with_desugar(
+            AstDesugarRule {
+                target_kind: "z".into(),
+                children: vec![],
+                when: None,
+            },
+        ))
+        .unwrap();
+        assert_eq!(lang.transforms.len(), 1);
+        let def = lang.transforms.get_by_id("transform.desugar.x").unwrap();
+        match &def.rule {
+            TransformRule::Declarative { target_kind, .. } => assert_eq!(target_kind, "y"),
+            _ => panic!("expected Declarative rule"),
+        }
+        // Re-merging the identical fragment stays idempotent — no collision.
+        let again = lang.clone();
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
+            AstDesugarRule {
+                target_kind: "y".into(),
+                children: vec![],
+                when: None,
+            },
+        ))
+        .unwrap();
+        assert_eq!(lang, again);
+    }
+
+    #[test]
+    fn ast_replace_updates_lowered_transform() {
+        // Replacing a shape that carried a desugar rule replaces the
+        // synthesized TransformDef instead of colliding.
+        let mut lang = Language::new();
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
+            AstDesugarRule {
+                target_kind: "y".into(),
+                children: vec![],
+                when: None,
+            },
+        ))
+        .unwrap();
+        lang.merge_ast_fragment(
+            AstShapeDef::new("ast.x2", "x")
+                .with_replaces(vec!["ast.x".into()])
+                .with_desugar(AstDesugarRule {
+                    target_kind: "z".into(),
+                    children: vec![],
+                    when: None,
+                }),
+        )
+        .unwrap();
+        assert_eq!(lang.transforms.len(), 1);
+        let def = lang.transforms.get_by_id("transform.desugar.x").unwrap();
+        match &def.rule {
+            TransformRule::Declarative { target_kind, .. } => assert_eq!(target_kind, "z"),
+            _ => panic!("expected Declarative rule"),
+        }
+
+        // Replacing with a shape that drops `desugar` removes the stale rule.
+        lang.merge_ast_fragment(
+            AstShapeDef::new("ast.x3", "x").with_replaces(vec!["ast.x2".into()]),
+        )
+        .unwrap();
+        assert!(lang.transforms.is_empty());
     }
 
     #[test]

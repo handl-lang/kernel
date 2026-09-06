@@ -178,6 +178,16 @@ impl<T: Fragment> FragmentSet<T> {
         self.id_index.get(id).and_then(|key| self.by_key.get(key))
     }
 
+    /// Remove a fragment by its `id`, returning it if present.
+    ///
+    /// Used by [`Language::merge_ast_fragment`](crate::Language::merge_ast_fragment)
+    /// to drop a stale synthesized [`TransformDef`](crate::TransformDef) when
+    /// an `AstShapeDef` replacement removes a `desugar` rule (ADR-0094 §6).
+    pub fn remove_by_id(&mut self, id: &str) -> Option<T> {
+        let key = self.id_index.remove(id)?;
+        self.by_key.remove(&key)
+    }
+
     /// Look up a fragment by its **identity key** (see ADR-0044 §5).
     ///
     /// This is the per-type key returned by [`Fragment::identity_key`], which
