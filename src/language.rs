@@ -132,6 +132,30 @@ impl Language {
         Ok(def.role_index(role))
     }
 
+    /// Whether a child node of `child_kind` occupying `role` of `node_kind`
+    /// is declared **literal** — its payload is the datum itself rather than
+    /// an expression to evaluate (ADR-0081 extension).
+    ///
+    /// Engines use this to replace `key_node.kind == "var" || kind ==
+    /// "string"`-style literal-vs-computed heuristics: e.g. an object
+    /// `entry` shape declares `literal_children: { key: [var, string] }` so
+    /// `{ a: 1, "b": 2 }` keys are read from the payload while `[expr]:` /
+    /// `paren` keys are evaluated.
+    ///
+    /// Returns `Some(bool)` when the shape declares a literal-kinds list for
+    /// `role`, `None` when it declares none — callers keep their legacy
+    /// fallback heuristic for role-less shapes.
+    pub fn literal_child(
+        &self,
+        node_kind: &str,
+        role: &str,
+        child_kind: &str,
+    ) -> Option<bool> {
+        self.ast
+            .get_by_identity(node_kind)
+            .and_then(|def| def.literal_child(role, child_kind))
+    }
+
     /// Whether `node_kind`'s shape declares any variadic child role (ADR-0081).
     ///
     /// Engines use this to replace `kind == "paren" || kind == "array"` shape

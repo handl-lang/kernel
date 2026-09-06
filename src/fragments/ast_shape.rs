@@ -149,6 +149,16 @@ pub struct AstShapeDef {
     /// positions by role instead of hardcoding `kind ==` shape checks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub children: Option<Vec<ChildRoleSpec>>,
+    /// Child node kinds that carry a **literal payload** when occupying a
+    /// given role (ADR-0081 extension). Keyed by role name: a child node
+    /// whose kind is listed for a role is data, not an expression — its
+    /// payload is used directly instead of being evaluated (e.g. an object
+    /// `entry` declares its `key` role literal for `var`/`string` children,
+    /// while a computed `paren` key is still evaluated). Absent/empty =
+    /// no literal children (backward compatible); engines fall back to
+    /// their legacy heuristic for shapes that declare no list for a role.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub literal_children: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 fn is_payload_null(v: &Value) -> bool {
@@ -166,6 +176,7 @@ impl AstShapeDef {
             replaces: Vec::new(),
             requires: Vec::new(),
             children: None,
+            literal_children: std::collections::BTreeMap::new(),
         }
     }
 
@@ -229,6 +240,21 @@ impl AstShapeDef {
     /// Whether the role spans multiple children (variadic).
     pub fn role_is_variadic(&self, role: &str) -> bool {
         self.child_role(role).map(|s| s.variadic).unwrap_or(false)
+    }
+
+    /// Whether a child node of `child_kind` occupying `role` is declared
+    /// **literal** — its payload is the datum itself rather than an
+    /// expression to evaluate.
+    ///
+    /// Returns `Some(bool)` when this shape declares a `literal_children`
+    /// list for `role` (`true` = `child_kind` is listed, `false` = the
+    /// role is declared but this kind is not literal). Returns `None` when
+    /// no list is declared for the role — callers keep their legacy
+    /// fallback heuristic for such shapes (ADR-0081 role-less fallback).
+    pub fn literal_child(&self, role: &str, child_kind: &str) -> Option<bool> {
+        self.literal_children
+            .get(role)
+            .map(|kinds| kinds.iter().any(|k| k == child_kind))
     }
 }
 
