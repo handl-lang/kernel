@@ -130,7 +130,9 @@ fn round_trip_arrow() {
     });
     let t: TaggedValue = a.clone().into();
     match &t {
-        TaggedValue::Arrow { params, body, env } => {
+        TaggedValue::Arrow {
+            params, body, env, ..
+        } => {
             assert_eq!(params.len(), 2);
             assert_eq!(params[0], "x");
             assert_eq!(params[1], "y");

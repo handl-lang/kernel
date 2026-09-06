@@ -165,10 +165,23 @@ pub enum TaggedValue {
     EitherRight(Rc<TaggedValue>),
     /// Arrow-value (closure): `{"__arrow__": true, "params": [...], "body":
     /// <idx>, "env": {...}}`.
+    ///
+    /// `home` is the provenance of the closure: the id of the eval frame
+    /// (AST + Language + module chain) that minted it, registered in the
+    /// producing engine's home-frame table. `body` is only meaningful
+    /// against that frame's AST. `None` means the arrow belongs to the
+    /// ambient evaluation — `body` is interpreted against the AST currently
+    /// being evaluated (the overwhelmingly common case: arrows are created
+    /// and applied within one `eval`). A `Some(id)` home is stamped when an
+    /// arrow crosses a runtime boundary (e.g. a `.hnl` module function
+    /// receiving or returning a closure), so the receiving engine can route
+    /// application back to the frame that owns the body. On the JSON side
+    /// the key is `"__home__"` inside the `__arrow__` object.
     Arrow {
         params: Rc<[String]>,
         body: usize, // AstRef index
         env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
+        home: Option<u64>,
     },
     /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
     /// optional finalizer that runs when the last `Rc` reference drops
@@ -283,7 +296,13 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             Some(Value::Object(env_map)) => Rc::from(obj_map_to_hashmap(env_map.clone())),
             _ => Rc::new(FxHashMap::default()),
         };
-        return TaggedValue::Arrow { params, body, env };
+        let home = o.get("__home__").and_then(|v| v.as_u64());
+        return TaggedValue::Arrow {
+            params,
+            body,
+            env,
+            home,
+        };
     }
     // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
     // encoding (ADR-0083 §2.2). The finalizer cannot be serialized, so the
@@ -355,17 +374,26 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         TaggedValue::EitherRight(inner) => {
             serde_json::json!({"__either__": "right", "value": tagged_to_value(inner)})
         }
-        TaggedValue::Arrow { params, body, env } => {
+        TaggedValue::Arrow {
+            params,
+            body,
+            env,
+            home,
+        } => {
             let mut env_map = Map::new();
             for (k, val) in env.iter() {
                 env_map.insert(k.to_string(), tagged_to_value(val));
             }
-            serde_json::json!({
+            let mut v = serde_json::json!({
                 "__arrow__": true,
                 "params": params.iter().collect::<Vec<_>>(),
                 "body": body,
                 "env": Value::Object(env_map),
-            })
+            });
+            if let Some(h) = home {
+                v["__home__"] = Value::from(*h);
+            }
+            v
         }
         TaggedValue::Resource(r) => {
             // Debug-only encoding: the finalizer (a function pointer)
@@ -691,11 +719,13 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 params: p1,
                 body: b1,
                 env: e1,
+                ..
             },
             TaggedValue::Arrow {
                 params: p2,
                 body: b2,
                 env: e2,
+                ..
             },
         ) => {
             p1.len() == p2.len() && p1.iter().zip(p2.iter()).all(|(a, b)| a == b) && b1 == b2 && {
