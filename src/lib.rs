@@ -34,10 +34,10 @@ pub mod fragment;
 pub mod fragment_set;
 /// Fragment type definitions.
 pub mod fragments;
-/// Structural law inference over the `Scheme` IR (ADR-0076 OQ#5).
-pub mod law_inference;
 /// The `Language` struct.
 pub mod language;
+/// Structural law inference over the `Scheme` IR (ADR-0076 OQ#5).
+pub mod law_inference;
 /// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Scheme`
 /// IR (ADR-0076 OQ#4).
 pub mod quantified_laws;
@@ -45,10 +45,10 @@ pub mod quantified_laws;
 pub mod scheme;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
 pub mod staged;
-/// Scheme combinator versioning.
-pub mod version;
 /// Proof verdicts for the partial-evaluator typechecker (ADR-0068).
 pub mod verdict;
+/// Scheme combinator versioning.
+pub mod version;
 
 pub use ast::{Ast, AstNode, AstRef, Span};
 pub use capabilities::{capabilities, foreign_names, subset_of};
@@ -57,16 +57,15 @@ pub use dynamic_handlers::{
     DispatchError, RegistrationResult, RuntimeVerification, VerifiedImpl, VerifiedImplStore,
     dynamic_dispatch, verify_at_runtime, verify_at_runtime_with_builtin,
 };
-pub use effects::{
-    EffectRow, EffectRowError, TypedScheme, eliminate_and_check, infer_effect_row,
-};
+pub use effects::{EffectRow, EffectRowError, TypedScheme, eliminate_and_check, infer_effect_row};
 pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
 pub use fragments::{
-    AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl, ChildRoleSpec, ChildSeparator,
-    DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow, LexerPattern, LexerRuleDef,
-    LiteralKind, OptionSchema, PairShape, PayloadTokenSpec, TokenKindDef, TypeRuleDef,
+    AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl,
+    ChildRoleSpec, ChildSeparator, DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow,
+    LexerPattern, LexerRuleDef, LiteralKind, OptionSchema, PairShape, PayloadTokenSpec,
+    TokenKindDef, TypeRuleDef,
 };
 pub use language::Language;
 pub use law_inference::{
@@ -302,8 +301,7 @@ mod value_tests {
 
     #[test]
     fn tag_value_mints_tagged_object() {
-        let v = tag_value("type.collection", &json!({ "name": "number" }))
-            .expect("mint succeeds");
+        let v = tag_value("type.collection", &json!({ "name": "number" })).expect("mint succeeds");
         assert!(is_tag_value(&v));
         assert_eq!(as_tag(&v), Some("type.collection"));
         assert_eq!(v["name"], json!("number"));

@@ -12,8 +12,8 @@ use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
-    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef,
-    OptionSchema, TokenKindDef, TypeRuleDef,
+    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, OptionSchema,
+    TokenKindDef, TypeRuleDef,
 };
 use crate::version::SchemeVersion;
 
@@ -121,7 +121,11 @@ impl Language {
     /// node kind has no shape or no such role (opaque/positional fallback), and
     /// `Err` when a shape exists but the resolved index is out of bounds for
     /// the node's children (a load-time data inconsistency).
-    pub fn child_role_index(&self, node_kind: &str, role: &str) -> Result<Option<usize>, LangError> {
+    pub fn child_role_index(
+        &self,
+        node_kind: &str,
+        role: &str,
+    ) -> Result<Option<usize>, LangError> {
         let Some(def) = self.ast.get_by_identity(node_kind) else {
             return Ok(None);
         };
@@ -152,11 +156,7 @@ impl Language {
     /// directly. A `type-annot` node (e.g. `x: Int`) has a `subject` role
     /// pointing at the inner `var`; this resolves that child and reads
     /// its string payload. Returns `Err` if the name cannot be extracted.
-    pub fn param_name(
-        &self,
-        ast: &Ast,
-        param_node: &AstNode,
-    ) -> Result<String, LangError> {
+    pub fn param_name(&self, ast: &Ast, param_node: &AstNode) -> Result<String, LangError> {
         // Fast path: the param is a bare `var` with a string payload.
         if let Some(name) = param_node.payload.as_str() {
             return Ok(name.to_string());
@@ -193,8 +193,8 @@ impl Language {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::TypeRuleDef;
+    use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::scheme::Scheme;
 
     #[test]

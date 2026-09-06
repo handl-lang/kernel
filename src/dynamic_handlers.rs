@@ -67,7 +67,9 @@
 
 use std::collections::HashMap;
 
-use crate::law_inference::{infer_laws, law_equal, uses_first, LawCheckResult, LawPattern, LawStatus};
+use crate::law_inference::{
+    LawCheckResult, LawPattern, LawStatus, infer_laws, law_equal, uses_first,
+};
 use crate::scheme::Scheme;
 
 // ============================================================================
@@ -375,7 +377,9 @@ pub fn verify_at_runtime(scheme: &Scheme, law_patterns: &[LawPattern]) -> Runtim
             LawCheckResult::NotApplicable => {} // skip
         }
     }
-    RuntimeVerification::Accepted { laws_checked: checked }
+    RuntimeVerification::Accepted {
+        laws_checked: checked,
+    }
 }
 
 /// Convenience: verify a runtime-generated scheme against the built-in
@@ -413,7 +417,10 @@ mod tests {
         let mut store = VerifiedImplStore::new();
         let result = store.register("Functor<List>", "map_list", first_f());
         match result {
-            RegistrationResult::Verified { name, laws_verified } => {
+            RegistrationResult::Verified {
+                name,
+                laws_verified,
+            } => {
                 assert_eq!(name, "map_list");
                 assert!(
                     laws_verified.contains(&"functor_identity".to_string()),
@@ -438,7 +445,10 @@ mod tests {
         let mut store = VerifiedImplStore::new();
         let result = store.register("Sort", "sort_impl", arr_sort());
         match result {
-            RegistrationResult::Verified { name, laws_verified } => {
+            RegistrationResult::Verified {
+                name,
+                laws_verified,
+            } => {
                 assert_eq!(name, "sort_impl");
                 assert!(
                     laws_verified.is_empty(),

@@ -194,8 +194,7 @@ mod tests {
 
     #[test]
     fn literal_kind_serde_roundtrip() {
-        let t = TokenKindDef::new("token.number")
-            .with_literal(LiteralKind::Number);
+        let t = TokenKindDef::new("token.number").with_literal(LiteralKind::Number);
         let j = serde_json::to_string(&t).unwrap();
         let back: TokenKindDef = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);

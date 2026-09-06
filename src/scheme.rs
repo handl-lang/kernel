@@ -187,11 +187,7 @@ impl Scheme {
 
     /// Convenience constructor for a native `arr` carrying a literal
     /// payload (e.g. `const`, `proj_env`, `proj_child`).
-    pub fn arr_native_lit(
-        op: impl Into<String>,
-        args: Vec<Scheme>,
-        lit: impl Into<Value>,
-    ) -> Self {
+    pub fn arr_native_lit(op: impl Into<String>, args: Vec<Scheme>, lit: impl Into<Value>) -> Self {
         Scheme::Arr {
             op: op.into(),
             args,
@@ -287,7 +283,12 @@ impl Scheme {
     /// 3. Return the substituted body.
     pub fn eliminate_handlers(&self) -> Scheme {
         match self {
-            Scheme::Arr { op, args, source, lit } => {
+            Scheme::Arr {
+                op,
+                args,
+                source,
+                lit,
+            } => {
                 let new_args: Vec<Scheme> = args.iter().map(|a| a.eliminate_handlers()).collect();
                 Scheme::Arr {
                     op: op.clone(),
@@ -317,7 +318,11 @@ impl Scheme {
                     args: new_args,
                 }
             }
-            Scheme::Handle { body, target, impl_ } => {
+            Scheme::Handle {
+                body,
+                target,
+                impl_,
+            } => {
                 let elim_body = body.eliminate_handlers();
                 let elim_impl = impl_.eliminate_handlers();
                 substitute_capability(&elim_body, target, &elim_impl)
@@ -336,7 +341,12 @@ impl Scheme {
 /// structurally.
 fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Scheme {
     match scheme {
-        Scheme::Arr { op, args, source, lit } => {
+        Scheme::Arr {
+            op,
+            args,
+            source,
+            lit,
+        } => {
             // Check if this is a bare `arr(target)` reference:
             // op == target, no args, no lit. The source may be Native (the
             // common case from `arr_native`) or Foreign(target).
@@ -348,8 +358,10 @@ fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Schem
                 }
             }
             // Otherwise, recurse into args.
-            let new_args: Vec<Scheme> =
-                args.iter().map(|a| substitute_capability(a, target, impl_)).collect();
+            let new_args: Vec<Scheme> = args
+                .iter()
+                .map(|a| substitute_capability(a, target, impl_))
+                .collect();
             Scheme::Arr {
                 op: op.clone(),
                 args: new_args,
@@ -372,14 +384,20 @@ fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Schem
             body: Box::new(substitute_capability(body, target, impl_)),
         },
         Scheme::App { callee, args } => {
-            let new_args: Vec<Scheme> =
-                args.iter().map(|a| substitute_capability(a, target, impl_)).collect();
+            let new_args: Vec<Scheme> = args
+                .iter()
+                .map(|a| substitute_capability(a, target, impl_))
+                .collect();
             Scheme::App {
                 callee: Box::new(substitute_capability(callee, target, impl_)),
                 args: new_args,
             }
         }
-        Scheme::Handle { body, target: t, impl_: i } => {
+        Scheme::Handle {
+            body,
+            target: t,
+            impl_: i,
+        } => {
             // Nested handle — should not occur after elimination, but handle
             // it by recursing into both children.
             Scheme::Handle {
@@ -427,7 +445,10 @@ mod tests {
 
     #[test]
     fn arr_foreign_constructs_and_roundtrips() {
-        let s = Scheme::arr_foreign("fs.read", vec![Scheme::arr_native_lit("proj_child", vec![], 0)]);
+        let s = Scheme::arr_foreign(
+            "fs.read",
+            vec![Scheme::arr_native_lit("proj_child", vec![], 0)],
+        );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"Foreign\""));
@@ -453,7 +474,10 @@ mod tests {
 
     #[test]
     fn seq_constructs_and_roundtrips() {
-        let s = Scheme::seq(Scheme::arr_native("id", vec![]), Scheme::arr_native("id", vec![]));
+        let s = Scheme::seq(
+            Scheme::arr_native("id", vec![]),
+            Scheme::arr_native("id", vec![]),
+        );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"Seq\""));
@@ -469,7 +493,10 @@ mod tests {
 
     #[test]
     fn choice_constructs_and_roundtrips() {
-        let s = Scheme::choice(Scheme::arr_native("id", vec![]), Scheme::arr_native("id", vec![]));
+        let s = Scheme::choice(
+            Scheme::arr_native("id", vec![]),
+            Scheme::arr_native("id", vec![]),
+        );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"Choice\""));

@@ -100,11 +100,9 @@ fn rewrite_root(scheme: &Scheme) -> Option<Scheme> {
             if matches!(**fst, Scheme::First { .. }) && matches!(**snd, Scheme::First { .. }) =>
         {
             match (&**fst, &**snd) {
-                (Scheme::First { inner: g1 }, Scheme::First { inner: g2 }) => {
-                    Some(Scheme::First {
-                        inner: Box::new(Scheme::seq((**g1).clone(), (**g2).clone())),
-                    })
-                }
+                (Scheme::First { inner: g1 }, Scheme::First { inner: g2 }) => Some(Scheme::First {
+                    inner: Box::new(Scheme::seq((**g1).clone(), (**g2).clone())),
+                }),
                 _ => None,
             }
         }
@@ -126,7 +124,12 @@ fn rewrite_root(scheme: &Scheme) -> Option<Scheme> {
 fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
     // First recurse into children (bottom-up).
     let (g_norm, child_changed) = match scheme {
-        Scheme::Arr { op, args, source, lit } => {
+        Scheme::Arr {
+            op,
+            args,
+            source,
+            lit,
+        } => {
             let mut changed = false;
             let args2: Vec<Scheme> = args
                 .iter()
@@ -159,7 +162,12 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
         }
         Scheme::First { inner } => {
             let (i2, c) = rewrite_pass(inner);
-            (Scheme::First { inner: Box::new(i2) }, c)
+            (
+                Scheme::First {
+                    inner: Box::new(i2),
+                },
+                c,
+            )
         }
         Scheme::Choice { l, r } => {
             let (l2, cl) = rewrite_pass(l);
@@ -195,7 +203,11 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
                 changed,
             )
         }
-        Scheme::Handle { body, target, impl_ } => {
+        Scheme::Handle {
+            body,
+            target,
+            impl_,
+        } => {
             let (b2, cb) = rewrite_pass(body);
             let (i2, ci) = rewrite_pass(impl_);
             (
@@ -462,7 +474,10 @@ mod tests {
         // A non-identity op is not the identity arrow.
         assert!(!is_id(&Scheme::arr_native("add", vec![])));
         // An identity with args is not the bare identity arrow.
-        assert!(!is_id(&Scheme::arr_native("id", vec![Scheme::arr_native("x", vec![])])));
+        assert!(!is_id(&Scheme::arr_native(
+            "id",
+            vec![Scheme::arr_native("x", vec![])]
+        )));
         // A foreign "id" is not the native identity arrow.
         assert!(!is_id(&Scheme::arr_foreign("id", vec![])));
         // An identity with a literal payload is not the bare identity arrow.
@@ -494,7 +509,10 @@ mod tests {
     fn normalize_ce_first_fusion() {
         // Seq(First(f), First(g)) ==> First(Seq(f, g))  (ceFirstFusion)
         let s = Scheme::seq(Scheme::first(f()), Scheme::first(g()));
-        assert_eq!(normalize(&s, NORMALIZE_FUEL), Scheme::first(Scheme::seq(f(), g())));
+        assert_eq!(
+            normalize(&s, NORMALIZE_FUEL),
+            Scheme::first(Scheme::seq(f(), g()))
+        );
     }
 
     #[test]
@@ -559,12 +577,16 @@ mod tests {
         let inferred = infer_laws(&Scheme::first(f()));
         // functor_identity (Satisfied) and functor_composition (Satisfied).
         assert_eq!(inferred.len(), 2);
-        assert!(inferred
-            .iter()
-            .any(|l| l.name == "functor_identity" && l.status == LawStatus::Satisfied));
-        assert!(inferred
-            .iter()
-            .any(|l| l.name == "functor_composition" && l.status == LawStatus::Satisfied));
+        assert!(
+            inferred
+                .iter()
+                .any(|l| l.name == "functor_identity" && l.status == LawStatus::Satisfied)
+        );
+        assert!(
+            inferred
+                .iter()
+                .any(|l| l.name == "functor_composition" && l.status == LawStatus::Satisfied)
+        );
     }
 
     #[test]
@@ -577,12 +599,16 @@ mod tests {
     fn infer_laws_seq_of_firsts_reports_both() {
         let inferred = infer_laws(&Scheme::seq(Scheme::first(f()), Scheme::first(g())));
         assert_eq!(inferred.len(), 2);
-        assert!(inferred
-            .iter()
-            .any(|l| l.name == "functor_identity" && l.status == LawStatus::Satisfied));
-        assert!(inferred
-            .iter()
-            .any(|l| l.name == "functor_composition" && l.status == LawStatus::Satisfied));
+        assert!(
+            inferred
+                .iter()
+                .any(|l| l.name == "functor_identity" && l.status == LawStatus::Satisfied)
+        );
+        assert!(
+            inferred
+                .iter()
+                .any(|l| l.name == "functor_composition" && l.status == LawStatus::Satisfied)
+        );
     }
 
     #[test]

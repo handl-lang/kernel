@@ -158,7 +158,10 @@ impl LawSubst {
 pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Scheme {
     match expr {
         LawExpr::Var(LawVar(name)) => subst.get(name).cloned().unwrap_or_else(|| {
-            panic!("unbound law variable: {} (all quantified vars must be bound)", name)
+            panic!(
+                "unbound law variable: {} (all quantified vars must be bound)",
+                name
+            )
         }),
         LawExpr::Const(name) => Scheme::arr_native(name, vec![]),
         LawExpr::Id => Scheme::arr_native("id", vec![]),
@@ -573,7 +576,11 @@ mod tests {
     #[test]
     fn catalog_has_exactly_five_laws() {
         let catalog = builtin_quantified_laws();
-        assert_eq!(catalog.len(), 5, "exactly 5 laws (4 CutElim-proven + 1 axiom)");
+        assert_eq!(
+            catalog.len(),
+            5,
+            "exactly 5 laws (4 CutElim-proven + 1 axiom)"
+        );
         let proven = catalog.iter().filter(|l| l.axiom.is_none()).count();
         let axiom = catalog.iter().filter(|l| l.axiom.is_some()).count();
         assert_eq!(proven, 4, "4 CutElim-proven laws");

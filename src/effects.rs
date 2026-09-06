@@ -225,9 +225,7 @@ pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
         // Concrete base arrows manage no capability.
         Scheme::Arr { .. } => EffectRow::empty(),
         // Combinators: thread/union the children's rows.
-        Scheme::Seq { fst, snd } => {
-            infer_effect_row(fst).union(&infer_effect_row(snd))
-        }
+        Scheme::Seq { fst, snd } => infer_effect_row(fst).union(&infer_effect_row(snd)),
         Scheme::First { inner } => infer_effect_row(inner),
         Scheme::Choice { l, r } => infer_effect_row(l).union(&infer_effect_row(r)),
         Scheme::Loop { body } => infer_effect_row(body),
@@ -241,7 +239,11 @@ pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
         // The handler site: `target` is a capability this graph manages, so
         // it is added to the row. The body and impl may manage further
         // capabilities (their own nested handles), which are unioned in.
-        Scheme::Handle { body, target, impl_ } => {
+        Scheme::Handle {
+            body,
+            target,
+            impl_,
+        } => {
             let body_row = infer_effect_row(body);
             let impl_row = infer_effect_row(impl_);
             body_row.union(&impl_row).insert(target)
@@ -549,7 +551,11 @@ mod tests {
     #[test]
     fn infer_row_of_choice_unions_branches() {
         let s = Scheme::choice(
-            Scheme::handle(Scheme::arr_native("map", vec![]), "map", Scheme::arr_native("add", vec![])),
+            Scheme::handle(
+                Scheme::arr_native("map", vec![]),
+                "map",
+                Scheme::arr_native("add", vec![]),
+            ),
             Scheme::handle(
                 Scheme::arr_native("serialize", vec![]),
                 "serialize",
@@ -575,7 +581,11 @@ mod tests {
     #[test]
     fn infer_row_of_app_unions_callee_and_args() {
         let s = Scheme::app(
-            Scheme::handle(Scheme::arr_native("map", vec![]), "map", Scheme::arr_native("add", vec![])),
+            Scheme::handle(
+                Scheme::arr_native("map", vec![]),
+                "map",
+                Scheme::arr_native("add", vec![]),
+            ),
             vec![Scheme::handle(
                 Scheme::arr_native("serialize", vec![]),
                 "serialize",
@@ -631,7 +641,10 @@ mod tests {
 
     #[test]
     fn typed_scheme_clean_when_no_handles() {
-        let s = Scheme::seq(Scheme::arr_native("add", vec![]), Scheme::arr_native("id", vec![]));
+        let s = Scheme::seq(
+            Scheme::arr_native("add", vec![]),
+            Scheme::arr_native("id", vec![]),
+        );
         let ts = TypedScheme::from_scheme(&s);
         assert!(ts.is_clean());
     }
@@ -641,7 +654,10 @@ mod tests {
     #[test]
     fn eliminate_and_check_clean_scheme_ok() {
         // A scheme with no handles is already clean.
-        let s = Scheme::seq(Scheme::arr_native("add", vec![]), Scheme::arr_native("id", vec![]));
+        let s = Scheme::seq(
+            Scheme::arr_native("add", vec![]),
+            Scheme::arr_native("id", vec![]),
+        );
         let eliminated = eliminate_and_check(&s).expect("clean scheme");
         assert!(!contains_handle(&eliminated));
         assert_eq!(eliminated, s);
@@ -679,7 +695,11 @@ mod tests {
     #[test]
     fn eliminate_and_check_seq_of_handles_becomes_clean() {
         let s = Scheme::seq(
-            Scheme::handle(Scheme::arr_native("map", vec![]), "map", Scheme::arr_native("add", vec![])),
+            Scheme::handle(
+                Scheme::arr_native("map", vec![]),
+                "map",
+                Scheme::arr_native("add", vec![]),
+            ),
             Scheme::handle(
                 Scheme::arr_native("serialize", vec![]),
                 "serialize",

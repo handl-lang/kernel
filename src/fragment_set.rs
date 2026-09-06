@@ -284,7 +284,7 @@ mod tests {
             "x",
             Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
         ))
-            .unwrap();
+        .unwrap();
         // Same identity key (node_kind "x"), different id/content → collision.
         let err = set
             .merge(EvalSchemeDef::new(

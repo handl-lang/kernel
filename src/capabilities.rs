@@ -125,7 +125,14 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.io",
                 "io",
-                Scheme::arr_foreign("fs.read", vec![Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64))]),
+                Scheme::arr_foreign(
+                    "fs.read",
+                    vec![Scheme::arr_native_lit(
+                        "proj_child",
+                        vec![],
+                        Value::from(0u64),
+                    )],
+                ),
             ))
             .unwrap();
         lang.caps.merge(CapabilityDecl::new("net.connect")).unwrap();

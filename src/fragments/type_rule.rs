@@ -148,7 +148,10 @@ mod tests {
     fn serde_omits_check_when_none() {
         let def = TypeRuleDef::new("type.lit", "lit", Scheme::arr_judgment("id", vec![]));
         let j = serde_json::to_string(&def).unwrap();
-        assert!(!j.contains("check"), "check should be omitted when None: {j}");
+        assert!(
+            !j.contains("check"),
+            "check should be omitted when None: {j}"
+        );
     }
 
     #[test]

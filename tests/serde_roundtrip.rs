@@ -49,7 +49,11 @@ fn nontrivial_language() -> Language {
             "io",
             Scheme::arr_foreign(
                 "fs.read",
-                vec![Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64))],
+                vec![Scheme::arr_native_lit(
+                    "proj_child",
+                    vec![],
+                    Value::from(0u64),
+                )],
             ),
         ))
         .unwrap();
@@ -104,7 +108,11 @@ fn scheme_with_nested_foreign_roundtrips_through_language() {
                 Scheme::choice(
                     Scheme::app(
                         Scheme::arr_native_lit("proj_env", vec![], Value::String("f".into())),
-                        vec![Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64))],
+                        vec![Scheme::arr_native_lit(
+                            "proj_child",
+                            vec![],
+                            Value::from(0u64),
+                        )],
                     ),
                     Scheme::arr_native_lit("const", vec![], Value::Bool(false)),
                 ),
