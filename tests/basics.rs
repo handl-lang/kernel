@@ -5,8 +5,8 @@
 //! and the `tval!` macro.
 
 use handl_value::{
-    add, div, eq, either_left, either_right, either_value, is_either_left, is_either_right, lt,
-    mod_, mul, pair, pair_fst, pair_snd, sub, truthy, tval, tagged_to_value, TaggedValue,
+    add, div, either_left, either_right, either_value, eq, is_either_left, is_either_right, lt,
+    mod_, mul, pair, pair_fst, pair_snd, sub, tagged_to_value, truthy, tval, TaggedValue,
 };
 use rustc_hash::FxHashMap;
 use serde_json::{json, Value};
@@ -295,10 +295,7 @@ fn truthiness_rules() {
     m.insert(Rc::from("a"), TaggedValue::Int(1));
     assert!(truthy(&TaggedValue::Obj(Rc::new(m))));
     // Pairs and Eithers are truthy.
-    assert!(truthy(&pair(
-        TaggedValue::Null,
-        TaggedValue::Null
-    )));
+    assert!(truthy(&pair(TaggedValue::Null, TaggedValue::Null)));
     assert!(truthy(&either_left(TaggedValue::Null)));
 }
 

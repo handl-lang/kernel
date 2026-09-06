@@ -77,10 +77,7 @@ impl ForeignResource {
     /// The caller must uphold the safety invariants documented on
     /// [`ForeignResource`]: `ptr` is a valid opaque handle and `finalizer`
     /// (if `Some`) releases it when called with `ptr`.
-    pub unsafe fn new(
-        ptr: *mut c_void,
-        finalizer: Option<unsafe fn(*mut c_void)>,
-    ) -> Self {
+    pub unsafe fn new(ptr: *mut c_void, finalizer: Option<unsafe fn(*mut c_void)>) -> Self {
         ForeignResource {
             ptr,
             finalizer,
@@ -253,10 +250,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
     }
     // Either: {"__either__": "left"|"right", "value": v}
     if let Some(side) = o.get("__either__").and_then(|v| v.as_str()) {
-        let value = o
-            .get("value")
-            .cloned()
-            .unwrap_or(Value::Null);
+        let value = o.get("value").cloned().unwrap_or(Value::Null);
         let inner = TaggedValue::from(value);
         return match side {
             "left" => TaggedValue::EitherLeft(Rc::new(inner)),
@@ -286,9 +280,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             .map(|u| u as usize)
             .unwrap_or(0);
         let env = match o.get("env") {
-            Some(Value::Object(env_map)) => {
-                Rc::from(obj_map_to_hashmap(env_map.clone()))
-            }
+            Some(Value::Object(env_map)) => Rc::from(obj_map_to_hashmap(env_map.clone())),
             _ => Rc::new(FxHashMap::default()),
         };
         return TaggedValue::Arrow { params, body, env };
@@ -341,16 +333,12 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         TaggedValue::Null => Value::Null,
         TaggedValue::Bool(b) => Value::Bool(*b),
         TaggedValue::Int(i) => Value::from(*i),
-        TaggedValue::Float(f) => {
-            serde_json::Number::from_f64(*f)
-                .map(Value::Number)
-                .unwrap_or(Value::Null)
-        }
+        TaggedValue::Float(f) => serde_json::Number::from_f64(*f)
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
         TaggedValue::Str(s) => Value::String((*s).to_string()),
         TaggedValue::Bytes(b) => bytes_to_value(b),
-        TaggedValue::Arr(a) => {
-            Value::Array(a.iter().map(tagged_to_value).collect())
-        }
+        TaggedValue::Arr(a) => Value::Array(a.iter().map(tagged_to_value).collect()),
         TaggedValue::Obj(o) => {
             let mut map = Map::new();
             for (k, val) in o.iter() {
@@ -506,10 +494,7 @@ pub fn bytes(b: impl Into<Vec<u8>>) -> TaggedValue {
 /// The caller must uphold the safety invariants of [`ForeignResource`]:
 /// `ptr` is a valid opaque handle and `finalizer` (if `Some`) releases it
 /// when called with `ptr`.
-pub unsafe fn resource(
-    ptr: *mut c_void,
-    finalizer: Option<unsafe fn(*mut c_void)>,
-) -> TaggedValue {
+pub unsafe fn resource(ptr: *mut c_void, finalizer: Option<unsafe fn(*mut c_void)>) -> TaggedValue {
     TaggedValue::Resource(Rc::new(ForeignResource::new(ptr, finalizer)))
 }
 
@@ -684,9 +669,8 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
         (TaggedValue::Int(x), TaggedValue::Int(y)) => x == y,
         (TaggedValue::Float(x), TaggedValue::Float(y)) => x == y,
         // Cross-numeric: compare as f64 for consistency with JSON semantics.
-        (TaggedValue::Int(x), TaggedValue::Float(y)) | (TaggedValue::Float(y), TaggedValue::Int(x)) => {
-            (*x as f64) == *y
-        }
+        (TaggedValue::Int(x), TaggedValue::Float(y))
+        | (TaggedValue::Float(y), TaggedValue::Int(x)) => (*x as f64) == *y,
         (TaggedValue::Str(x), TaggedValue::Str(y)) => x == y,
         (TaggedValue::Bytes(x), TaggedValue::Bytes(y)) => x == y,
         (TaggedValue::Arr(x), TaggedValue::Arr(y)) => {
@@ -696,27 +680,31 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
             if x.len() != y.len() {
                 return false;
             }
-            x.iter().all(|(k, v)| y.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
+            x.iter()
+                .all(|(k, v)| y.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
         }
-        (TaggedValue::Pair(p1), TaggedValue::Pair(p2)) => {
-            eq(&p1.0, &p2.0) && eq(&p1.1, &p2.1)
-        }
+        (TaggedValue::Pair(p1), TaggedValue::Pair(p2)) => eq(&p1.0, &p2.0) && eq(&p1.1, &p2.1),
         (TaggedValue::EitherLeft(a), TaggedValue::EitherLeft(b)) => eq(a, b),
         (TaggedValue::EitherRight(a), TaggedValue::EitherRight(b)) => eq(a, b),
         (
-            TaggedValue::Arrow { params: p1, body: b1, env: e1 },
-            TaggedValue::Arrow { params: p2, body: b2, env: e2 },
+            TaggedValue::Arrow {
+                params: p1,
+                body: b1,
+                env: e1,
+            },
+            TaggedValue::Arrow {
+                params: p2,
+                body: b2,
+                env: e2,
+            },
         ) => {
-            p1.len() == p2.len()
-                && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
-                && b1 == b2
-                && {
-                    if e1.len() != e2.len() {
-                        return false;
-                    }
-                    e1.iter()
-                        .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
+            p1.len() == p2.len() && p1.iter().zip(p2.iter()).all(|(a, b)| a == b) && b1 == b2 && {
+                if e1.len() != e2.len() {
+                    return false;
                 }
+                e1.iter()
+                    .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
+            }
         }
         // Resources are equal by opaque pointer identity.
         (TaggedValue::Resource(a), TaggedValue::Resource(b)) => a.ptr == b.ptr,

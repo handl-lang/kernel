@@ -139,7 +139,9 @@ fn resource_encodes_to_json_debug_form() {
     let r = unsafe { resource(0x1234 as *mut c_void, None) };
     let json = tagged_to_value(&r);
     let obj = json.as_object().expect("should be a JSON object");
-    let res = obj.get("__resource__").expect("should have __resource__ key");
+    let res = obj
+        .get("__resource__")
+        .expect("should have __resource__ key");
     let ptr = res.get("ptr").and_then(|v| v.as_i64());
     assert_eq!(ptr, Some(0x1234));
 }
