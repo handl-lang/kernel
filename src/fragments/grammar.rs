@@ -83,6 +83,15 @@ pub struct AstShapeRef {
     /// compatible).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub block_children: Vec<usize>,
+    /// Infix-only constraint: when non-empty, the infix rule fires only if
+    /// the already-parsed **left** operand's node kind is in this list.
+    /// Declares the left-context sensitivity of token-homonym infixes —
+    /// e.g. `do {..} while cond` (do-while) is only valid when the left
+    /// operand is a `block` (the `do` form); otherwise `while` must remain
+    /// available as a *prefix* statement (`x :: f(); while {..} {..}`).
+    /// Empty = unconditional (default, backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub left_kinds: Vec<String>,
 }
 
 /// Describes a separator token consumed between two children of an
@@ -165,6 +174,7 @@ impl AstShapeRef {
             child_separators: Vec::new(),
             payload_tokens: Vec::new(),
             block_children: Vec::new(),
+            left_kinds: Vec::new(),
         }
     }
 
