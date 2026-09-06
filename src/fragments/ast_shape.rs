@@ -159,6 +159,15 @@ pub struct AstShapeDef {
     /// their legacy heuristic for shapes that declare no list for a role.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub literal_children: std::collections::BTreeMap<String, Vec<String>>,
+    /// Optional pattern-role metadata (ADR-0081 extension). When present,
+    /// a node of this kind may appear as a `match` pattern and the value
+    /// tells pattern-matching engines how to interpret its children:
+    /// `leaf` (a bare binder), `sequence` (an array-like list of element
+    /// patterns), `entries` (an object-like list of field patterns),
+    /// `entry` (one key/value field pattern), or `rest` (a spread/rest
+    /// pattern). Absent = this node kind is not a pattern shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern_role: Option<String>,
 }
 
 fn is_payload_null(v: &Value) -> bool {
@@ -177,6 +186,7 @@ impl AstShapeDef {
             requires: Vec::new(),
             children: None,
             literal_children: std::collections::BTreeMap::new(),
+            pattern_role: None,
         }
     }
 
@@ -207,6 +217,12 @@ impl AstShapeDef {
     /// Attach named child roles (ADR-0081).
     pub fn with_children(mut self, children: Vec<ChildRoleSpec>) -> Self {
         self.children = Some(children);
+        self
+    }
+
+    /// Attach a pattern-role tag (ADR-0081 extension).
+    pub fn with_pattern_role(mut self, role: impl Into<String>) -> Self {
+        self.pattern_role = Some(role.into());
         self
     }
 

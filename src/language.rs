@@ -145,12 +145,7 @@ impl Language {
     /// Returns `Some(bool)` when the shape declares a literal-kinds list for
     /// `role`, `None` when it declares none — callers keep their legacy
     /// fallback heuristic for role-less shapes.
-    pub fn literal_child(
-        &self,
-        node_kind: &str,
-        role: &str,
-        child_kind: &str,
-    ) -> Option<bool> {
+    pub fn literal_child(&self, node_kind: &str, role: &str, child_kind: &str) -> Option<bool> {
         self.ast
             .get_by_identity(node_kind)
             .and_then(|def| def.literal_child(role, child_kind))
@@ -211,6 +206,31 @@ impl Language {
             "closure: param must be a var with string payload (or a type-annot wrapping one)"
                 .to_string(),
         ))
+    }
+
+    /// Extract the binding target name from a top-level binding node.
+    ///
+    /// A binding shape declares a `target` child role (e.g. `assign`,
+    /// `let`) whose payload is a `var` or `type-annot` node. Some legacy
+    /// binding forms (e.g. `bind`) carry the name directly in the payload
+    /// under `name`; that is used as a fallback when no `target` role is
+    /// declared. Returns `None` when the node is not a binding shape.
+    ///
+    /// This is the data-driven equivalent of
+    /// `root.kind == "assign" || root.kind == "let"` checks in module
+    /// export collection.
+    pub fn binding_target(&self, ast: &Ast, node: &AstNode) -> Option<String> {
+        if let Ok(Some(target_idx)) = self.child_role_index(&node.kind, "target") {
+            let children = node.payload.get("children").and_then(|c| c.as_array())?;
+            let entry = children.get(target_idx)?;
+            let idx = entry.as_u64()? as usize;
+            let target_node = ast.at(AstRef::new(idx)).ok()?;
+            return self.param_name(ast, target_node).ok();
+        }
+        node.payload
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(String::from)
     }
 }
 
