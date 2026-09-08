@@ -179,6 +179,11 @@ pub enum TaggedValue {
     /// the key is `"__home__"` inside the `__arrow__` object.
     Arrow {
         params: Rc<[String]>,
+        /// Rest/variadic parameter name (`[a, ...rest] ~> body`): when
+        /// `Some`, surplus call arguments are bound to this name as an
+        /// array (`TaggedValue::Arr`) instead of being curried. On the
+        /// JSON side the key is `"rest"` inside the `__arrow__` object.
+        rest: Option<Rc<str>>,
         body: usize, // AstRef index
         env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
         home: Option<u64>,
@@ -296,9 +301,14 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             Some(Value::Object(env_map)) => Rc::from(obj_map_to_hashmap(env_map.clone())),
             _ => Rc::new(FxHashMap::default()),
         };
+        let rest = o
+            .get("rest")
+            .and_then(|v| v.as_str())
+            .map(Rc::from);
         let home = o.get("__home__").and_then(|v| v.as_u64());
         return TaggedValue::Arrow {
             params,
+            rest,
             body,
             env,
             home,
@@ -376,6 +386,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         }
         TaggedValue::Arrow {
             params,
+            rest,
             body,
             env,
             home,
@@ -390,6 +401,9 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
                 "body": body,
                 "env": Value::Object(env_map),
             });
+            if let Some(r) = rest {
+                v["rest"] = Value::String(r.to_string());
+            }
             if let Some(h) = home {
                 v["__home__"] = Value::from(*h);
             }
@@ -717,24 +731,30 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
         (
             TaggedValue::Arrow {
                 params: p1,
+                rest: r1,
                 body: b1,
                 env: e1,
                 ..
             },
             TaggedValue::Arrow {
                 params: p2,
+                rest: r2,
                 body: b2,
                 env: e2,
                 ..
             },
         ) => {
-            p1.len() == p2.len() && p1.iter().zip(p2.iter()).all(|(a, b)| a == b) && b1 == b2 && {
-                if e1.len() != e2.len() {
-                    return false;
+            r1 == r2
+                && p1.len() == p2.len()
+                && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
+                && b1 == b2
+                && {
+                    if e1.len() != e2.len() {
+                        return false;
+                    }
+                    e1.iter()
+                        .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
                 }
-                e1.iter()
-                    .all(|(k, v)| e2.get(k.as_ref()).map(|w| eq(v, w)).unwrap_or(false))
-            }
         }
         // Resources are equal by opaque pointer identity.
         (TaggedValue::Resource(a), TaggedValue::Resource(b)) => a.ptr == b.ptr,
