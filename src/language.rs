@@ -12,8 +12,8 @@ use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
-    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, OptionSchema,
-    TokenKindDef, TransformDef, TypeRuleDef,
+    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, LintRuleDef,
+    OptionSchema, TokenKindDef, TransformDef, TypeRuleDef,
 };
 use crate::version::SchemeVersion;
 
@@ -49,6 +49,11 @@ pub struct Language {
     /// Lexer rule definitions — the patterns a data-driven lexer engine reads
     /// to tokenize source text.
     pub lexer_rules: FragmentSet<LexerRuleDef>,
+    /// Lint rule definitions (ADR-0097 — Lint Rules as Language Data): the
+    /// rule table lint engines read. Absent in serialized languages written
+    /// before ADR-0097, hence `serde(default)`.
+    #[serde(default)]
+    pub lints: FragmentSet<LintRuleDef>,
     /// The scheme combinator version this language targets.
     pub scheme_version: SchemeVersion,
 }
@@ -72,6 +77,7 @@ impl Language {
             caps: FragmentSet::new(),
             options: FragmentSet::new(),
             lexer_rules: FragmentSet::new(),
+            lints: FragmentSet::new(),
             scheme_version: SchemeVersion::v2(),
         }
     }
@@ -120,6 +126,9 @@ impl Language {
         }
         for frag in other.lexer_rules.fragments().cloned() {
             clone.lexer_rules.merge(frag)?;
+        }
+        for frag in other.lints.fragments().cloned() {
+            clone.lints.merge(frag)?;
         }
         *self = clone;
         Ok(())

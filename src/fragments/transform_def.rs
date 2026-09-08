@@ -188,6 +188,25 @@ pub enum TransformCondition {
         /// The value the payload at `path` must equal.
         value: Value,
     },
+    /// The payload of one of the node's children must equal `value` at
+    /// `path`. The child is resolved by named `role` (via
+    /// [`AstShapeDef::role_index`](crate::AstShapeDef::role_index), ADR-0081),
+    /// falling back to positional `index` for role-less shapes. An empty
+    /// `path` tests the child's payload itself.
+    ChildPayloadEq {
+        /// The positional child index to test (role-less fallback).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<usize>,
+        /// The named child role to test (ADR-0081).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<String>,
+        /// The payload path to test on the resolved child (empty = the
+        /// payload itself).
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        path: String,
+        /// The value the payload at `path` must equal.
+        value: Value,
+    },
     /// The node must have exactly this many children.
     ChildCount(usize),
     /// All sub-conditions must hold.

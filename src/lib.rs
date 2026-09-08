@@ -64,9 +64,9 @@ pub use fragment_set::FragmentSet;
 pub use fragments::{
     AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl,
     ChildRoleSpec, ChildSeparator, DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow,
-    KeywordClause, LexerPattern, LexerRuleDef, LiteralKind, OptionSchema, PairShape,
-    PayloadExtractSpec, PayloadTokenSpec, TokenStep,
-    RewriteStep, TokenKindDef, TransformCondition, TransformDef, TransformRule, TypeRuleDef,
+    KeywordClause, LexerPattern, LexerRuleDef, LintCheck, LintFix, LintRuleDef, LiteralKind,
+    OptionSchema, PairShape, PayloadExtractSpec, PayloadTokenSpec, RewriteStep, TokenKindDef,
+    TokenStep, TransformCondition, TransformDef, TransformRule, TypeRuleDef,
 };
 pub use language::Language;
 pub use law_inference::{
