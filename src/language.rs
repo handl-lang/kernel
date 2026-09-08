@@ -207,6 +207,55 @@ impl Language {
         rules
     }
 
+    /// Return the [`TokenKindDef`] declared for `kind`, if any.
+    pub fn token_kind(&self, kind: &str) -> Option<&TokenKindDef> {
+        self.tokens.get_by_id(kind)
+    }
+
+    /// Return the classification `category` declared for token kind `kind`
+    /// (e.g. `"keyword"`, `"open-bracket"`), or `None` when the kind is
+    /// undeclared or carries no category.
+    ///
+    /// This is the data-driven replacement for string-matching on kind ids
+    /// (`kind == "token.lparen"`, `kind.starts_with("token.keyword")`) in
+    /// tooling — a language that spells or names its tokens differently still
+    /// classifies correctly because the category travels with the token data
+    /// (ADR-0044).
+    pub fn token_category(&self, kind: &str) -> Option<&str> {
+        self.token_kind(kind)
+            .and_then(|d| d.category.as_deref())
+    }
+
+    /// Whether token kind `kind` is classified as `category`.
+    pub fn token_in_category(&self, kind: &str, category: &str) -> bool {
+        self.token_category(kind) == Some(category)
+    }
+
+    /// Return the id of the bracket counterpart declared for `kind`
+    /// (`TokenKindDef::pair`), if any.
+    pub fn token_pair(&self, kind: &str) -> Option<&str> {
+        self.token_kind(kind).and_then(|d| d.pair.as_deref())
+    }
+
+    /// Return the hover/documentation markdown declared for `kind`
+    /// (`TokenKindDef::doc`), if any.
+    pub fn token_doc(&self, kind: &str) -> Option<&str> {
+        self.token_kind(kind).and_then(|d| d.doc.as_deref())
+    }
+
+    /// Resolve a surface-syntax `label` (e.g. `"."`, `"::"`) to the id of the
+    /// token kind that declares it. Lets tooling ask "which kind is the
+    /// member-access token?" without hardcoding canonical kind ids — a
+    /// language that spells member access differently still answers.
+    ///
+    /// When several kinds share a label the first declaration wins.
+    pub fn token_kind_for_label(&self, label: &str) -> Option<&str> {
+        self.tokens
+            .iter()
+            .find(|d| d.label.as_deref() == Some(label))
+            .map(|d| d.id.as_str())
+    }
+
     /// Resolve a named child role (ADR-0081) to its positional index for a node
     /// kind, using this language's AST shapes.
     ///
@@ -353,6 +402,52 @@ mod tests {
         let lang = Language::default();
         assert!(lang.tokens.is_empty());
         assert_eq!(lang.scheme_version, SchemeVersion::v2());
+    }
+
+    #[test]
+    fn token_classification_helpers_are_data_driven() {
+        // A language whose token kinds use *noncanonical* ids still
+        // classifies via `category`/`pair`/`doc`/`label` — this is the
+        // genericity property ADR-0044 requires of host tooling.
+        let mut lang = Language::new();
+        lang.tokens
+            .merge(
+                TokenKindDef::new("tok::name")
+                    .with_category("identifier")
+                    .with_label("ident"),
+            )
+            .unwrap();
+        lang.tokens
+            .merge(
+                TokenKindDef::new("tok::open")
+                    .with_category("open-bracket")
+                    .with_pair("tok::close"),
+            )
+            .unwrap();
+        lang.tokens
+            .merge(
+                TokenKindDef::new("tok::close")
+                    .with_category("close-bracket")
+                    .with_pair("tok::open"),
+            )
+            .unwrap();
+        lang.tokens
+            .merge(
+                TokenKindDef::new("tok::kw")
+                    .with_category("keyword")
+                    .with_doc("docs!"),
+            )
+            .unwrap();
+
+        assert_eq!(lang.token_category("tok::name"), Some("identifier"));
+        assert!(lang.token_in_category("tok::kw", "keyword"));
+        assert!(!lang.token_in_category("tok::kw", "identifier"));
+        assert_eq!(lang.token_pair("tok::open"), Some("tok::close"));
+        assert_eq!(lang.token_pair("tok::close"), Some("tok::open"));
+        assert_eq!(lang.token_doc("tok::kw"), Some("docs!"));
+        assert_eq!(lang.token_kind_for_label("ident"), Some("tok::name"));
+        assert_eq!(lang.token_category("tok::missing"), None);
+        assert_eq!(lang.token_kind_for_label("missing"), None);
     }
 
     #[test]

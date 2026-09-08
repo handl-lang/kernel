@@ -80,6 +80,26 @@ pub struct TokenKindDef {
     /// parser edit (ADR-0044).
     #[serde(default, skip_serializing_if = "is_false")]
     pub trivia: bool,
+    /// Free-form classification of this token kind for tooling that must not
+    /// hardcode kind strings (ADR-0044 "language as data"). The canonical kit
+    /// uses: `keyword`, `identifier`, `number`, `string`, `bool`, `null`,
+    /// `template`, `operator`, `punctuation`, `open-bracket`,
+    /// `close-bracket`, `comment`, `doc-comment`, `eof`. Optional for
+    /// backward compatibility with third-party kits — tooling should fall
+    /// back gracefully when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// For bracket token kinds (`open-bracket`/`close-bracket` categories),
+    /// the id of the matching counterpart kind (e.g. `token.lparen` pairs
+    /// with `token.rparen`). Lets bracket-matching tooling pair delimiters
+    /// without hardcoding kind strings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pair: Option<String>,
+    /// Optional hover/documentation markdown for this token kind, surfaced by
+    /// tooling (e.g. the LSP's keyword hover). Free-form markdown; tooling
+    /// falls back to a generic description when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -96,6 +116,9 @@ impl TokenKindDef {
             label: None,
             literal: None,
             trivia: false,
+            category: None,
+            pair: None,
+            doc: None,
             replaces: Vec::new(),
             requires: Vec::new(),
         }
@@ -116,6 +139,24 @@ impl TokenKindDef {
     /// Mark this token kind as trivia (skipped by the parser).
     pub fn with_trivia(mut self) -> Self {
         self.trivia = true;
+        self
+    }
+
+    /// Attach a classification category (e.g. `"keyword"`, `"open-bracket"`).
+    pub fn with_category(mut self, category: impl Into<String>) -> Self {
+        self.category = Some(category.into());
+        self
+    }
+
+    /// Attach the id of the matching bracket counterpart.
+    pub fn with_pair(mut self, pair: impl Into<String>) -> Self {
+        self.pair = Some(pair.into());
+        self
+    }
+
+    /// Attach hover/documentation markdown for this token kind.
+    pub fn with_doc(mut self, doc: impl Into<String>) -> Self {
+        self.doc = Some(doc.into());
         self
     }
 
@@ -177,6 +218,28 @@ mod tests {
     }
 
     #[test]
+    fn category_pair_doc_serde_roundtrip() {
+        let t = TokenKindDef::new("tok::open")
+            .with_category("open-bracket")
+            .with_pair("tok::close")
+            .with_doc("opens a group");
+        let j = serde_json::to_string(&t).unwrap();
+        let back: TokenKindDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(t, back);
+        assert_eq!(back.category.as_deref(), Some("open-bracket"));
+        assert_eq!(back.pair.as_deref(), Some("tok::close"));
+        assert_eq!(back.doc.as_deref(), Some("opens a group"));
+    }
+
+    #[test]
+    fn serde_backward_compat_without_new_fields() {
+        // Third-party YAML/JSON without category/pair/doc still parses.
+        let t: TokenKindDef = serde_json::from_str(r#"{"id":"tok::x"}"#).unwrap();
+        assert_eq!(t.id(), "tok::x");
+        assert!(t.category.is_none() && t.pair.is_none() && t.doc.is_none());
+    }
+
+    #[test]
     fn equality() {
         assert_eq!(TokenKindDef::new("a"), TokenKindDef::new("a"));
         assert_ne!(TokenKindDef::new("a"), TokenKindDef::new("b"));
@@ -190,6 +253,9 @@ mod tests {
         assert!(!j.contains("requires"));
         assert!(!j.contains("literal"));
         assert!(!j.contains("trivia"));
+        assert!(!j.contains("category"));
+        assert!(!j.contains("pair"));
+        assert!(!j.contains("doc"));
     }
 
     #[test]
