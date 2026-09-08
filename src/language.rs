@@ -355,6 +355,71 @@ impl Language {
         ))
     }
 
+    /// Extract the parameter names from an arrow's params node, splitting
+    /// off an optional rest parameter (`[a, b, ...rest] ~> body`).
+    ///
+    /// Returns `(fixed_params, rest_param)`. A params node whose shape
+    /// declares a variadic child role (ADR-0081, e.g. `elements`) is a
+    /// parameter list: each child is an ordinary param (resolved via
+    /// [`param_name`](Self::param_name)) unless its own shape declares
+    /// `pattern_role: rest`, in which case its `subject` child names the
+    /// rest binding. A non-collection params node is a single param; if
+    /// it is itself a `rest` node, the arrow is fully variadic.
+    ///
+    /// The `rest` check is data-driven — dispatch is on the child's
+    /// `AstShapeDef::pattern_role`, never on a hardcoded kind string.
+    pub fn param_names(
+        &self,
+        ast: &Ast,
+        params_node: &AstNode,
+    ) -> Result<(Vec<String>, Option<String>), LangError> {
+        let is_rest = |node: &AstNode| {
+            self.ast
+                .get_by_identity(&node.kind)
+                .and_then(|s| s.pattern_role.as_deref())
+                == Some("rest")
+        };
+        if !self.has_variadic_role(&params_node.kind) {
+            let name = self.param_name(ast, params_node)?;
+            return if is_rest(params_node) {
+                Ok((Vec::new(), Some(name)))
+            } else {
+                Ok((vec![name], None))
+            };
+        }
+        let children = params_node
+            .payload
+            .get("children")
+            .and_then(|c| c.as_array())
+            .ok_or_else(|| LangError::engine("closure: params missing children".to_string()))?;
+        let mut names = Vec::with_capacity(children.len());
+        let mut rest: Option<String> = None;
+        for entry in children {
+            let idx = entry
+                .as_u64()
+                .ok_or_else(|| LangError::engine("closure: param index must be a number".to_string()))?
+                as usize;
+            let child = ast.at(AstRef::new(idx))?;
+            let name = self.param_name(ast, child)?;
+            if is_rest(child) {
+                if rest.is_some() {
+                    return Err(LangError::engine(
+                        "closure: multiple rest params".to_string(),
+                    ));
+                }
+                rest = Some(name);
+            } else {
+                if rest.is_some() {
+                    return Err(LangError::engine(
+                        "closure: rest param must be last".to_string(),
+                    ));
+                }
+                names.push(name);
+            }
+        }
+        Ok((names, rest))
+    }
+
     /// Extract the binding target name from a top-level binding node.
     ///
     /// A binding shape declares a `target` child role (e.g. `assign`,
