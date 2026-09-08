@@ -35,6 +35,6 @@ pub use grammar::{
 };
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;
-pub use token_kind::{LiteralKind, TokenKindDef};
+pub use token_kind::{LiteralKind, TokenCategory, TokenKindDef};
 pub use transform_def::{RewriteStep, TransformCondition, TransformDef, TransformRule};
 pub use type_rule::TypeRuleDef;

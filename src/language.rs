@@ -207,6 +207,24 @@ impl Language {
         rules
     }
 
+    /// The declared [`crate::TokenCategory`] for a token kind id
+    /// (ADR-0081), looked up in `self.tokens`.
+    ///
+    /// This is the entry point hosts (LSP, tooling) call to classify tokens
+    /// instead of `kind == "token.keyword.*"` / `starts_with` string
+    /// heuristics. Returns `None` when the kind is undeclared or declares
+    /// no category — hosts must not guess.
+    pub fn token_category(&self, kind: &str) -> Option<crate::TokenCategory> {
+        self.tokens
+            .get_by_id(kind)
+            .and_then(|def| def.category)
+    }
+
+    /// Whether token kind `kind` is declared with `category` (ADR-0081).
+    pub fn token_is(&self, kind: &str, category: crate::TokenCategory) -> bool {
+        self.token_category(kind) == Some(category)
+    }
+
     /// Resolve a named child role (ADR-0081) to its positional index for a node
     /// kind, using this language's AST shapes.
     ///
