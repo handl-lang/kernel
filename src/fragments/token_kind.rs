@@ -48,136 +48,6 @@ impl Default for LiteralKind {
     }
 }
 
-/// Host-facing classification of a token kind (ADR-0081).
-///
-/// Replaces the former `kind.starts_with("token.keyword.")` /
-/// `kind == "token.lparen"` string heuristics in hosts (LSP, tooling) with
-/// declared data: each [`TokenKindDef`] optionally declares the category a
-/// host should treat it as. The taxonomy is host vocabulary — it is fixed in
-/// Rust because it is the contract between `Language` data and host
-/// classification, while the *mapping* from token kind to category is data
-/// (a new language declares its own kinds mapped onto these categories).
-///
-/// `None` on a [`TokenKindDef`] means *unclassified*: hosts must not guess.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "kebab-case")]
-pub enum TokenCategory {
-    /// Reserved-word keyword (`token.keyword.*`).
-    Keyword,
-    /// User-defined identifier.
-    Identifier,
-    /// Numeric literal.
-    Number,
-    /// String literal.
-    String,
-    /// Template/interpolated string.
-    Template,
-    /// Embedded JSON literal (`json{...}`).
-    Json,
-    /// Boolean literal.
-    Boolean,
-    /// Null literal.
-    Null,
-    /// Line/block comment (trivia).
-    Comment,
-    /// Documentation comment (trivia).
-    DocComment,
-    /// Infix/prefix operator or other symbolic token.
-    Operator,
-    /// Open `(`.
-    OpenParen,
-    /// Close `)`.
-    CloseParen,
-    /// Open `[`.
-    OpenBracket,
-    /// Close `]`.
-    CloseBracket,
-    /// Open `{`.
-    OpenBrace,
-    /// Close `}`.
-    CloseBrace,
-    /// `,` separator.
-    Comma,
-    /// `;` separator.
-    Semicolon,
-    /// `:` type-annotation / key-value separator.
-    Colon,
-    /// `.` member access.
-    Dot,
-    /// `::` binding separator.
-    Bind,
-    /// `...` spread/ellipsis.
-    Ellipsis,
-}
-
-impl TokenCategory {
-    /// Whether this category is an opening bracket (`(`/`[`/`{`).
-    pub fn is_open_bracket(self) -> bool {
-        matches!(
-            self,
-            Self::OpenParen | Self::OpenBracket | Self::OpenBrace
-        )
-    }
-
-    /// Whether this category is a closing bracket (`)`/`]`/`}`).
-    pub fn is_close_bracket(self) -> bool {
-        matches!(
-            self,
-            Self::CloseParen | Self::CloseBracket | Self::CloseBrace
-        )
-    }
-
-    /// Whether this category is any bracket (open or close).
-    pub fn is_bracket(self) -> bool {
-        self.is_open_bracket() || self.is_close_bracket()
-    }
-
-    /// The matching close category for an open bracket (`OpenParen` →
-    /// `CloseParen`), or `None` for non-open categories.
-    pub fn matching_close(self) -> Option<Self> {
-        match self {
-            Self::OpenParen => Some(Self::CloseParen),
-            Self::OpenBracket => Some(Self::CloseBracket),
-            Self::OpenBrace => Some(Self::CloseBrace),
-            _ => None,
-        }
-    }
-
-    /// The matching open category for a close bracket (`CloseParen` →
-    /// `OpenParen`), or `None` for non-close categories.
-    pub fn matching_open(self) -> Option<Self> {
-        match self {
-            Self::CloseParen => Some(Self::OpenParen),
-            Self::CloseBracket => Some(Self::OpenBracket),
-            Self::CloseBrace => Some(Self::OpenBrace),
-            _ => None,
-        }
-    }
-
-    /// Whether this category counts as an *operator* for highlighting and
-    /// hover purposes. Covers [`Self::Operator`] plus the symbolic
-    /// separators that historically lived in the operator set (`::`,
-    /// `...`). Mirrors the former `is_operator_kind` kind list.
-    pub fn is_operator_like(self) -> bool {
-        matches!(self, Self::Operator | Self::Bind | Self::Ellipsis)
-    }
-
-    /// Whether this category counts as a *delimiter/punctuation* for
-    /// highlighting purposes: brackets plus `,` `;` `:` `.`. Mirrors the
-    /// former `is_delimiter_kind` kind list (minus `token.arrow`, which was
-    /// unreachable — every caller checked operator first).
-    pub fn is_delimiter_like(self) -> bool {
-        self.is_bracket()
-            || matches!(self, Self::Comma | Self::Semicolon | Self::Colon | Self::Dot)
-    }
-
-    /// Whether this category is comment trivia ([`Self::Comment`] or
-    /// [`Self::DocComment`]).
-    pub fn is_comment_like(self) -> bool {
-        matches!(self, Self::Comment | Self::DocComment)
-    }
-}
-
 /// Serde helper: skip the `trivia` flag when it is `false` (the default).
 fn is_false(b: &bool) -> bool {
     !*b
@@ -210,12 +80,26 @@ pub struct TokenKindDef {
     /// parser edit (ADR-0044).
     #[serde(default, skip_serializing_if = "is_false")]
     pub trivia: bool,
-    /// Host-facing classification (ADR-0081): how hosts such as the LSP
-    /// should treat this token kind (keyword, bracket, operator, ...).
-    /// `None` means unclassified — hosts must not fall back to `kind`
-    /// string heuristics.
+    /// Free-form classification of this token kind for tooling that must not
+    /// hardcode kind strings (ADR-0044 "language as data"). The canonical kit
+    /// uses: `keyword`, `identifier`, `number`, `string`, `bool`, `null`,
+    /// `template`, `operator`, `punctuation`, `open-bracket`,
+    /// `close-bracket`, `comment`, `doc-comment`, `eof`. Optional for
+    /// backward compatibility with third-party kits — tooling should fall
+    /// back gracefully when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub category: Option<TokenCategory>,
+    pub category: Option<String>,
+    /// For bracket token kinds (`open-bracket`/`close-bracket` categories),
+    /// the id of the matching counterpart kind (e.g. `token.lparen` pairs
+    /// with `token.rparen`). Lets bracket-matching tooling pair delimiters
+    /// without hardcoding kind strings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pair: Option<String>,
+    /// Optional hover/documentation markdown for this token kind, surfaced by
+    /// tooling (e.g. the LSP's keyword hover). Free-form markdown; tooling
+    /// falls back to a generic description when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doc: Option<String>,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -233,6 +117,8 @@ impl TokenKindDef {
             literal: None,
             trivia: false,
             category: None,
+            pair: None,
+            doc: None,
             replaces: Vec::new(),
             requires: Vec::new(),
         }
@@ -250,15 +136,27 @@ impl TokenKindDef {
         self
     }
 
-    /// Attach a host-facing category (ADR-0081).
-    pub fn with_category(mut self, category: TokenCategory) -> Self {
-        self.category = Some(category);
-        self
-    }
-
     /// Mark this token kind as trivia (skipped by the parser).
     pub fn with_trivia(mut self) -> Self {
         self.trivia = true;
+        self
+    }
+
+    /// Attach a classification category (e.g. `"keyword"`, `"open-bracket"`).
+    pub fn with_category(mut self, category: impl Into<String>) -> Self {
+        self.category = Some(category.into());
+        self
+    }
+
+    /// Attach the id of the matching bracket counterpart.
+    pub fn with_pair(mut self, pair: impl Into<String>) -> Self {
+        self.pair = Some(pair.into());
+        self
+    }
+
+    /// Attach hover/documentation markdown for this token kind.
+    pub fn with_doc(mut self, doc: impl Into<String>) -> Self {
+        self.doc = Some(doc.into());
         self
     }
 
@@ -320,6 +218,28 @@ mod tests {
     }
 
     #[test]
+    fn category_pair_doc_serde_roundtrip() {
+        let t = TokenKindDef::new("tok::open")
+            .with_category("open-bracket")
+            .with_pair("tok::close")
+            .with_doc("opens a group");
+        let j = serde_json::to_string(&t).unwrap();
+        let back: TokenKindDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(t, back);
+        assert_eq!(back.category.as_deref(), Some("open-bracket"));
+        assert_eq!(back.pair.as_deref(), Some("tok::close"));
+        assert_eq!(back.doc.as_deref(), Some("opens a group"));
+    }
+
+    #[test]
+    fn serde_backward_compat_without_new_fields() {
+        // Third-party YAML/JSON without category/pair/doc still parses.
+        let t: TokenKindDef = serde_json::from_str(r#"{"id":"tok::x"}"#).unwrap();
+        assert_eq!(t.id(), "tok::x");
+        assert!(t.category.is_none() && t.pair.is_none() && t.doc.is_none());
+    }
+
+    #[test]
     fn equality() {
         assert_eq!(TokenKindDef::new("a"), TokenKindDef::new("a"));
         assert_ne!(TokenKindDef::new("a"), TokenKindDef::new("b"));
@@ -333,6 +253,9 @@ mod tests {
         assert!(!j.contains("requires"));
         assert!(!j.contains("literal"));
         assert!(!j.contains("trivia"));
+        assert!(!j.contains("category"));
+        assert!(!j.contains("pair"));
+        assert!(!j.contains("doc"));
     }
 
     #[test]

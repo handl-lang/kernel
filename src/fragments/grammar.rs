@@ -92,6 +92,80 @@ pub struct AstShapeRef {
     /// Empty = unconditional (default, backward-compatible).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub left_kinds: Vec<String>,
+    /// Optional per-child right binding powers. When
+    /// `child_binding_powers[i]` is present, fixed child `i` is parsed at
+    /// that right binding power instead of the row's default (the prefix
+    /// row's left binding power, or the infix row's right binding power for
+    /// trailing children). This expresses forms whose children need
+    /// different precedence contexts — e.g. `data Vec(..) :: A | B` parses
+    /// its first child above `::` (rbp 6) but its constructor list at rbp 0
+    /// so the low-precedence `|` infix still binds. Empty = all children
+    /// use the row default (backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub child_binding_powers: Vec<u8>,
+    /// Optional keyword clauses that may appear between a fixed child and
+    /// the next child or delimited block. After fixed child
+    /// `after_child` is parsed, if the next token matches a clause's `open`
+    /// keyword the clause is parsed (its expression becomes an extra child
+    /// spliced in at that position). Expresses forms like
+    /// `match scrutinee return motive with { arms }` where
+    /// `return ... with` is an optional clause between the scrutinee and
+    /// the delimited arm block. Empty = no optional clauses (default,
+    /// backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub keyword_clauses: Vec<KeywordClause>,
+    /// Payload-extraction steps: after all children are parsed, lift a
+    /// name-like string out of a fixed child's payload into this node's
+    /// payload under `field`. The extraction resolves a string payload
+    /// (e.g. `var`), an existing `name` property, or the `callee`-role
+    /// child of a `call`-shaped node. Expresses `data` declarations where
+    /// the family name is lifted from the type-expression child into
+    /// `payload.name`. Empty = no extraction (default, backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub payload_extract: Vec<PayloadExtractSpec>,
+}
+
+/// An optional keyword-delimited clause that may appear between fixed child
+/// `after_child` and the following child or delimited block (ADR-0053).
+///
+/// When the parser has just parsed fixed child `after_child` and the next
+/// token has kind `open`, the clause fires: `open` is consumed, a clause
+/// expression is parsed at `binding_power`, `close` is required and
+/// consumed, and the clause expression is spliced into the node's children
+/// immediately after `after_child`. When the next token is not `open`, the
+/// clause is skipped entirely. Example: `match`'s `return ... with` motive
+/// clause is `KeywordClause { after_child: 0, open: "token.keyword.return",
+/// close: "token.keyword.with", binding_power: 0 }`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct KeywordClause {
+    /// Index of the fixed child after which the clause may appear.
+    pub after_child: usize,
+    /// The keyword token kind that opens the clause (e.g.
+    /// `token.keyword.return`).
+    pub open: String,
+    /// The keyword token kind that must follow the clause expression (e.g.
+    /// `token.keyword.with`).
+    pub close: String,
+    /// The right binding power for the clause expression (default 0).
+    #[serde(default)]
+    pub binding_power: u8,
+}
+
+/// A payload-extraction step: lift a name-like string out of fixed child
+/// `child` into this node's payload under `field` (ADR-0053).
+///
+/// The engine resolves the string generically from the child's payload: a
+/// bare string payload (e.g. a `var` node), an existing `name` property, or
+/// the `callee`-role child of a `call`-shaped node. When no string resolves,
+/// the field is simply not set. Example: `data` lifts the family name from
+/// its type-expression child into `payload.name` via
+/// `PayloadExtractSpec { child: 0, field: "name" }`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PayloadExtractSpec {
+    /// Index of the child to extract from.
+    pub child: usize,
+    /// The payload field to store the extracted string under (e.g. `name`).
+    pub field: String,
 }
 
 /// Describes a separator token consumed between two children of an
@@ -175,6 +249,9 @@ impl AstShapeRef {
             payload_tokens: Vec::new(),
             block_children: Vec::new(),
             left_kinds: Vec::new(),
+            child_binding_powers: Vec::new(),
+            keyword_clauses: Vec::new(),
+            payload_extract: Vec::new(),
         }
     }
 
@@ -195,6 +272,24 @@ impl AstShapeRef {
     /// (ADR-0053 §7b — payload extraction).
     pub fn with_payload_tokens(mut self, tokens: Vec<PayloadTokenSpec>) -> Self {
         self.payload_tokens = tokens;
+        self
+    }
+
+    /// Attach per-child right binding powers (ADR-0053).
+    pub fn with_child_binding_powers(mut self, powers: Vec<u8>) -> Self {
+        self.child_binding_powers = powers;
+        self
+    }
+
+    /// Attach optional keyword clauses between fixed children (ADR-0053).
+    pub fn with_keyword_clauses(mut self, clauses: Vec<KeywordClause>) -> Self {
+        self.keyword_clauses = clauses;
+        self
+    }
+
+    /// Attach payload-extraction steps (ADR-0053).
+    pub fn with_payload_extract(mut self, specs: Vec<PayloadExtractSpec>) -> Self {
+        self.payload_extract = specs;
         self
     }
 }

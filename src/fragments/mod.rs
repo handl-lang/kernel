@@ -30,11 +30,11 @@ pub use ast_shape::{
 pub use capability::CapabilityDecl;
 pub use eval_scheme::EvalSchemeDef;
 pub use grammar::{
-    AstShapeRef, ChildSeparator, DelimitedShape, GrammarPosition, GrammarRow, PairShape,
-    PayloadTokenSpec,
+    AstShapeRef, ChildSeparator, DelimitedShape, GrammarPosition, GrammarRow, KeywordClause,
+    PairShape, PayloadExtractSpec, PayloadTokenSpec,
 };
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;
-pub use token_kind::{LiteralKind, TokenCategory, TokenKindDef};
+pub use token_kind::{LiteralKind, TokenKindDef};
 pub use transform_def::{RewriteStep, TransformCondition, TransformDef, TransformRule};
 pub use type_rule::TypeRuleDef;
