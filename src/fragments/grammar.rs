@@ -176,6 +176,17 @@ pub struct TokenStep {
     /// of `kinds` (default false = required).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub optional: bool,
+    /// When true, the step is only *attempted* when the immediately
+    /// preceding step matched; if the previous step did not match, this
+    /// step is skipped entirely without inspecting the next token —
+    /// including when the token would otherwise match `kinds`. This
+    /// expresses gated tail pairs like `from "p" import name as alias`,
+    /// where the alias is consumed only when the `as` keyword was seen:
+    /// without the gate, a bare `from "p" import name` followed by a
+    /// statement starting with an identifier would silently swallow that
+    /// identifier as the alias.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub requires_prev_match: bool,
 }
 
 /// An optional keyword-delimited clause that may appear between fixed child
