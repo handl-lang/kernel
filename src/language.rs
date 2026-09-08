@@ -357,15 +357,14 @@ impl Language {
 
     /// Extract the binding target name from a top-level binding node.
     ///
-    /// A binding shape declares a `target` child role (e.g. `assign`,
-    /// `let`) whose payload is a `var` or `type-annot` node. Some legacy
+    /// A binding shape declares a `target` child role (e.g. `assign`)
+    /// whose payload is a `var` or `type-annot` node. Some legacy
     /// binding forms (e.g. `bind`) carry the name directly in the payload
     /// under `name`; that is used as a fallback when no `target` role is
     /// declared. Returns `None` when the node is not a binding shape.
     ///
-    /// This is the data-driven equivalent of
-    /// `root.kind == "assign" || root.kind == "let"` checks in module
-    /// export collection.
+    /// This is the data-driven equivalent of a
+    /// `root.kind == "assign"` check in module export collection.
     pub fn binding_target(&self, ast: &Ast, node: &AstNode) -> Option<String> {
         if let Ok(Some(target_idx)) = self.child_role_index(&node.kind, "target") {
             let children = node.payload.get("children").and_then(|c| c.as_array())?;
