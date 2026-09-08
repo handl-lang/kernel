@@ -150,6 +150,13 @@ pub enum RewriteStep {
         /// The index of the child to transform.
         index: usize,
     },
+    /// Allocate a fresh `var` leaf with a unique, non-colliding name.
+    ///
+    /// The `hint` is used only to make the generated name readable and to
+    /// share a single generated variable when the same hint appears multiple
+    /// times within one rule application. Freshness is guaranteed by a
+    /// per-rewrite counter.
+    Fresh(String),
 }
 
 /// A condition gating whether a [`TransformDef`] fires (ADR-0094 §3).
@@ -400,6 +407,7 @@ mod tests {
             RewriteStep::KeepPath(vec![0, 0]),
             RewriteStep::KeepRest(2),
             RewriteStep::Splice(1),
+            RewriteStep::Fresh("rec_v".into()),
             RewriteStep::Create {
                 kind: "k".into(),
                 payload: None,
