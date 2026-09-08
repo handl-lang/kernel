@@ -65,7 +65,7 @@ pub use fragments::{
     AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl,
     ChildRoleSpec, ChildSeparator, DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow,
     KeywordClause, LexerPattern, LexerRuleDef, LiteralKind, OptionSchema, PairShape,
-    PayloadExtractSpec, PayloadTokenSpec,
+    PayloadExtractSpec, PayloadTokenSpec, TokenStep,
     RewriteStep, TokenKindDef, TransformCondition, TransformDef, TransformRule, TypeRuleDef,
 };
 pub use language::Language;

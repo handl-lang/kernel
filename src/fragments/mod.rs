@@ -31,7 +31,7 @@ pub use capability::CapabilityDecl;
 pub use eval_scheme::EvalSchemeDef;
 pub use grammar::{
     AstShapeRef, ChildSeparator, DelimitedShape, GrammarPosition, GrammarRow, KeywordClause,
-    PairShape, PayloadExtractSpec, PayloadTokenSpec,
+    PairShape, PayloadExtractSpec, PayloadTokenSpec, TokenStep,
 };
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use option::OptionSchema;

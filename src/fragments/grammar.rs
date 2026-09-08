@@ -123,6 +123,43 @@ pub struct AstShapeRef {
     /// `payload.name`. Empty = no extraction (default, backward-compatible).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub payload_extract: Vec<PayloadExtractSpec>,
+    /// Required (or optional) trailing token steps consumed in order after
+    /// all fixed children and the delimited block, before the node's payload
+    /// is assembled (ADR-0053). Expresses multi-keyword tail forms like
+    /// `from "path" import * as alias` where `import`, `*`, and `as` are
+    /// required tokens and the alias's text is captured into `payload.alias`.
+    /// Each step accepts one of `kinds`; a step whose `optional` flag is set
+    /// is skipped when the next token does not match. Empty = no trailing
+    /// tokens (default, backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trailing_tokens: Vec<TokenStep>,
+}
+
+/// A single trailing token step consumed after a node's children
+/// ([`AstShapeRef::trailing_tokens`], ADR-0053).
+///
+/// The step matches when the next token's kind is in `kinds`; the token is
+/// consumed and, when `field` is set, its text is stored in the node's
+/// payload under that key. When `optional` is true and the next token does
+/// not match, the step is skipped without consuming. This is the tail-form
+/// counterpart of [`PayloadTokenSpec`] (which consumes before children) and
+/// generalizes multi-keyword suffixes — e.g. `from <path> import * as
+/// <alias>` is `kinds: [import]`, `kinds: [star]`, `kinds: [as]`,
+/// `kinds: [identifier, string], field: alias`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TokenStep {
+    /// The token kinds this step accepts (one-of). The first listed kind is
+    /// used in error messages.
+    pub kinds: Vec<String>,
+    /// When set, the matched token's text is stored in the node's payload
+    /// under this key (e.g. `alias`). When `None`, the token is consumed
+    /// but not stored (e.g. a required keyword).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    /// When true, the step is skipped if the next token does not match any
+    /// of `kinds` (default false = required).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub optional: bool,
 }
 
 /// An optional keyword-delimited clause that may appear between fixed child
@@ -166,6 +203,12 @@ pub struct PayloadExtractSpec {
     pub child: usize,
     /// The payload field to store the extracted string under (e.g. `name`).
     pub field: String,
+    /// When true, failure to resolve a string from the child is a parse
+    /// error instead of silently leaving the field unset — e.g. `from`
+    /// requires a string-literal path child (default false, backward-
+    /// compatible).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub required: bool,
 }
 
 /// Describes a separator token consumed between two children of an
@@ -252,6 +295,7 @@ impl AstShapeRef {
             child_binding_powers: Vec::new(),
             keyword_clauses: Vec::new(),
             payload_extract: Vec::new(),
+            trailing_tokens: Vec::new(),
         }
     }
 
@@ -290,6 +334,12 @@ impl AstShapeRef {
     /// Attach payload-extraction steps (ADR-0053).
     pub fn with_payload_extract(mut self, specs: Vec<PayloadExtractSpec>) -> Self {
         self.payload_extract = specs;
+        self
+    }
+
+    /// Attach trailing token steps consumed after all children (ADR-0053).
+    pub fn with_trailing_tokens(mut self, steps: Vec<TokenStep>) -> Self {
+        self.trailing_tokens = steps;
         self
     }
 }
