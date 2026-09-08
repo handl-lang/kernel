@@ -254,7 +254,11 @@ pub fn is_tag_value(value: &Value) -> bool {
 pub fn is_reserved_value_key(key: &str) -> bool {
     matches!(
         key,
-        TAG_VALUE_KEY | REGISTRY_VALUE_KEY | LANGUAGE_VALUE_KEY | AST_VALUE_KEY | "__arrow__"
+        TAG_VALUE_KEY
+            | REGISTRY_VALUE_KEY
+            | LANGUAGE_VALUE_KEY
+            | AST_VALUE_KEY
+            | "__arrow__"
             | "__home__"
     )
 }
