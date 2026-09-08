@@ -114,6 +114,22 @@ pub struct AstShapeRef {
     /// backward-compatible).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keyword_clauses: Vec<KeywordClause>,
+    /// Optional trailing children (ADR-0053 extension). A fixed child index
+    /// listed here is parsed only when its preceding separator
+    /// (`child_separators[i - 1]`) is present in the input: the parser peeks,
+    /// and if the next token matches one of the separator kinds it consumes
+    /// the separator and parses the child; otherwise it stops parsing
+    /// children entirely (optional children must form a trailing suffix of
+    /// the non-delimited children). This expresses forms like
+    /// `if cond { then }` / `if cond { then } else { else }` where the `else`
+    /// clause is gated on the `else` keyword — the keyword token is the
+    /// disambiguator, so the following statement is never swallowed as the
+    /// optional child. An optional child with no declared preceding
+    /// separator is a grammar error (the parser cannot tell where the
+    /// child begins). Empty = all children required (default,
+    /// backward-compatible).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub optional_children: Vec<usize>,
     /// Payload-extraction steps: after all children are parsed, lift a
     /// name-like string out of a fixed child's payload into this node's
     /// payload under `field`. The extraction resolves a string payload
@@ -251,6 +267,7 @@ impl AstShapeRef {
             left_kinds: Vec::new(),
             child_binding_powers: Vec::new(),
             keyword_clauses: Vec::new(),
+            optional_children: Vec::new(),
             payload_extract: Vec::new(),
         }
     }
@@ -284,6 +301,13 @@ impl AstShapeRef {
     /// Attach optional keyword clauses between fixed children (ADR-0053).
     pub fn with_keyword_clauses(mut self, clauses: Vec<KeywordClause>) -> Self {
         self.keyword_clauses = clauses;
+        self
+    }
+
+    /// Attach optional trailing children gated on their preceding separator
+    /// (ADR-0053 extension).
+    pub fn with_optional_children(mut self, children: Vec<usize>) -> Self {
+        self.optional_children = children;
         self
     }
 
