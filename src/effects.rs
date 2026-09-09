@@ -380,6 +380,10 @@ mod tests {
                 contains_handle(callee) || args.iter().any(contains_handle)
             }
             Term::Handle { .. } => true,
+            Term::Arr { .. }
+            | Term::Iter { .. }
+            | Term::Child { .. }
+            | Term::Rewrite { .. } => false,
         }
     }
 

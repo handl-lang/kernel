@@ -16,6 +16,7 @@ use crate::fragments::{
     AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, LintRuleDef,
     OptionSchema, TokenKindDef, TransformDef, TypeRuleDef,
 };
+use crate::Value;
 use crate::version::SchemeVersion;
 
 /// A language definition as pure serializable data.
@@ -58,9 +59,12 @@ pub struct Language {
     /// Evaluated `op` declarations keyed by op name (ADR-0098/0100).
     #[serde(default)]
     pub ops: BTreeMap<String, crate::Value>,
-    /// Handler values keyed by grade (ADR-0098/0100).
+    /// Handler values keyed by handler name (ADR-0098/0100).
     #[serde(default)]
     pub handlers: BTreeMap<String, crate::Value>,
+    /// Handlers indexed by grade (computed from `handlers` entries).
+    #[serde(default)]
+    pub handlers_by_grade: BTreeMap<String, crate::Value>,
     /// The scheme combinator version this language targets.
     pub scheme_version: SchemeVersion,
 }
@@ -87,6 +91,7 @@ impl Language {
             lints: FragmentSet::new(),
             ops: BTreeMap::new(),
             handlers: BTreeMap::new(),
+            handlers_by_grade: BTreeMap::new(),
             scheme_version: SchemeVersion::v2(),
         }
     }
@@ -98,7 +103,32 @@ impl Language {
 
     /// Return the first handler value whose `grades` list contains `grade`.
     pub fn handler_for_grade(&self, grade: &str) -> Option<crate::Value> {
-        self.handlers.get(grade).cloned()
+        if let Some(v) = self.handlers_by_grade.get(grade) {
+            return Some(v.clone());
+        }
+        self.handlers.values().find(|h| {
+            h.get("grades")
+                .and_then(Value::as_array)
+                .map(|arr| arr.iter().any(|v| v.as_str() == Some(grade)))
+                .unwrap_or(false)
+        }).cloned()
+    }
+
+    /// Register an evaluated `op` declaration under its name.
+    pub fn register_op(&mut self, name: impl Into<String>, value: crate::Value) {
+        self.ops.insert(name.into(), value);
+    }
+
+    /// Register an evaluated `handler` declaration under its name and update
+    /// the grade index.
+    pub fn register_handler(&mut self, name: impl Into<String>, value: crate::Value) {
+        let name = name.into();
+        if let Some(grades) = value.get("grades").and_then(Value::as_array) {
+            for g in grades.iter().filter_map(Value::as_str) {
+                self.handlers_by_grade.insert(g.to_string(), value.clone());
+            }
+        }
+        self.handlers.insert(name, value);
     }
 
     /// Merge another `Language` into this one, set by set.
