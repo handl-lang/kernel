@@ -302,15 +302,45 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 ca || cb || cp,
             )
         }
-        Term::Transport { path, value } => {
-            let (p2, cp) = rewrite_pass(path);
+        Term::Const { value } => (Term::Const { value: value.clone() }, false),
+        Term::Src { cell } => {
+            let (c2, cc) = rewrite_pass(cell);
+            (Term::Src { cell: Box::new(c2) }, cc)
+        }
+        Term::Tgt { cell } => {
+            let (c2, cc) = rewrite_pass(cell);
+            (Term::Tgt { cell: Box::new(c2) }, cc)
+        }
+        Term::RecordProj { record, field } => {
+            let (r2, cr) = rewrite_pass(record);
+            (
+                Term::RecordProj {
+                    record: Box::new(r2),
+                    field: field.clone(),
+                },
+                cr,
+            )
+        }
+        Term::RecordWith { record, field, value } => {
+            let (r2, cr) = rewrite_pass(record);
             let (v2, cv) = rewrite_pass(value);
             (
-                Term::Transport {
-                    path: Box::new(p2),
+                Term::RecordWith {
+                    record: Box::new(r2),
+                    field: field.clone(),
                     value: Box::new(v2),
                 },
-                cp || cv,
+                cr || cv,
+            )
+        }
+        Term::Tag { tag, value } => {
+            let (v2, cv) = rewrite_pass(value);
+            (
+                Term::Tag {
+                    tag: tag.clone(),
+                    value: Box::new(v2),
+                },
+                cv,
             )
         }
         Term::CellId { arrow } => {
@@ -326,17 +356,6 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                     second: Box::new(s2),
                 },
                 cf || cs,
-            )
-        }
-        Term::CellCompH { left, right } => {
-            let (l2, cl) = rewrite_pass(left);
-            let (r2, cr) = rewrite_pass(right);
-            (
-                Term::CellCompH {
-                    left: Box::new(l2),
-                    right: Box::new(r2),
-                },
-                cl || cr,
             )
         }
         Term::Whisker { side, arrow, cell } => {
@@ -390,17 +409,6 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cp || cm || cb,
             )
         }
-        Term::Witness { grade, proof } => {
-            let (g2, cg) = rewrite_pass(grade);
-            let (p2, cp) = rewrite_pass(proof);
-            (
-                Term::Witness {
-                    grade: Box::new(g2),
-                    proof: Box::new(p2),
-                },
-                cg || cp,
-            )
-        }
         Term::Refine { sort, predicate } => {
             let (s2, cs) = rewrite_pass(sort);
             let (p2, cp) = rewrite_pass(predicate);
@@ -422,10 +430,6 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 },
                 cg || cb,
             )
-        }
-        Term::Cobox { cell } => {
-            let (c2, cc) = rewrite_pass(cell);
-            (Term::Cobox { cell: Box::new(c2) }, cc)
         }
     };
 
@@ -524,10 +528,14 @@ pub fn uses_first(scheme: &Term) -> bool {
             }
             r
         }
-        Term::Transport { path, value } => uses_first(path) || uses_first(value),
+        Term::Const { .. } => false,
+        Term::Src { cell } => uses_first(cell),
+        Term::Tgt { cell } => uses_first(cell),
+        Term::RecordProj { record, .. } => uses_first(record),
+        Term::RecordWith { record, value, .. } => uses_first(record) || uses_first(value),
+        Term::Tag { value, .. } => uses_first(value),
         Term::CellId { arrow } => uses_first(arrow),
         Term::CellCompV { first, second } => uses_first(first) || uses_first(second),
-        Term::CellCompH { left, right } => uses_first(left) || uses_first(right),
         Term::Whisker { arrow, cell, .. } => uses_first(arrow) || uses_first(cell),
         Term::Univalence { equiv } => uses_first(equiv),
         Term::Glue { family, path } => uses_first(family) || uses_first(path),
@@ -535,10 +543,8 @@ pub fn uses_first(scheme: &Term) -> bool {
         Term::JElim { path, motive, base } => {
             uses_first(path) || uses_first(motive) || uses_first(base)
         }
-        Term::Witness { grade, proof } => uses_first(grade) || uses_first(proof),
         Term::Refine { sort, predicate } => uses_first(sort) || uses_first(predicate),
         Term::Cobind { grade, body } => uses_first(grade) || uses_first(body),
-        Term::Cobox { cell } => uses_first(cell),
     }
 }
 

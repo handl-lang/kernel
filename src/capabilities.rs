@@ -92,18 +92,19 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
                 collect_foreign(p, out);
             }
         }
-        Term::Transport { path, value } => {
-            collect_foreign(path, out);
+        Term::Const { .. } => {}
+        Term::Src { cell } => collect_foreign(cell, out),
+        Term::Tgt { cell } => collect_foreign(cell, out),
+        Term::RecordProj { record, .. } => collect_foreign(record, out),
+        Term::RecordWith { record, value, .. } => {
+            collect_foreign(record, out);
             collect_foreign(value, out);
         }
+        Term::Tag { value, .. } => collect_foreign(value, out),
         Term::CellId { arrow } => collect_foreign(arrow, out),
         Term::CellCompV { first, second } => {
             collect_foreign(first, out);
             collect_foreign(second, out);
-        }
-        Term::CellCompH { left, right } => {
-            collect_foreign(left, out);
-            collect_foreign(right, out);
         }
         Term::Whisker { arrow, cell, .. } => {
             collect_foreign(arrow, out);
@@ -123,10 +124,6 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(motive, out);
             collect_foreign(base, out);
         }
-        Term::Witness { grade, proof } => {
-            collect_foreign(grade, out);
-            collect_foreign(proof, out);
-        }
         Term::Refine { sort, predicate } => {
             collect_foreign(sort, out);
             collect_foreign(predicate, out);
@@ -135,7 +132,6 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(grade, out);
             collect_foreign(body, out);
         }
-        Term::Cobox { cell } => collect_foreign(cell, out),
     }
 }
 

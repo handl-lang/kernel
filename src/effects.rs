@@ -164,6 +164,18 @@ impl EffectRow {
         self.tail = Some(tail.into());
         self
     }
+
+    /// Mark every operation in this row with a grade, producing a coeffect row.
+    pub fn coeffect(&self, grade: &str) -> EffectRow {
+        EffectRow {
+            ops: self
+                .ops
+                .iter()
+                .map(|op| format!("{}:{}", grade, op))
+                .collect(),
+            tail: self.tail.clone(),
+        }
+    }
 }
 
 impl Default for EffectRow {
@@ -186,6 +198,20 @@ impl std::fmt::Display for EffectRow {
             }
         }
     }
+}
+
+/// Extract a grade name from a grade term.
+fn grade_name(grade: &Term) -> String {
+    match grade {
+        Term::Arr { value } => value.as_str().unwrap_or("?").to_string(),
+        _ => "?".to_string(),
+    }
+}
+
+/// Infer a coeffect row: the body row with every operation marked by the grade.
+pub fn infer_coeffect(grade: &Term, body: &Term) -> EffectRow {
+    let grade = grade_name(grade);
+    infer_effect_row(body).coeffect(&grade)
 }
 
 /// Infer the effect row of a [`Term`] by structural inspection.
@@ -279,15 +305,17 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
             }
             row
         }
-        Term::Transport { path, value } => {
-            infer_effect_row(path).union(&infer_effect_row(value))
+        Term::Const { .. } => EffectRow::empty(),
+        Term::Src { cell } => infer_effect_row(cell),
+        Term::Tgt { cell } => infer_effect_row(cell),
+        Term::RecordProj { record, .. } => infer_effect_row(record),
+        Term::RecordWith { record, value, .. } => {
+            infer_effect_row(record).union(&infer_effect_row(value))
         }
+        Term::Tag { value, .. } => infer_effect_row(value),
         Term::CellId { arrow } => infer_effect_row(arrow),
         Term::CellCompV { first, second } => {
             infer_effect_row(first).union(&infer_effect_row(second))
-        }
-        Term::CellCompH { left, right } => {
-            infer_effect_row(left).union(&infer_effect_row(right))
         }
         Term::Whisker { arrow, cell, .. } => {
             infer_effect_row(arrow).union(&infer_effect_row(cell))
@@ -302,16 +330,10 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
         Term::JElim { path, motive, base } => infer_effect_row(path)
             .union(&infer_effect_row(motive))
             .union(&infer_effect_row(base)),
-        Term::Witness { grade, proof } => {
-            infer_effect_row(grade).union(&infer_effect_row(proof))
-        }
         Term::Refine { sort, predicate } => {
             infer_effect_row(sort).union(&infer_effect_row(predicate))
         }
-        Term::Cobind { grade, body } => {
-            infer_effect_row(grade).union(&infer_effect_row(body))
-        }
-        Term::Cobox { cell } => infer_effect_row(cell),
+        Term::Cobind { grade, body } => infer_coeffect(grade, body),
     }
 }
 
@@ -433,9 +455,14 @@ mod tests {
             Term::CellCompV { first, second } => {
                 contains_handle(first) || contains_handle(second)
             }
-            Term::CellCompH { left, right } => {
-                contains_handle(left) || contains_handle(right)
+            Term::Const { .. } => false,
+            Term::Src { cell } => contains_handle(cell),
+            Term::Tgt { cell } => contains_handle(cell),
+            Term::RecordProj { record, .. } => contains_handle(record),
+            Term::RecordWith { record, value, .. } => {
+                contains_handle(record) || contains_handle(value)
             }
+            Term::Tag { value, .. } => contains_handle(value),
             Term::Whisker { arrow, cell, .. } => {
                 contains_handle(arrow) || contains_handle(cell)
             }
@@ -449,24 +476,19 @@ mod tests {
             Term::JElim { path, motive, base } => {
                 contains_handle(path) || contains_handle(motive) || contains_handle(base)
             }
-            Term::Witness { grade, proof } => {
-                contains_handle(grade) || contains_handle(proof)
-            }
             Term::Refine { sort, predicate } => {
                 contains_handle(sort) || contains_handle(predicate)
             }
             Term::Cobind { grade, body } => {
                 contains_handle(grade) || contains_handle(body)
             }
-            Term::Cobox { cell } => contains_handle(cell),
             Term::Handle { .. } => true,
             Term::Arr { .. }
             | Term::Iter { .. }
             | Term::Child { .. }
             | Term::Rewrite { .. }
             | Term::Path { .. }
-            | Term::Equiv { .. }
-            | Term::Transport { .. } => false,
+            | Term::Equiv { .. } => false,
         }
     }
 
