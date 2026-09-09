@@ -65,6 +65,12 @@ pub struct Language {
     /// Handlers indexed by grade (computed from `handlers` entries).
     #[serde(default)]
     pub handlers_by_grade: BTreeMap<String, crate::Value>,
+    /// Declared laws `source ~> target` keyed by name (ADR-0100).
+    #[serde(default)]
+    pub laws: BTreeMap<String, crate::Value>,
+    /// Declared rewrite rules `source ~> target` keyed by name (ADR-0100).
+    #[serde(default)]
+    pub rewrites: BTreeMap<String, crate::Value>,
     /// The scheme combinator version this language targets.
     pub scheme_version: SchemeVersion,
 }
@@ -92,6 +98,8 @@ impl Language {
             ops: BTreeMap::new(),
             handlers: BTreeMap::new(),
             handlers_by_grade: BTreeMap::new(),
+            laws: BTreeMap::new(),
+            rewrites: BTreeMap::new(),
             scheme_version: SchemeVersion::v2(),
         }
     }
@@ -129,6 +137,26 @@ impl Language {
             }
         }
         self.handlers.insert(name, value);
+    }
+
+    /// Return the declared law `source ~> target` for `name`, if any.
+    pub fn law(&self, name: &str) -> Option<crate::Value> {
+        self.laws.get(name).cloned()
+    }
+
+    /// Return the declared rewrite rule `source ~> target` for `name`, if any.
+    pub fn rewrite_rule(&self, name: &str) -> Option<crate::Value> {
+        self.rewrites.get(name).cloned()
+    }
+
+    /// Register a declared law `source ~> target` under its name.
+    pub fn register_law(&mut self, name: impl Into<String>, value: crate::Value) {
+        self.laws.insert(name.into(), value);
+    }
+
+    /// Register a declared rewrite rule `source ~> target` under its name.
+    pub fn register_rewrite(&mut self, name: impl Into<String>, value: crate::Value) {
+        self.rewrites.insert(name.into(), value);
     }
 
     /// Merge another `Language` into this one, set by set.

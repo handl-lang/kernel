@@ -126,6 +126,14 @@ impl plugin_engine::LanguageView for Language {
     fn handler_for_grade(&self, grade: &str) -> Option<Value> {
         self.handler_for_grade(grade)
     }
+
+    fn law(&self, name: &str) -> Option<Value> {
+        self.law(name)
+    }
+
+    fn rewrite_rule(&self, name: &str) -> Option<Value> {
+        self.rewrite_rule(name)
+    }
 }
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use verdict::{Proof, Verdict};
