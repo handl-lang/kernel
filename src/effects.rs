@@ -282,6 +282,36 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
         Term::Transport { path, value } => {
             infer_effect_row(path).union(&infer_effect_row(value))
         }
+        Term::CellId { arrow } => infer_effect_row(arrow),
+        Term::CellCompV { first, second } => {
+            infer_effect_row(first).union(&infer_effect_row(second))
+        }
+        Term::CellCompH { left, right } => {
+            infer_effect_row(left).union(&infer_effect_row(right))
+        }
+        Term::Whisker { arrow, cell, .. } => {
+            infer_effect_row(arrow).union(&infer_effect_row(cell))
+        }
+        Term::Univalence { equiv } => infer_effect_row(equiv),
+        Term::Glue { family, path } => {
+            infer_effect_row(family).union(&infer_effect_row(path))
+        }
+        Term::Fibrant { base, family } => {
+            infer_effect_row(base).union(&infer_effect_row(family))
+        }
+        Term::JElim { path, motive, base } => infer_effect_row(path)
+            .union(&infer_effect_row(motive))
+            .union(&infer_effect_row(base)),
+        Term::Witness { grade, proof } => {
+            infer_effect_row(grade).union(&infer_effect_row(proof))
+        }
+        Term::Refine { sort, predicate } => {
+            infer_effect_row(sort).union(&infer_effect_row(predicate))
+        }
+        Term::Cobind { grade, body } => {
+            infer_effect_row(grade).union(&infer_effect_row(body))
+        }
+        Term::Cobox { cell } => infer_effect_row(cell),
     }
 }
 
@@ -399,6 +429,36 @@ mod tests {
             Term::App { callee, args } => {
                 contains_handle(callee) || args.iter().any(contains_handle)
             }
+            Term::CellId { arrow } => contains_handle(arrow),
+            Term::CellCompV { first, second } => {
+                contains_handle(first) || contains_handle(second)
+            }
+            Term::CellCompH { left, right } => {
+                contains_handle(left) || contains_handle(right)
+            }
+            Term::Whisker { arrow, cell, .. } => {
+                contains_handle(arrow) || contains_handle(cell)
+            }
+            Term::Univalence { equiv } => contains_handle(equiv),
+            Term::Glue { family, path } => {
+                contains_handle(family) || contains_handle(path)
+            }
+            Term::Fibrant { base, family } => {
+                contains_handle(base) || contains_handle(family)
+            }
+            Term::JElim { path, motive, base } => {
+                contains_handle(path) || contains_handle(motive) || contains_handle(base)
+            }
+            Term::Witness { grade, proof } => {
+                contains_handle(grade) || contains_handle(proof)
+            }
+            Term::Refine { sort, predicate } => {
+                contains_handle(sort) || contains_handle(predicate)
+            }
+            Term::Cobind { grade, body } => {
+                contains_handle(grade) || contains_handle(body)
+            }
+            Term::Cobox { cell } => contains_handle(cell),
             Term::Handle { .. } => true,
             Term::Arr { .. }
             | Term::Iter { .. }

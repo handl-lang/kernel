@@ -79,7 +79,7 @@ pub use quantified_laws::{
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
 pub use term::{
-    ArrSource, RewriteWitness, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
+    ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };
 
 impl plugin_engine::AstView for Ast {

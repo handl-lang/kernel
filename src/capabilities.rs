@@ -96,6 +96,46 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(path, out);
             collect_foreign(value, out);
         }
+        Term::CellId { arrow } => collect_foreign(arrow, out),
+        Term::CellCompV { first, second } => {
+            collect_foreign(first, out);
+            collect_foreign(second, out);
+        }
+        Term::CellCompH { left, right } => {
+            collect_foreign(left, out);
+            collect_foreign(right, out);
+        }
+        Term::Whisker { arrow, cell, .. } => {
+            collect_foreign(arrow, out);
+            collect_foreign(cell, out);
+        }
+        Term::Univalence { equiv } => collect_foreign(equiv, out),
+        Term::Glue { family, path } => {
+            collect_foreign(family, out);
+            collect_foreign(path, out);
+        }
+        Term::Fibrant { base, family } => {
+            collect_foreign(base, out);
+            collect_foreign(family, out);
+        }
+        Term::JElim { path, motive, base } => {
+            collect_foreign(path, out);
+            collect_foreign(motive, out);
+            collect_foreign(base, out);
+        }
+        Term::Witness { grade, proof } => {
+            collect_foreign(grade, out);
+            collect_foreign(proof, out);
+        }
+        Term::Refine { sort, predicate } => {
+            collect_foreign(sort, out);
+            collect_foreign(predicate, out);
+        }
+        Term::Cobind { grade, body } => {
+            collect_foreign(grade, out);
+            collect_foreign(body, out);
+        }
+        Term::Cobox { cell } => collect_foreign(cell, out),
     }
 }
 

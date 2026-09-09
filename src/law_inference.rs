@@ -313,6 +313,120 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cp || cv,
             )
         }
+        Term::CellId { arrow } => {
+            let (a2, ca) = rewrite_pass(arrow);
+            (Term::CellId { arrow: Box::new(a2) }, ca)
+        }
+        Term::CellCompV { first, second } => {
+            let (f2, cf) = rewrite_pass(first);
+            let (s2, cs) = rewrite_pass(second);
+            (
+                Term::CellCompV {
+                    first: Box::new(f2),
+                    second: Box::new(s2),
+                },
+                cf || cs,
+            )
+        }
+        Term::CellCompH { left, right } => {
+            let (l2, cl) = rewrite_pass(left);
+            let (r2, cr) = rewrite_pass(right);
+            (
+                Term::CellCompH {
+                    left: Box::new(l2),
+                    right: Box::new(r2),
+                },
+                cl || cr,
+            )
+        }
+        Term::Whisker { side, arrow, cell } => {
+            let (a2, ca) = rewrite_pass(arrow);
+            let (c2, cc) = rewrite_pass(cell);
+            (
+                Term::Whisker {
+                    side: side.clone(),
+                    arrow: Box::new(a2),
+                    cell: Box::new(c2),
+                },
+                ca || cc,
+            )
+        }
+        Term::Univalence { equiv } => {
+            let (e2, ce) = rewrite_pass(equiv);
+            (Term::Univalence { equiv: Box::new(e2) }, ce)
+        }
+        Term::Glue { family, path } => {
+            let (f2, cf) = rewrite_pass(family);
+            let (p2, cp) = rewrite_pass(path);
+            (
+                Term::Glue {
+                    family: Box::new(f2),
+                    path: Box::new(p2),
+                },
+                cf || cp,
+            )
+        }
+        Term::Fibrant { base, family } => {
+            let (b2, cb) = rewrite_pass(base);
+            let (f2, cf) = rewrite_pass(family);
+            (
+                Term::Fibrant {
+                    base: Box::new(b2),
+                    family: Box::new(f2),
+                },
+                cb || cf,
+            )
+        }
+        Term::JElim { path, motive, base } => {
+            let (p2, cp) = rewrite_pass(path);
+            let (m2, cm) = rewrite_pass(motive);
+            let (b2, cb) = rewrite_pass(base);
+            (
+                Term::JElim {
+                    path: Box::new(p2),
+                    motive: Box::new(m2),
+                    base: Box::new(b2),
+                },
+                cp || cm || cb,
+            )
+        }
+        Term::Witness { grade, proof } => {
+            let (g2, cg) = rewrite_pass(grade);
+            let (p2, cp) = rewrite_pass(proof);
+            (
+                Term::Witness {
+                    grade: Box::new(g2),
+                    proof: Box::new(p2),
+                },
+                cg || cp,
+            )
+        }
+        Term::Refine { sort, predicate } => {
+            let (s2, cs) = rewrite_pass(sort);
+            let (p2, cp) = rewrite_pass(predicate);
+            (
+                Term::Refine {
+                    sort: Box::new(s2),
+                    predicate: Box::new(p2),
+                },
+                cs || cp,
+            )
+        }
+        Term::Cobind { grade, body } => {
+            let (g2, cg) = rewrite_pass(grade);
+            let (b2, cb) = rewrite_pass(body);
+            (
+                Term::Cobind {
+                    grade: Box::new(g2),
+                    body: Box::new(b2),
+                },
+                cg || cb,
+            )
+        }
+        Term::Cobox { cell } => {
+            let (c2, cc) = rewrite_pass(cell);
+            (Term::Cobox { cell: Box::new(c2) }, cc)
+        }
     };
 
     // Then try root rewrites on the (children-normalized) scheme. Repeat at
@@ -411,6 +525,20 @@ pub fn uses_first(scheme: &Term) -> bool {
             r
         }
         Term::Transport { path, value } => uses_first(path) || uses_first(value),
+        Term::CellId { arrow } => uses_first(arrow),
+        Term::CellCompV { first, second } => uses_first(first) || uses_first(second),
+        Term::CellCompH { left, right } => uses_first(left) || uses_first(right),
+        Term::Whisker { arrow, cell, .. } => uses_first(arrow) || uses_first(cell),
+        Term::Univalence { equiv } => uses_first(equiv),
+        Term::Glue { family, path } => uses_first(family) || uses_first(path),
+        Term::Fibrant { base, family } => uses_first(base) || uses_first(family),
+        Term::JElim { path, motive, base } => {
+            uses_first(path) || uses_first(motive) || uses_first(base)
+        }
+        Term::Witness { grade, proof } => uses_first(grade) || uses_first(proof),
+        Term::Refine { sort, predicate } => uses_first(sort) || uses_first(predicate),
+        Term::Cobind { grade, body } => uses_first(grade) || uses_first(body),
+        Term::Cobox { cell } => uses_first(cell),
     }
 }
 
