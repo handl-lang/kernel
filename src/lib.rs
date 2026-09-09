@@ -77,7 +77,8 @@ pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
-pub use term::{ArrSource, Term, eliminate_all_handlers, eliminate_handler_in_scheme};
+pub use term::{ArrSource, RewriteWitness, Term, eliminate_all_handlers, eliminate_handler_in_scheme};
+pub use plugin_engine::{Model, ModelCtx, RewriteResult};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use verdict::{Proof, Verdict};
 pub use version::SchemeVersion;

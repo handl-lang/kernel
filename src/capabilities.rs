@@ -61,6 +61,10 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(body, out);
             collect_foreign(impl_, out);
         }
+        Term::Rewrite { source, target, .. } => {
+            collect_foreign(source, out);
+            collect_foreign(target, out);
+        }
     }
 }
 

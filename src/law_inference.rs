@@ -219,6 +219,22 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cb || ci,
             )
         }
+        Term::Rewrite {
+            source,
+            target,
+            witness,
+        } => {
+            let (s2, cs) = rewrite_pass(source);
+            let (t2, ct) = rewrite_pass(target);
+            (
+                Term::Rewrite {
+                    source: Box::new(s2),
+                    target: Box::new(t2),
+                    witness: witness.clone(),
+                },
+                cs || ct,
+            )
+        }
     };
 
     // Then try root rewrites on the (children-normalized) scheme. Repeat at
@@ -291,6 +307,7 @@ pub fn uses_first(scheme: &Term) -> bool {
         Term::Loop { body } => uses_first(body),
         Term::App { callee, args } => uses_first(callee) || args.iter().any(uses_first),
         Term::Handle { body, impl_, .. } => uses_first(body) || uses_first(impl_),
+        Term::Rewrite { source, target, .. } => uses_first(source) || uses_first(target),
     }
 }
 

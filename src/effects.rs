@@ -248,6 +248,9 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
             let impl_row = infer_effect_row(impl_);
             body_row.union(&impl_row).insert(target)
         }
+        Term::Rewrite { source, target, .. } => {
+            infer_effect_row(source).union(&infer_effect_row(target))
+        }
     }
 }
 
