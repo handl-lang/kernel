@@ -301,10 +301,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             Some(Value::Object(env_map)) => Rc::from(obj_map_to_hashmap(env_map.clone())),
             _ => Rc::new(FxHashMap::default()),
         };
-        let rest = o
-            .get("rest")
-            .and_then(|v| v.as_str())
-            .map(Rc::from);
+        let rest = o.get("rest").and_then(|v| v.as_str()).map(Rc::from);
         let home = o.get("__home__").and_then(|v| v.as_u64());
         return TaggedValue::Arrow {
             params,
