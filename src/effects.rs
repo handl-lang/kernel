@@ -262,6 +262,26 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
             .union(&infer_effect_row(predicate))
             .union(&infer_effect_row(step))
             .union(&infer_effect_row(initial)),
+        Term::Path {
+            endpoints: (a, b),
+            witness,
+        } => {
+            let mut row = infer_effect_row(a).union(&infer_effect_row(b));
+            if let Some(w) = witness {
+                row = row.union(&infer_effect_row(w));
+            }
+            row
+        }
+        Term::Equiv { a, b, path } => {
+            let mut row = infer_effect_row(a).union(&infer_effect_row(b));
+            if let Some(p) = path {
+                row = row.union(&infer_effect_row(p));
+            }
+            row
+        }
+        Term::Transport { path, value } => {
+            infer_effect_row(path).union(&infer_effect_row(value))
+        }
     }
 }
 
@@ -383,7 +403,10 @@ mod tests {
             Term::Arr { .. }
             | Term::Iter { .. }
             | Term::Child { .. }
-            | Term::Rewrite { .. } => false,
+            | Term::Rewrite { .. }
+            | Term::Path { .. }
+            | Term::Equiv { .. }
+            | Term::Transport { .. } => false,
         }
     }
 

@@ -262,6 +262,57 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cf || cp || cs || ci,
             )
         }
+        Term::Path {
+            endpoints: (a, b),
+            witness,
+        } => {
+            let (a2, ca) = rewrite_pass(a);
+            let (b2, cb) = rewrite_pass(b);
+            let (w2, cw) = witness
+                .as_ref()
+                .map(|w| {
+                    let (w2, c) = rewrite_pass(w);
+                    (Some(Box::new(w2)), c)
+                })
+                .unwrap_or((None, false));
+            (
+                Term::Path {
+                    endpoints: (Box::new(a2), Box::new(b2)),
+                    witness: w2,
+                },
+                ca || cb || cw,
+            )
+        }
+        Term::Equiv { a, b, path } => {
+            let (a2, ca) = rewrite_pass(a);
+            let (b2, cb) = rewrite_pass(b);
+            let (p2, cp) = path
+                .as_ref()
+                .map(|p| {
+                    let (p2, c) = rewrite_pass(p);
+                    (Some(Box::new(p2)), c)
+                })
+                .unwrap_or((None, false));
+            (
+                Term::Equiv {
+                    a: Box::new(a2),
+                    b: Box::new(b2),
+                    path: p2,
+                },
+                ca || cb || cp,
+            )
+        }
+        Term::Transport { path, value } => {
+            let (p2, cp) = rewrite_pass(path);
+            let (v2, cv) = rewrite_pass(value);
+            (
+                Term::Transport {
+                    path: Box::new(p2),
+                    value: Box::new(v2),
+                },
+                cp || cv,
+            )
+        }
     };
 
     // Then try root rewrites on the (children-normalized) scheme. Repeat at
@@ -342,6 +393,24 @@ pub fn uses_first(scheme: &Term) -> bool {
             step,
             initial,
         } => uses_first(fuel) || uses_first(predicate) || uses_first(step) || uses_first(initial),
+        Term::Path {
+            endpoints: (a, b),
+            witness,
+        } => {
+            let mut r = uses_first(a) || uses_first(b);
+            if let Some(w) = witness {
+                r = r || uses_first(w);
+            }
+            r
+        }
+        Term::Equiv { a, b, path } => {
+            let mut r = uses_first(a) || uses_first(b);
+            if let Some(p) = path {
+                r = r || uses_first(p);
+            }
+            r
+        }
+        Term::Transport { path, value } => uses_first(path) || uses_first(value),
     }
 }
 
