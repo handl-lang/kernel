@@ -73,7 +73,7 @@ const NORMALIZE_FUEL: usize = 1024;
 fn is_id(scheme: &Term) -> bool {
     matches!(
         scheme,
-        Term::Arr { op, args, source, lit }
+        Term::Op { name: op, args, source, lit }
             if op == "id"
                 && args.is_empty()
                 && matches!(source, ArrSource::Native)
@@ -124,8 +124,7 @@ fn rewrite_root(scheme: &Term) -> Option<Term> {
 fn rewrite_pass(scheme: &Term) -> (Term, bool) {
     // First recurse into children (bottom-up).
     let (g_norm, child_changed) = match scheme {
-        Term::Arr {
-            op,
+        Term::Op { name: op,
             args,
             source,
             lit,
@@ -140,8 +139,7 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 })
                 .collect();
             (
-                Term::Arr {
-                    op: op.clone(),
+                Term::Op { name: op.clone(),
                     args: args2,
                     source: source.clone(),
                     lit: lit.clone(),
@@ -235,6 +233,28 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cs || ct,
             )
         }
+        Term::Arr { value } => (Term::Arr { value: value.clone() }, false),
+        Term::Child { role } => (Term::Child { role: role.clone() }, false),
+        Term::Iter {
+            fuel,
+            predicate,
+            step,
+            initial,
+        } => {
+            let (f2, cf) = rewrite_pass(fuel);
+            let (p2, cp) = rewrite_pass(predicate);
+            let (s2, cs) = rewrite_pass(step);
+            let (i2, ci) = rewrite_pass(initial);
+            (
+                Term::Iter {
+                    fuel: Box::new(f2),
+                    predicate: Box::new(p2),
+                    step: Box::new(s2),
+                    initial: Box::new(i2),
+                },
+                cf || cp || cs || ci,
+            )
+        }
     };
 
     // Then try root rewrites on the (children-normalized) scheme. Repeat at
@@ -301,13 +321,25 @@ pub fn law_equal(a: &Term, b: &Term) -> bool {
 pub fn uses_first(scheme: &Term) -> bool {
     match scheme {
         Term::First { .. } => true,
-        Term::Arr { args, .. } => args.iter().any(uses_first),
+        Term::Op { args, .. } => args.iter().any(uses_first),
         Term::Seq { fst, snd } => uses_first(fst) || uses_first(snd),
         Term::Choice { l, r } => uses_first(l) || uses_first(r),
         Term::Loop { body } => uses_first(body),
         Term::App { callee, args } => uses_first(callee) || args.iter().any(uses_first),
         Term::Handle { body, impl_, .. } => uses_first(body) || uses_first(impl_),
         Term::Rewrite { source, target, .. } => uses_first(source) || uses_first(target),
+        Term::Arr { .. } | Term::Child { .. } => false,
+        Term::Iter {
+            fuel,
+            predicate,
+            step,
+            initial,
+        } => {
+            uses_first(fuel)
+                || uses_first(predicate)
+                || uses_first(step)
+                || uses_first(initial)
+        }
     }
 }
 

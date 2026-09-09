@@ -223,7 +223,7 @@ impl std::fmt::Display for EffectRow {
 pub fn infer_effect_row(scheme: &Term) -> EffectRow {
     match scheme {
         // Concrete base arrows manage no capability.
-        Term::Arr { .. } => EffectRow::empty(),
+        Term::Op { .. } => EffectRow::empty(),
         // Combinators: thread/union the children's rows.
         Term::Seq { fst, snd } => infer_effect_row(fst).union(&infer_effect_row(snd)),
         Term::First { inner } => infer_effect_row(inner),
@@ -251,6 +251,17 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
         Term::Rewrite { source, target, .. } => {
             infer_effect_row(source).union(&infer_effect_row(target))
         }
+        // Pure constants and child projections have no effects.
+        Term::Arr { .. } | Term::Child { .. } => EffectRow::empty(),
+        Term::Iter {
+            fuel,
+            predicate,
+            step,
+            initial,
+        } => infer_effect_row(fuel)
+            .union(&infer_effect_row(predicate))
+            .union(&infer_effect_row(step))
+            .union(&infer_effect_row(initial)),
     }
 }
 
@@ -360,7 +371,7 @@ mod tests {
     /// Helper: does this `Term` contain any `Handle` node?
     fn contains_handle(s: &Term) -> bool {
         match s {
-            Term::Arr { args, .. } => args.iter().any(contains_handle),
+            Term::Op { args, .. } => args.iter().any(contains_handle),
             Term::Seq { fst, snd } => contains_handle(fst) || contains_handle(snd),
             Term::First { inner } => contains_handle(inner),
             Term::Choice { l, r } => contains_handle(l) || contains_handle(r),

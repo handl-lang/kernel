@@ -29,7 +29,7 @@ pub fn foreign_names(scheme: &Term) -> BTreeSet<String> {
 
 fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
     match scheme {
-        Term::Arr { args, source, .. } => {
+        Term::Op { args, source, .. } => {
             if let ArrSource::Foreign(name) = source {
                 out.insert(name.clone());
             }
@@ -65,6 +65,19 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(source, out);
             collect_foreign(target, out);
         }
+        Term::Arr { .. } => {}
+        Term::Iter {
+            fuel,
+            predicate,
+            step,
+            initial,
+        } => {
+            collect_foreign(fuel, out);
+            collect_foreign(predicate, out);
+            collect_foreign(step, out);
+            collect_foreign(initial, out);
+        }
+        Term::Child { .. } => {}
     }
 }
 
@@ -98,8 +111,7 @@ mod tests {
     #[test]
     fn foreign_names_collects_recursively() {
         let s = Term::Choice {
-            l: Box::new(Term::Arr {
-                op: "fs.read".into(),
+            l: Box::new(Term::Op { name: "fs.read".into(),
                 args: vec![Term::arr_foreign("fs.open", vec![])],
                 source: ArrSource::Foreign("fs.read".into()),
                 lit: None,
