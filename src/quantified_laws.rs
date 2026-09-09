@@ -493,10 +493,7 @@ mod tests {
         );
         assert_eq!(
             result,
-            Term::seq(
-                Term::arr_native("a", vec![]),
-                Term::arr_native("b", vec![])
-            )
+            Term::seq(Term::arr_native("a", vec![]), Term::arr_native("b", vec![]))
         );
     }
 

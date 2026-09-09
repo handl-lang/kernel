@@ -3,7 +3,7 @@
 
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow, Language,
-    Term, SchemeVersion, TokenKindDef,
+    SchemeVersion, Term, TokenKindDef,
 };
 use serde_json::Value;
 

@@ -6,7 +6,7 @@
 
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
-    GrammarRow, Language, Term, SchemeVersion, TokenKindDef, capabilities,
+    GrammarRow, Language, SchemeVersion, Term, TokenKindDef, capabilities,
 };
 use serde_json::Value;
 

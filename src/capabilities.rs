@@ -111,7 +111,8 @@ mod tests {
     #[test]
     fn foreign_names_collects_recursively() {
         let s = Term::Choice {
-            l: Box::new(Term::Op { name: "fs.read".into(),
+            l: Box::new(Term::Op {
+                name: "fs.read".into(),
                 args: vec![Term::arr_foreign("fs.open", vec![])],
                 source: ArrSource::Foreign("fs.read".into()),
                 lit: None,

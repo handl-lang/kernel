@@ -41,10 +41,10 @@ pub mod law_inference;
 /// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Term`
 /// IR (ADR-0076 OQ#4).
 pub mod quantified_laws;
-/// The arrow-calculus `Term` kernel (ADR-0052).
-pub mod term;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
 pub mod staged;
+/// The arrow-calculus `Term` kernel (ADR-0052).
+pub mod term;
 /// Proof verdicts for the partial-evaluator typechecker (ADR-0068).
 pub mod verdict;
 /// Term combinator versioning.
@@ -73,12 +73,14 @@ pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
     normalize, uses_first,
 };
+pub use plugin_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
 pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
-pub use term::{ArrSource, RewriteWitness, Term, eliminate_all_handlers, eliminate_handler_in_scheme};
-pub use plugin_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
+pub use term::{
+    ArrSource, RewriteWitness, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
+};
 
 impl plugin_engine::AstView for Ast {
     fn as_any(&self) -> &dyn std::any::Any {
@@ -115,6 +117,14 @@ impl plugin_engine::LanguageView for Language {
 
     fn type_rule(&self, kind: &str) -> Option<&Term> {
         self.types.get_by_identity(kind).map(|def| &def.synth)
+    }
+
+    fn op_decl(&self, name: &str) -> Option<Value> {
+        self.op_decl(name)
+    }
+
+    fn handler_for_grade(&self, grade: &str) -> Option<Value> {
+        self.handler_for_grade(grade)
     }
 }
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};

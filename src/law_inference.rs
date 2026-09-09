@@ -124,7 +124,8 @@ fn rewrite_root(scheme: &Term) -> Option<Term> {
 fn rewrite_pass(scheme: &Term) -> (Term, bool) {
     // First recurse into children (bottom-up).
     let (g_norm, child_changed) = match scheme {
-        Term::Op { name: op,
+        Term::Op {
+            name: op,
             args,
             source,
             lit,
@@ -139,7 +140,8 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 })
                 .collect();
             (
-                Term::Op { name: op.clone(),
+                Term::Op {
+                    name: op.clone(),
                     args: args2,
                     source: source.clone(),
                     lit: lit.clone(),
@@ -233,7 +235,12 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cs || ct,
             )
         }
-        Term::Arr { value } => (Term::Arr { value: value.clone() }, false),
+        Term::Arr { value } => (
+            Term::Arr {
+                value: value.clone(),
+            },
+            false,
+        ),
         Term::Child { role } => (Term::Child { role: role.clone() }, false),
         Term::Iter {
             fuel,
@@ -334,12 +341,7 @@ pub fn uses_first(scheme: &Term) -> bool {
             predicate,
             step,
             initial,
-        } => {
-            uses_first(fuel)
-                || uses_first(predicate)
-                || uses_first(step)
-                || uses_first(initial)
-        }
+        } => uses_first(fuel) || uses_first(predicate) || uses_first(step) || uses_first(initial),
     }
 }
 

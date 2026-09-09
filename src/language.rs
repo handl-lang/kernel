@@ -7,6 +7,7 @@
 //! rolls back atomically.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
@@ -54,6 +55,12 @@ pub struct Language {
     /// before ADR-0097, hence `serde(default)`.
     #[serde(default)]
     pub lints: FragmentSet<LintRuleDef>,
+    /// Evaluated `op` declarations keyed by op name (ADR-0098/0100).
+    #[serde(default)]
+    pub ops: BTreeMap<String, crate::Value>,
+    /// Handler values keyed by grade (ADR-0098/0100).
+    #[serde(default)]
+    pub handlers: BTreeMap<String, crate::Value>,
     /// The scheme combinator version this language targets.
     pub scheme_version: SchemeVersion,
 }
@@ -78,8 +85,20 @@ impl Language {
             options: FragmentSet::new(),
             lexer_rules: FragmentSet::new(),
             lints: FragmentSet::new(),
+            ops: BTreeMap::new(),
+            handlers: BTreeMap::new(),
             scheme_version: SchemeVersion::v2(),
         }
+    }
+
+    /// Return the evaluated `op` declaration for `name`, if any.
+    pub fn op_decl(&self, name: &str) -> Option<crate::Value> {
+        self.ops.get(name).cloned()
+    }
+
+    /// Return the first handler value whose `grades` list contains `grade`.
+    pub fn handler_for_grade(&self, grade: &str) -> Option<crate::Value> {
+        self.handlers.get(grade).cloned()
     }
 
     /// Merge another `Language` into this one, set by set.
@@ -231,8 +250,7 @@ impl Language {
     /// classifies correctly because the category travels with the token data
     /// (ADR-0044).
     pub fn token_category(&self, kind: &str) -> Option<&str> {
-        self.token_kind(kind)
-            .and_then(|d| d.category.as_deref())
+        self.token_kind(kind).and_then(|d| d.category.as_deref())
     }
 
     /// Whether token kind `kind` is classified as `category`.
@@ -404,10 +422,9 @@ impl Language {
         let mut names = Vec::with_capacity(children.len());
         let mut rest: Option<String> = None;
         for entry in children {
-            let idx = entry
-                .as_u64()
-                .ok_or_else(|| LangError::engine("closure: param index must be a number".to_string()))?
-                as usize;
+            let idx = entry.as_u64().ok_or_else(|| {
+                LangError::engine("closure: param index must be a number".to_string())
+            })? as usize;
             let child = ast.at(AstRef::new(idx))?;
             let name = self.param_name(ast, child)?;
             if is_rest(child) {
@@ -748,22 +765,20 @@ mod tests {
         // A second shape declaring the same node_kind is a union no-op; its
         // desugar rule must be dropped with it.
         let mut lang = Language::new();
-        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
-            AstDesugarRule {
-                target_kind: "y".into(),
-                children: vec![],
-                when: None,
-            },
-        ))
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(AstDesugarRule {
+            target_kind: "y".into(),
+            children: vec![],
+            when: None,
+        }))
         .unwrap();
         // Union-dropped duplicate — different id, same node_kind.
-        lang.merge_ast_fragment(AstShapeDef::new("ast.x.dup", "x").with_desugar(
-            AstDesugarRule {
+        lang.merge_ast_fragment(
+            AstShapeDef::new("ast.x.dup", "x").with_desugar(AstDesugarRule {
                 target_kind: "z".into(),
                 children: vec![],
                 when: None,
-            },
-        ))
+            }),
+        )
         .unwrap();
         assert_eq!(lang.transforms.len(), 1);
         let def = lang.transforms.get_by_id("transform.desugar.x").unwrap();
@@ -773,13 +788,11 @@ mod tests {
         }
         // Re-merging the identical fragment stays idempotent — no collision.
         let again = lang.clone();
-        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
-            AstDesugarRule {
-                target_kind: "y".into(),
-                children: vec![],
-                when: None,
-            },
-        ))
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(AstDesugarRule {
+            target_kind: "y".into(),
+            children: vec![],
+            when: None,
+        }))
         .unwrap();
         assert_eq!(lang, again);
     }
@@ -789,13 +802,11 @@ mod tests {
         // Replacing a shape that carried a desugar rule replaces the
         // synthesized TransformDef instead of colliding.
         let mut lang = Language::new();
-        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(
-            AstDesugarRule {
-                target_kind: "y".into(),
-                children: vec![],
-                when: None,
-            },
-        ))
+        lang.merge_ast_fragment(AstShapeDef::new("ast.x", "x").with_desugar(AstDesugarRule {
+            target_kind: "y".into(),
+            children: vec![],
+            when: None,
+        }))
         .unwrap();
         lang.merge_ast_fragment(
             AstShapeDef::new("ast.x2", "x")
