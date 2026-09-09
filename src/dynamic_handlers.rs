@@ -1,9 +1,9 @@
-//! Dynamic handler law verification over the production `Scheme` IR
+//! Dynamic handler law verification over the production `Term` IR
 //! (ADR-0076 OQ#2).
 //!
 //! Ports the research PoC in
 //! `research/arrow-calculus-kernel-poc/src/dynamic_handlers.rs` to the
-//! production [`Scheme`](crate::scheme::Scheme) kernel. ADR-0076 OQ#2 asks:
+//! production [`Term`](crate::term::Term) kernel. ADR-0076 OQ#2 asks:
 //! "Can we verify laws for runtime-chosen impls?" The ADR's tentative "likely
 //! no" is corrected here: dynamic law checking IS possible because the arrow
 //! calculus graph is always inspectable (a finite combinator tree) and CutElim
@@ -13,7 +13,7 @@
 //!   - **Mode 1: Static (compile-time verify)** -- the impl is fixed at
 //!     compile time; laws checked once at installation; proof travels. This is
 //!     the existing [`crate::effects::eliminate_and_check`] and
-//!     [`Scheme::eliminate_handlers`](crate::scheme::Scheme::eliminate_handlers)
+//!     [`Term::eliminate_handlers`](crate::term::Term::eliminate_handlers)
 //!     path. This module does NOT re-implement Mode 1.
 //!
 //!   - **Mode 2: Dynamic, closed set (pick among pre-verified)** -- multiple
@@ -35,7 +35,7 @@
 //!
 //! The PoC uses `Bundle` / `BundleLaw` / `VerificationReport` from
 //! `decoupled_traits.rs`. The real compiler does NOT have these. A "verified
-//! impl" here is just a [`Scheme`] plus its `Vec<InferredLaw>` (from
+//! impl" here is just a [`Term`] plus its `Vec<InferredLaw>` (from
 //! [`infer_laws`](crate::law_inference::infer_laws)) -- no separate Bundle
 //! type needed. The normalizer, `law_equal`, `uses_first`, `LawPattern`,
 //! `LawCheckResult`, and the inference engine are reused from
@@ -70,13 +70,13 @@ use std::collections::HashMap;
 use crate::law_inference::{
     LawCheckResult, LawPattern, LawStatus, infer_laws, law_equal, uses_first,
 };
-use crate::scheme::Scheme;
+use crate::term::Term;
 
 // ============================================================================
 // 1. VerifiedImpl and VerifiedImplStore (Mode 2)
 // ============================================================================
 
-/// A pre-verified impl: a named [`Scheme`] plus the laws it was verified to
+/// A pre-verified impl: a named [`Term`] plus the laws it was verified to
 /// satisfy at registration time. The verification result travels with the
 /// impl -- no re-verification needed at dispatch.
 ///
@@ -88,7 +88,7 @@ pub struct VerifiedImpl {
     /// The impl name, e.g. `"map_list"`.
     pub name: String,
     /// The impl graph (the arrow-calculus description).
-    pub scheme: Scheme,
+    pub scheme: Term,
     /// Names of the laws this impl was verified to satisfy at registration.
     pub verified_laws: Vec<String>,
 }
@@ -151,7 +151,7 @@ impl VerifiedImplStore {
     /// always satisfied). Rejection would only happen for a catalog entry
     /// whose `check` returns `Violated`; the built-in catalog does not, but a
     /// custom catalog could.
-    pub fn register(&mut self, capability: &str, name: &str, scheme: Scheme) -> RegistrationResult {
+    pub fn register(&mut self, capability: &str, name: &str, scheme: Term) -> RegistrationResult {
         let inferred = infer_laws(&scheme);
 
         // If any law is Violated, reject -- not safe for dispatch.
@@ -286,13 +286,13 @@ pub enum RuntimeVerification {
 /// [`crate::law_inference`]'s `check_functor_identity` only in the
 /// structural-mismatch case: here it is `Violated`, there it is
 /// `NotApplicable`.
-fn check_functor_identity_runtime(scheme: &Scheme) -> LawCheckResult {
+fn check_functor_identity_runtime(scheme: &Term) -> LawCheckResult {
     if !uses_first(scheme) {
         return LawCheckResult::Violated;
     }
     // functor identity: first(id) = id  (ceFirstId)
-    let lhs = Scheme::first(Scheme::arr_native("id", vec![]));
-    let rhs = Scheme::arr_native("id", vec![]);
+    let lhs = Term::first(Term::arr_native("id", vec![]));
+    let rhs = Term::arr_native("id", vec![]);
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -311,15 +311,15 @@ fn check_functor_identity_runtime(scheme: &Scheme) -> LawCheckResult {
 /// [`crate::law_inference`]'s `check_functor_composition` only in the
 /// structural-mismatch case: here it is `Violated`, there it is
 /// `NotApplicable`.
-fn check_functor_composition_runtime(scheme: &Scheme) -> LawCheckResult {
+fn check_functor_composition_runtime(scheme: &Term) -> LawCheckResult {
     if !uses_first(scheme) {
         return LawCheckResult::Violated;
     }
     // functor composition: first(f;g) = first(f);first(g)  (ceFirstFusion)
-    let f = Scheme::arr_native("f", vec![]);
-    let g = Scheme::arr_native("g", vec![]);
-    let lhs = Scheme::first(Scheme::seq(f.clone(), g.clone()));
-    let rhs = Scheme::seq(Scheme::first(f), Scheme::first(g));
+    let f = Term::arr_native("f", vec![]);
+    let g = Term::arr_native("g", vec![]);
+    let lhs = Term::first(Term::seq(f.clone(), g.clone()));
+    let rhs = Term::seq(Term::first(f), Term::first(g));
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -360,7 +360,7 @@ fn runtime_law_patterns() -> Vec<LawPattern> {
 ///     axiom-requiring laws that CutElim cannot verify).
 ///
 /// If all applicable laws are satisfied, returns [`RuntimeVerification::Accepted`].
-pub fn verify_at_runtime(scheme: &Scheme, law_patterns: &[LawPattern]) -> RuntimeVerification {
+pub fn verify_at_runtime(scheme: &Term, law_patterns: &[LawPattern]) -> RuntimeVerification {
     let mut checked = Vec::new();
     for pattern in law_patterns {
         let result = (pattern.check)(scheme);
@@ -385,7 +385,7 @@ pub fn verify_at_runtime(scheme: &Scheme, law_patterns: &[LawPattern]) -> Runtim
 /// Convenience: verify a runtime-generated scheme against the built-in
 /// runtime law patterns ([`runtime_law_patterns`]). This is the common case
 /// -- verify against the CutElim-proven structural functor laws.
-pub fn verify_at_runtime_with_builtin(scheme: &Scheme) -> RuntimeVerification {
+pub fn verify_at_runtime_with_builtin(scheme: &Term) -> RuntimeVerification {
     let patterns = runtime_law_patterns();
     verify_at_runtime(scheme, &patterns)
 }
@@ -398,16 +398,16 @@ pub fn verify_at_runtime_with_builtin(scheme: &Scheme) -> RuntimeVerification {
 mod tests {
     use super::*;
 
-    fn first_f() -> Scheme {
-        Scheme::first(Scheme::arr_native("f", vec![]))
+    fn first_f() -> Term {
+        Term::first(Term::arr_native("f", vec![]))
     }
 
-    fn arr_sort() -> Scheme {
-        Scheme::arr_native("sort", vec![])
+    fn arr_sort() -> Term {
+        Term::arr_native("sort", vec![])
     }
 
-    fn arr_not_a_functor() -> Scheme {
-        Scheme::arr_native("not_a_functor", vec![])
+    fn arr_not_a_functor() -> Term {
+        Term::arr_native("not_a_functor", vec![])
     }
 
     // --- Mode 2: registration ---

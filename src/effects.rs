@@ -7,21 +7,21 @@
 //! system.
 //!
 //! This module upgrades that concept to a real (if not yet type-inferred) row
-//! polymorphism layer over the production [`Scheme`](crate::scheme::Scheme)
+//! polymorphism layer over the production [`Term`](crate::term::Term)
 //! kernel. An [`EffectRow`] is a set of operation names plus an optional
-//! polymorphic tail; a [`TypedScheme`] pairs a `Scheme` with its inferred
+//! polymorphic tail; a [`TypedScheme`] pairs a `Term` with its inferred
 //! [`EffectRow`]. The row records which capabilities a graph *manages* -- the
 //! `Handle` targets appearing in the graph. After
-//! [`Scheme::eliminate_handlers`](crate::scheme::Scheme::eliminate_handlers)
+//! [`Term::eliminate_handlers`](crate::term::Term::eliminate_handlers)
 //! the row is empty -- a "clean" graph manages no capabilities and is safe to
 //! normalize.
 //!
 //! # The capability-declaration interpretation
 //!
-//! The production `Scheme` has no dedicated `Op` node (unlike the research
+//! The production `Term` has no dedicated `Op` node (unlike the research
 //! PoC's `EffectGraph::Op` or the Lean mechanization's `op`). In those systems
 //! an `Op(name)` *adds* `name` to the row and a `Handle` *removes* it (the
-//! handler covers the op). The production `Scheme` has no `Op`, so there is
+//! handler covers the op). The production `Term` has no `Op`, so there is
 //! nothing for a `Handle` to remove -- instead, the `Handle` target itself is
 //! the capability marker: a `Handle { body, target, impl_ }` *declares* that
 //! `target` is a capability the graph manages (provides an interpretation
@@ -46,12 +46,12 @@
 
 use std::collections::BTreeSet;
 
-use crate::scheme::Scheme;
+use crate::term::Term;
 
 /// An effect row: a set of operation names (the "labelled" part) plus an
 /// optional polymorphic tail.
 ///
-/// The row records which capabilities a [`Scheme`] graph manages. An empty
+/// The row records which capabilities a [`Term`] graph manages. An empty
 /// row (no `ops`, no `tail`) means the graph is clean -- it manages no
 /// capabilities and is safe to normalize.
 ///
@@ -188,7 +188,7 @@ impl std::fmt::Display for EffectRow {
     }
 }
 
-/// Infer the effect row of a [`Scheme`] by structural inspection.
+/// Infer the effect row of a [`Term`] by structural inspection.
 ///
 /// The row is the set of capabilities the graph *manages* -- the `Handle`
 /// targets appearing anywhere in the graph. A `Handle { body, target, impl_ }`
@@ -198,13 +198,13 @@ impl std::fmt::Display for EffectRow {
 /// targets), which are unioned in.
 ///
 /// This is the "capability declaration" reading adapted to the production
-/// `Scheme`, which has no dedicated `Op` node (unlike the research PoC's
+/// `Term`, which has no dedicated `Op` node (unlike the research PoC's
 /// `EffectGraph::Op` or the Lean mechanization's `op`). In those systems an
 /// `Op(name)` *adds* `name` to the row and a `Handle` *removes* it (the handler
-/// covers the op). The production `Scheme` has no `Op`, so there is nothing
+/// covers the op). The production `Term` has no `Op`, so there is nothing
 /// for a `Handle` to remove -- instead, the `Handle` target itself is the
 /// capability marker: the row is the set of `Handle` targets. After
-/// [`Scheme::eliminate_handlers`](crate::scheme::Scheme::eliminate_handlers)
+/// [`Term::eliminate_handlers`](crate::term::Term::eliminate_handlers)
 /// every `Handle` node is gone, so the inferred row of the eliminated scheme
 /// is empty by construction -- the graph is clean (no capabilities managed,
 /// everything is concrete).
@@ -220,16 +220,16 @@ impl std::fmt::Display for EffectRow {
 /// - `Handle { body, target, impl_ }`: `target` is added to the row (this
 ///   handle manages the `target` capability), unioned with the body's and
 ///   impl's rows. The result is `{target} ∪ infer(body) ∪ infer(impl_)`.
-pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
+pub fn infer_effect_row(scheme: &Term) -> EffectRow {
     match scheme {
         // Concrete base arrows manage no capability.
-        Scheme::Arr { .. } => EffectRow::empty(),
+        Term::Arr { .. } => EffectRow::empty(),
         // Combinators: thread/union the children's rows.
-        Scheme::Seq { fst, snd } => infer_effect_row(fst).union(&infer_effect_row(snd)),
-        Scheme::First { inner } => infer_effect_row(inner),
-        Scheme::Choice { l, r } => infer_effect_row(l).union(&infer_effect_row(r)),
-        Scheme::Loop { body } => infer_effect_row(body),
-        Scheme::App { callee, args } => {
+        Term::Seq { fst, snd } => infer_effect_row(fst).union(&infer_effect_row(snd)),
+        Term::First { inner } => infer_effect_row(inner),
+        Term::Choice { l, r } => infer_effect_row(l).union(&infer_effect_row(r)),
+        Term::Loop { body } => infer_effect_row(body),
+        Term::App { callee, args } => {
             let mut row = infer_effect_row(callee);
             for a in args {
                 row = row.union(&infer_effect_row(a));
@@ -239,7 +239,7 @@ pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
         // The handler site: `target` is a capability this graph manages, so
         // it is added to the row. The body and impl may manage further
         // capabilities (their own nested handles), which are unioned in.
-        Scheme::Handle {
+        Term::Handle {
             body,
             target,
             impl_,
@@ -251,7 +251,7 @@ pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
     }
 }
 
-/// A [`Scheme`] paired with its inferred [`EffectRow`].
+/// A [`Term`] paired with its inferred [`EffectRow`].
 ///
 /// The row is computed once at construction and cached alongside the scheme.
 /// Use [`TypedScheme::is_clean`] to check whether the scheme manages no
@@ -259,20 +259,20 @@ pub fn infer_effect_row(scheme: &Scheme) -> EffectRow {
 #[derive(Clone, Debug)]
 pub struct TypedScheme {
     /// The underlying scheme graph.
-    pub scheme: Scheme,
+    pub scheme: Term,
     /// The inferred effect row: which capabilities this scheme manages.
     pub row: EffectRow,
 }
 
 impl TypedScheme {
-    /// Compute the effect row of a [`Scheme`] by inspecting its structure.
+    /// Compute the effect row of a [`Term`] by inspecting its structure.
     /// See [`infer_effect_row`] for the rules.
-    pub fn infer_row(scheme: &Scheme) -> EffectRow {
+    pub fn infer_row(scheme: &Term) -> EffectRow {
         infer_effect_row(scheme)
     }
 
-    /// Wrap a [`Scheme`] with its structurally-inferred effect row.
-    pub fn from_scheme(scheme: &Scheme) -> Self {
+    /// Wrap a [`Term`] with its structurally-inferred effect row.
+    pub fn from_scheme(scheme: &Term) -> Self {
         let row = infer_effect_row(scheme);
         TypedScheme {
             scheme: scheme.clone(),
@@ -319,7 +319,7 @@ impl std::fmt::Display for EffectRowError {
 
 impl std::error::Error for EffectRowError {}
 
-/// Eliminate every [`Scheme::Handle`] node in `scheme` and verify the result
+/// Eliminate every [`Term::Handle`] node in `scheme` and verify the result
 /// is clean (no managed capabilities).
 ///
 /// This is the compile-time safety check that closes ADR-0076 OQ#1 for the
@@ -340,7 +340,7 @@ impl std::error::Error for EffectRowError {}
 ///
 /// Returns [`EffectRowError::UnhandledOps`] if the eliminated scheme's effect
 /// row is not empty.
-pub fn eliminate_and_check(scheme: &Scheme) -> Result<Scheme, EffectRowError> {
+pub fn eliminate_and_check(scheme: &Term) -> Result<Term, EffectRowError> {
     let eliminated = scheme.eliminate_handlers();
     let row = infer_effect_row(&eliminated);
     if row.is_empty() {
@@ -354,18 +354,18 @@ pub fn eliminate_and_check(scheme: &Scheme) -> Result<Scheme, EffectRowError> {
 mod tests {
     use super::*;
 
-    /// Helper: does this `Scheme` contain any `Handle` node?
-    fn contains_handle(s: &Scheme) -> bool {
+    /// Helper: does this `Term` contain any `Handle` node?
+    fn contains_handle(s: &Term) -> bool {
         match s {
-            Scheme::Arr { args, .. } => args.iter().any(contains_handle),
-            Scheme::Seq { fst, snd } => contains_handle(fst) || contains_handle(snd),
-            Scheme::First { inner } => contains_handle(inner),
-            Scheme::Choice { l, r } => contains_handle(l) || contains_handle(r),
-            Scheme::Loop { body } => contains_handle(body),
-            Scheme::App { callee, args } => {
+            Term::Arr { args, .. } => args.iter().any(contains_handle),
+            Term::Seq { fst, snd } => contains_handle(fst) || contains_handle(snd),
+            Term::First { inner } => contains_handle(inner),
+            Term::Choice { l, r } => contains_handle(l) || contains_handle(r),
+            Term::Loop { body } => contains_handle(body),
+            Term::App { callee, args } => {
                 contains_handle(callee) || args.iter().any(contains_handle)
             }
-            Scheme::Handle { .. } => true,
+            Term::Handle { .. } => true,
         }
     }
 
@@ -474,23 +474,23 @@ mod tests {
     #[test]
     fn infer_row_of_arr_is_empty() {
         // A concrete base arrow manages no capability.
-        let s = Scheme::arr_native("add", vec![Scheme::arr_native_lit("const", vec![], 1)]);
+        let s = Term::arr_native("add", vec![Term::arr_native_lit("const", vec![], 1)]);
         assert!(infer_effect_row(&s).is_empty());
     }
 
     #[test]
     fn infer_row_of_foreign_arr_is_empty() {
-        let s = Scheme::arr_foreign("fs.read", vec![]);
+        let s = Term::arr_foreign("fs.read", vec![]);
         assert!(infer_effect_row(&s).is_empty());
     }
 
     #[test]
     fn infer_row_of_handle_contains_target() {
         // handle(arr("map"), "map", impl) manages "map" -> row {map}.
-        let s = Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::arr_native("add", vec![]),
+            Term::arr_native("add", vec![]),
         );
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
@@ -501,16 +501,16 @@ mod tests {
     fn infer_row_of_seq_unions_children() {
         // seq(handle(..., "map", ...), handle(..., "serialize", ...))
         // -> row {map, serialize}
-        let s = Scheme::seq(
-            Scheme::handle(
-                Scheme::arr_native("map", vec![]),
+        let s = Term::seq(
+            Term::handle(
+                Term::arr_native("map", vec![]),
                 "map",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ),
-            Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             ),
         );
         let row = infer_effect_row(&s);
@@ -523,13 +523,13 @@ mod tests {
     fn infer_row_of_handle_unions_body_and_impl() {
         // handle(body, "map", impl) where impl manages "serialize".
         // -> row {map, serialize}
-        let s = Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             ),
         );
         let row = infer_effect_row(&s);
@@ -539,10 +539,10 @@ mod tests {
 
     #[test]
     fn infer_row_of_first_threads_inner() {
-        let s = Scheme::first(Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::first(Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::arr_native("add", vec![]),
+            Term::arr_native("add", vec![]),
         ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
@@ -550,16 +550,16 @@ mod tests {
 
     #[test]
     fn infer_row_of_choice_unions_branches() {
-        let s = Scheme::choice(
-            Scheme::handle(
-                Scheme::arr_native("map", vec![]),
+        let s = Term::choice(
+            Term::handle(
+                Term::arr_native("map", vec![]),
                 "map",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ),
-            Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             ),
         );
         let row = infer_effect_row(&s);
@@ -569,10 +569,10 @@ mod tests {
 
     #[test]
     fn infer_row_of_loop_threads_body() {
-        let s = Scheme::loop_feedback(Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::loop_feedback(Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::arr_native("add", vec![]),
+            Term::arr_native("add", vec![]),
         ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
@@ -580,16 +580,16 @@ mod tests {
 
     #[test]
     fn infer_row_of_app_unions_callee_and_args() {
-        let s = Scheme::app(
-            Scheme::handle(
-                Scheme::arr_native("map", vec![]),
+        let s = Term::app(
+            Term::handle(
+                Term::arr_native("map", vec![]),
                 "map",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ),
-            vec![Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            vec![Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             )],
         );
         let row = infer_effect_row(&s);
@@ -601,14 +601,14 @@ mod tests {
     fn infer_row_of_nested_handles() {
         // handle(handle(arr("a"), "a", impl_a), "b", impl_b)
         // -> row {a, b}
-        let s = Scheme::handle(
-            Scheme::handle(
-                Scheme::arr_native("a", vec![]),
+        let s = Term::handle(
+            Term::handle(
+                Term::arr_native("a", vec![]),
                 "a",
-                Scheme::arr_native("impl_a", vec![]),
+                Term::arr_native("impl_a", vec![]),
             ),
             "b",
-            Scheme::arr_native("impl_b", vec![]),
+            Term::arr_native("impl_b", vec![]),
         );
         let row = infer_effect_row(&s);
         assert!(row.contains("a"));
@@ -618,9 +618,9 @@ mod tests {
     #[test]
     fn infer_row_of_no_handles_is_empty() {
         // A graph with no Handle nodes manages no capabilities.
-        let s = Scheme::seq(
-            Scheme::arr_native("add", vec![]),
-            Scheme::first(Scheme::arr_foreign("fs.read", vec![])),
+        let s = Term::seq(
+            Term::arr_native("add", vec![]),
+            Term::first(Term::arr_foreign("fs.read", vec![])),
         );
         assert!(infer_effect_row(&s).is_empty());
     }
@@ -629,10 +629,10 @@ mod tests {
 
     #[test]
     fn typed_scheme_from_scheme_infers_row() {
-        let s = Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::arr_native("add", vec![]),
+            Term::arr_native("add", vec![]),
         );
         let ts = TypedScheme::from_scheme(&s);
         assert!(!ts.is_clean());
@@ -641,9 +641,9 @@ mod tests {
 
     #[test]
     fn typed_scheme_clean_when_no_handles() {
-        let s = Scheme::seq(
-            Scheme::arr_native("add", vec![]),
-            Scheme::arr_native("id", vec![]),
+        let s = Term::seq(
+            Term::arr_native("add", vec![]),
+            Term::arr_native("id", vec![]),
         );
         let ts = TypedScheme::from_scheme(&s);
         assert!(ts.is_clean());
@@ -654,9 +654,9 @@ mod tests {
     #[test]
     fn eliminate_and_check_clean_scheme_ok() {
         // A scheme with no handles is already clean.
-        let s = Scheme::seq(
-            Scheme::arr_native("add", vec![]),
-            Scheme::arr_native("id", vec![]),
+        let s = Term::seq(
+            Term::arr_native("add", vec![]),
+            Term::arr_native("id", vec![]),
         );
         let eliminated = eliminate_and_check(&s).expect("clean scheme");
         assert!(!contains_handle(&eliminated));
@@ -666,44 +666,44 @@ mod tests {
     #[test]
     fn eliminate_and_check_handle_becomes_clean() {
         // handle(arr(target), "target", add) -> add. Row empty after elim.
-        let s = Scheme::handle(
-            Scheme::arr_native("target", vec![]),
+        let s = Term::handle(
+            Term::arr_native("target", vec![]),
             "target",
-            Scheme::arr_native("add", vec![]),
+            Term::arr_native("add", vec![]),
         );
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
         assert!(!contains_handle(&eliminated));
-        assert_eq!(eliminated, Scheme::arr_native("add", vec![]));
+        assert_eq!(eliminated, Term::arr_native("add", vec![]));
     }
 
     #[test]
     fn eliminate_and_check_nested_handles_becomes_clean() {
-        let s = Scheme::handle(
-            Scheme::handle(
-                Scheme::arr_native("a", vec![]),
+        let s = Term::handle(
+            Term::handle(
+                Term::arr_native("a", vec![]),
                 "a",
-                Scheme::arr_native("impl_a", vec![]),
+                Term::arr_native("impl_a", vec![]),
             ),
             "b",
-            Scheme::arr_native("impl_b", vec![]),
+            Term::arr_native("impl_b", vec![]),
         );
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
         assert!(!contains_handle(&eliminated));
-        assert_eq!(eliminated, Scheme::arr_native("impl_a", vec![]));
+        assert_eq!(eliminated, Term::arr_native("impl_a", vec![]));
     }
 
     #[test]
     fn eliminate_and_check_seq_of_handles_becomes_clean() {
-        let s = Scheme::seq(
-            Scheme::handle(
-                Scheme::arr_native("map", vec![]),
+        let s = Term::seq(
+            Term::handle(
+                Term::arr_native("map", vec![]),
                 "map",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ),
-            Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             ),
         );
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
@@ -715,13 +715,13 @@ mod tests {
     fn eliminate_and_check_impl_with_handle_becomes_clean() {
         // handle(arr("map"), "map", handle(arr("serialize"), "serialize", impl))
         // -> impl (after eliminating both handles)
-        let s = Scheme::handle(
-            Scheme::arr_native("map", vec![]),
+        let s = Term::handle(
+            Term::arr_native("map", vec![]),
             "map",
-            Scheme::handle(
-                Scheme::arr_native("serialize", vec![]),
+            Term::handle(
+                Term::arr_native("serialize", vec![]),
                 "serialize",
-                Scheme::arr_native("to_json", vec![]),
+                Term::arr_native("to_json", vec![]),
             ),
         );
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");

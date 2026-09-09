@@ -1,9 +1,9 @@
-//! The arrow-calculus `Scheme` kernel (ADR-0052).
+//! The arrow-calculus `Term` kernel (ADR-0052).
 //!
-//! `Scheme` is the arrow-calculus evaluation kernel: the six arrow
+//! `Term` is the arrow-calculus evaluation kernel: the six arrow
 //! primitives — `arr`, `>>>` (`Seq`), `first`, `Choice`, `Loop`, and `app`
 //! — plus an `ArrSource` discipline on `arr` that keeps the capability
-//! boundary structural. A `Scheme` is an engine-agnostic description of
+//! boundary structural. A `Term` is an engine-agnostic description of
 //! *what* to evaluate for a given AST node kind, not *how*. Engines
 //! (tree-walk, bytecode, cranelift) interpret schemes; the scheme itself is
 //! pure data. Surface constructs are expressed as [`DesugarRule`]s, not new
@@ -13,7 +13,7 @@
 //!
 //! # The `lit` payload
 //!
-//! `Arr::args` is `Vec<Scheme>` — a literal value is not a sub-scheme. Literal
+//! `Arr::args` is `Vec<Term>` — a literal value is not a sub-scheme. Literal
 //! operands (the value of a `const`, the name of a `proj_env`, the index of a
 //! `proj_child`) ride on `Arr`'s optional `lit: Option<Value>` payload, while
 //! `args` stays a pure list of sub-schemes. The field serializes only when
@@ -30,7 +30,7 @@ use serde_json::Value;
 /// interpretations of those descriptions. Every variant *constructs* a
 /// new arrow description; none *execute*.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Scheme {
+pub enum Term {
     /// `arr f` — lift a named pure function over the arrow's input.
     ///
     /// Sub-schemes feed the function's arguments. Replaces the former v1
@@ -44,7 +44,7 @@ pub enum Scheme {
         /// The operator name (e.g. `"add"`, `"const"`, `"proj_env"`).
         op: String,
         /// The argument sub-schemes feeding the op.
-        args: Vec<Scheme>,
+        args: Vec<Term>,
         /// Whether this is a native pure op or a foreign (host) call.
         source: ArrSource,
         /// An inline literal operand for ops that take a literal value
@@ -62,9 +62,9 @@ pub enum Scheme {
     /// arrow is a description; a handler interprets it.
     Seq {
         /// The first arrow; its output feeds `snd`.
-        fst: Box<Scheme>,
+        fst: Box<Term>,
         /// The second arrow; fed by `fst`'s output.
-        snd: Box<Scheme>,
+        snd: Box<Term>,
     },
 
     /// `first` — fan-out: run `inner` on the first component of a pair,
@@ -73,7 +73,7 @@ pub enum Scheme {
     /// Constructs a new arrow; does not execute.
     First {
         /// The arrow to run on the first component.
-        inner: Box<Scheme>,
+        inner: Box<Term>,
     },
 
     /// `ArrowChoice` — route on `Either`: `l` handles `Left`, `r` handles
@@ -82,9 +82,9 @@ pub enum Scheme {
     /// Constructs a routing arrow; does not execute.
     Choice {
         /// The arrow handling the `Left` case.
-        l: Box<Scheme>,
+        l: Box<Term>,
         /// The arrow handling the `Right` case.
-        r: Box<Scheme>,
+        r: Box<Term>,
     },
 
     /// `ArrowLoop` — feedback (NOT iteration).
@@ -98,7 +98,7 @@ pub enum Scheme {
     /// strategy is the handler's concern.
     Loop {
         /// The feedback body: `(In, State) ~> (Out, State)`.
-        body: Box<Scheme>,
+        body: Box<Term>,
     },
 
     /// `app` / `ArrowApply` — dynamic/higher-order arrow application.
@@ -110,24 +110,24 @@ pub enum Scheme {
     /// entire arrow from outside.
     App {
         /// The callee arrow.
-        callee: Box<Scheme>,
+        callee: Box<Term>,
         /// The argument arrows.
-        args: Vec<Scheme>,
+        args: Vec<Term>,
     },
 
     /// `handle body with target = impl_` (ADR-0076): declares that `target`
     /// is a managed capability, with `body` as the handler body and `impl_`
     /// as the handler implementation. Eliminated at compile time by
-    /// [`Scheme::eliminate_handlers`].
+    /// [`Term::eliminate_handlers`].
     Handle {
         /// The handler body — the program being handled. Bare `arr(target)`
         /// references within it are replaced by `impl_` during elimination.
-        body: Box<Scheme>,
+        body: Box<Term>,
         /// The capability name being managed (the handle target).
         target: String,
         /// The handler implementation substituted for bare `arr(target)`
         /// references during elimination.
-        impl_: Box<Scheme>,
+        impl_: Box<Term>,
     },
 }
 
@@ -159,10 +159,10 @@ pub enum ArrSource {
     DynamicForeign,
 }
 
-impl Scheme {
+impl Term {
     /// Convenience constructor for a native `arr` with no literal payload.
-    pub fn arr_native(op: impl Into<String>, args: Vec<Scheme>) -> Self {
-        Scheme::Arr {
+    pub fn arr_native(op: impl Into<String>, args: Vec<Term>) -> Self {
+        Term::Arr {
             op: op.into(),
             args,
             source: ArrSource::Native,
@@ -175,9 +175,9 @@ impl Scheme {
     /// The host function `name` is used both as the op and as the
     /// `Foreign(name)` source, matching ADR-0052's lowering of
     /// `Foreign { name, args }`.
-    pub fn arr_foreign(name: impl Into<String>, args: Vec<Scheme>) -> Self {
+    pub fn arr_foreign(name: impl Into<String>, args: Vec<Term>) -> Self {
         let name = name.into();
-        Scheme::Arr {
+        Term::Arr {
             op: name.clone(),
             args,
             source: ArrSource::Foreign(name),
@@ -187,8 +187,8 @@ impl Scheme {
 
     /// Convenience constructor for a native `arr` carrying a literal
     /// payload (e.g. `const`, `proj_env`, `proj_child`).
-    pub fn arr_native_lit(op: impl Into<String>, args: Vec<Scheme>, lit: impl Into<Value>) -> Self {
-        Scheme::Arr {
+    pub fn arr_native_lit(op: impl Into<String>, args: Vec<Term>, lit: impl Into<Value>) -> Self {
+        Term::Arr {
             op: op.into(),
             args,
             source: ArrSource::Native,
@@ -198,8 +198,8 @@ impl Scheme {
 
     /// Convenience constructor for a typecheck judgment `arr` (ADR-0054
     /// §1, §2) with no literal payload.
-    pub fn arr_judgment(op: impl Into<String>, args: Vec<Scheme>) -> Self {
-        Scheme::Arr {
+    pub fn arr_judgment(op: impl Into<String>, args: Vec<Term>) -> Self {
+        Term::Arr {
             op: op.into(),
             args,
             source: ArrSource::Judgment,
@@ -211,10 +211,10 @@ impl Scheme {
     /// §1, §2) carrying a literal payload.
     pub fn arr_judgment_lit(
         op: impl Into<String>,
-        args: Vec<Scheme>,
+        args: Vec<Term>,
         lit: impl Into<Value>,
     ) -> Self {
-        Scheme::Arr {
+        Term::Arr {
             op: op.into(),
             args,
             source: ArrSource::Judgment,
@@ -223,8 +223,8 @@ impl Scheme {
     }
 
     /// Convenience constructor for `>>>` (sequential composition).
-    pub fn seq(fst: Scheme, snd: Scheme) -> Self {
-        Scheme::Seq {
+    pub fn seq(fst: Term, snd: Term) -> Self {
+        Term::Seq {
             fst: Box::new(fst),
             snd: Box::new(snd),
         }
@@ -232,15 +232,15 @@ impl Scheme {
 
     /// Convenience constructor for `first` (fan-out on the first
     /// component of a pair).
-    pub fn first(inner: Scheme) -> Self {
-        Scheme::First {
+    pub fn first(inner: Term) -> Self {
+        Term::First {
             inner: Box::new(inner),
         }
     }
 
     /// Convenience constructor for `ArrowChoice` routing.
-    pub fn choice(l: Scheme, r: Scheme) -> Self {
-        Scheme::Choice {
+    pub fn choice(l: Term, r: Term) -> Self {
+        Term::Choice {
             l: Box::new(l),
             r: Box::new(r),
         }
@@ -250,75 +250,75 @@ impl Scheme {
     ///
     /// Named `loop_feedback` rather than `loop` (a reserved word) to keep
     /// the constructor name clear and non-raw.
-    pub fn loop_feedback(body: Scheme) -> Self {
-        Scheme::Loop {
+    pub fn loop_feedback(body: Term) -> Self {
+        Term::Loop {
             body: Box::new(body),
         }
     }
 
     /// Convenience constructor for `app` / `ArrowApply` (dynamic
     /// higher-order arrow application).
-    pub fn app(callee: Scheme, args: Vec<Scheme>) -> Self {
-        Scheme::App {
+    pub fn app(callee: Term, args: Vec<Term>) -> Self {
+        Term::App {
             callee: Box::new(callee),
             args,
         }
     }
 
     /// Construct a `handle body with target = impl_` node (ADR-0076).
-    pub fn handle(body: Scheme, target: impl Into<String>, impl_: Scheme) -> Self {
-        Scheme::Handle {
+    pub fn handle(body: Term, target: impl Into<String>, impl_: Term) -> Self {
+        Term::Handle {
             body: Box::new(body),
             target: target.into(),
             impl_: Box::new(impl_),
         }
     }
 
-    /// Eliminate every [`Scheme::Handle`] node in this scheme (ADR-0076).
+    /// Eliminate every [`Term::Handle`] node in this scheme (ADR-0076).
     ///
     /// For each `handle body with target = impl_`:
     /// 1. Recursively eliminate handlers in `body` and `impl_`.
     /// 2. Substitute bare `arr(target)` references in the eliminated body
     ///    with the eliminated impl.
     /// 3. Return the substituted body.
-    pub fn eliminate_handlers(&self) -> Scheme {
+    pub fn eliminate_handlers(&self) -> Term {
         match self {
-            Scheme::Arr {
+            Term::Arr {
                 op,
                 args,
                 source,
                 lit,
             } => {
-                let new_args: Vec<Scheme> = args.iter().map(|a| a.eliminate_handlers()).collect();
-                Scheme::Arr {
+                let new_args: Vec<Term> = args.iter().map(|a| a.eliminate_handlers()).collect();
+                Term::Arr {
                     op: op.clone(),
                     args: new_args,
                     source: source.clone(),
                     lit: lit.clone(),
                 }
             }
-            Scheme::Seq { fst, snd } => Scheme::Seq {
+            Term::Seq { fst, snd } => Term::Seq {
                 fst: Box::new(fst.eliminate_handlers()),
                 snd: Box::new(snd.eliminate_handlers()),
             },
-            Scheme::First { inner } => Scheme::First {
+            Term::First { inner } => Term::First {
                 inner: Box::new(inner.eliminate_handlers()),
             },
-            Scheme::Choice { l, r } => Scheme::Choice {
+            Term::Choice { l, r } => Term::Choice {
                 l: Box::new(l.eliminate_handlers()),
                 r: Box::new(r.eliminate_handlers()),
             },
-            Scheme::Loop { body } => Scheme::Loop {
+            Term::Loop { body } => Term::Loop {
                 body: Box::new(body.eliminate_handlers()),
             },
-            Scheme::App { callee, args } => {
-                let new_args: Vec<Scheme> = args.iter().map(|a| a.eliminate_handlers()).collect();
-                Scheme::App {
+            Term::App { callee, args } => {
+                let new_args: Vec<Term> = args.iter().map(|a| a.eliminate_handlers()).collect();
+                Term::App {
                     callee: Box::new(callee.eliminate_handlers()),
                     args: new_args,
                 }
             }
-            Scheme::Handle {
+            Term::Handle {
                 body,
                 target,
                 impl_,
@@ -339,9 +339,9 @@ impl Scheme {
 /// by `arr_native`) or a [`ArrSource::Foreign`] source naming `target`. Both
 /// are recognized and replaced by `impl_`. All other nodes are recursed into
 /// structurally.
-fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Scheme {
+fn substitute_capability(scheme: &Term, target: &str, impl_: &Term) -> Term {
     match scheme {
-        Scheme::Arr {
+        Term::Arr {
             op,
             args,
             source,
@@ -358,49 +358,49 @@ fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Schem
                 }
             }
             // Otherwise, recurse into args.
-            let new_args: Vec<Scheme> = args
+            let new_args: Vec<Term> = args
                 .iter()
                 .map(|a| substitute_capability(a, target, impl_))
                 .collect();
-            Scheme::Arr {
+            Term::Arr {
                 op: op.clone(),
                 args: new_args,
                 source: source.clone(),
                 lit: lit.clone(),
             }
         }
-        Scheme::Seq { fst, snd } => Scheme::Seq {
+        Term::Seq { fst, snd } => Term::Seq {
             fst: Box::new(substitute_capability(fst, target, impl_)),
             snd: Box::new(substitute_capability(snd, target, impl_)),
         },
-        Scheme::First { inner } => Scheme::First {
+        Term::First { inner } => Term::First {
             inner: Box::new(substitute_capability(inner, target, impl_)),
         },
-        Scheme::Choice { l, r } => Scheme::Choice {
+        Term::Choice { l, r } => Term::Choice {
             l: Box::new(substitute_capability(l, target, impl_)),
             r: Box::new(substitute_capability(r, target, impl_)),
         },
-        Scheme::Loop { body } => Scheme::Loop {
+        Term::Loop { body } => Term::Loop {
             body: Box::new(substitute_capability(body, target, impl_)),
         },
-        Scheme::App { callee, args } => {
-            let new_args: Vec<Scheme> = args
+        Term::App { callee, args } => {
+            let new_args: Vec<Term> = args
                 .iter()
                 .map(|a| substitute_capability(a, target, impl_))
                 .collect();
-            Scheme::App {
+            Term::App {
                 callee: Box::new(substitute_capability(callee, target, impl_)),
                 args: new_args,
             }
         }
-        Scheme::Handle {
+        Term::Handle {
             body,
             target: t,
             impl_: i,
         } => {
             // Nested handle — should not occur after elimination, but handle
             // it by recursing into both children.
-            Scheme::Handle {
+            Term::Handle {
                 body: Box::new(substitute_capability(body, target, impl_)),
                 target: t.clone(),
                 impl_: Box::new(substitute_capability(i, target, impl_)),
@@ -410,12 +410,12 @@ fn substitute_capability(scheme: &Scheme, target: &str, impl_: &Scheme) -> Schem
 }
 
 /// Eliminate all handlers in a scheme (free function version).
-pub fn eliminate_all_handlers(scheme: &Scheme) -> Scheme {
+pub fn eliminate_all_handlers(scheme: &Term) -> Term {
     scheme.eliminate_handlers()
 }
 
 /// Eliminate handlers in a scheme (alias for compatibility).
-pub fn eliminate_handler_in_scheme(scheme: &Scheme) -> Scheme {
+pub fn eliminate_handler_in_scheme(scheme: &Term) -> Term {
     scheme.eliminate_handlers()
 }
 
@@ -424,30 +424,30 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
-    fn roundtrip(s: &Scheme) -> Scheme {
+    fn roundtrip(s: &Term) -> Term {
         let j = serde_json::to_string(s).unwrap();
         serde_json::from_str(&j).unwrap()
     }
 
     #[test]
     fn arr_native_constructs_and_roundtrips() {
-        let s = Scheme::arr_native("add", vec![Scheme::arr_native_lit("proj_child", vec![], 0)]);
+        let s = Term::arr_native("add", vec![Term::arr_native_lit("proj_child", vec![], 0)]);
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"Arr\""));
         assert!(j.contains("\"Native\""));
         // The outer arr has no lit; the inner proj_child does.
         match s {
-            Scheme::Arr { lit, .. } => assert_eq!(lit, None),
+            Term::Arr { lit, .. } => assert_eq!(lit, None),
             other => panic!("expected Arr, got {other:?}"),
         }
     }
 
     #[test]
     fn arr_foreign_constructs_and_roundtrips() {
-        let s = Scheme::arr_foreign(
+        let s = Term::arr_foreign(
             "fs.read",
-            vec![Scheme::arr_native_lit("proj_child", vec![], 0)],
+            vec![Term::arr_native_lit("proj_child", vec![], 0)],
         );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn arr_lit_present_roundtrips() {
-        let s = Scheme::arr_native_lit("const", vec![], Value::from(42));
+        let s = Term::arr_native_lit("const", vec![], Value::from(42));
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"lit\""));
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn arr_lit_absent_omitted() {
-        let s = Scheme::arr_native("id", vec![]);
+        let s = Term::arr_native("id", vec![]);
         let j = serde_json::to_string(&s).unwrap();
         assert!(!j.contains("\"lit\""));
         assert_eq!(s, roundtrip(&s));
@@ -474,9 +474,9 @@ mod tests {
 
     #[test]
     fn seq_constructs_and_roundtrips() {
-        let s = Scheme::seq(
-            Scheme::arr_native("id", vec![]),
-            Scheme::arr_native("id", vec![]),
+        let s = Term::seq(
+            Term::arr_native("id", vec![]),
+            Term::arr_native("id", vec![]),
         );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
@@ -485,7 +485,7 @@ mod tests {
 
     #[test]
     fn first_constructs_and_roundtrips() {
-        let s = Scheme::first(Scheme::arr_native("id", vec![]));
+        let s = Term::first(Term::arr_native("id", vec![]));
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"First\""));
@@ -493,9 +493,9 @@ mod tests {
 
     #[test]
     fn choice_constructs_and_roundtrips() {
-        let s = Scheme::choice(
-            Scheme::arr_native("id", vec![]),
-            Scheme::arr_native("id", vec![]),
+        let s = Term::choice(
+            Term::arr_native("id", vec![]),
+            Term::arr_native("id", vec![]),
         );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
@@ -506,7 +506,7 @@ mod tests {
 
     #[test]
     fn loop_feedback_constructs_and_roundtrips() {
-        let s = Scheme::loop_feedback(Scheme::arr_native("id", vec![]));
+        let s = Term::loop_feedback(Term::arr_native("id", vec![]));
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
         assert!(j.contains("\"Loop\""));
@@ -514,9 +514,9 @@ mod tests {
 
     #[test]
     fn app_constructs_and_roundtrips() {
-        let s = Scheme::app(
-            Scheme::arr_native_lit("proj_env", vec![], "f"),
-            vec![Scheme::arr_native_lit("const", vec![], 1)],
+        let s = Term::app(
+            Term::arr_native_lit("proj_env", vec![], "f"),
+            vec![Term::arr_native_lit("const", vec![], 1)],
         );
         assert_eq!(s, roundtrip(&s));
         let j = serde_json::to_string(&s).unwrap();
@@ -543,13 +543,13 @@ mod tests {
 
     #[test]
     fn nested_scheme_roundtrips() {
-        let s = Scheme::seq(
-            Scheme::arr_native("id", vec![]),
-            Scheme::choice(
-                Scheme::loop_feedback(Scheme::arr_foreign("fs.read", vec![])),
-                Scheme::app(
-                    Scheme::arr_native_lit("proj_env", vec![], "f"),
-                    vec![Scheme::arr_native_lit("const", vec![], Value::Bool(true))],
+        let s = Term::seq(
+            Term::arr_native("id", vec![]),
+            Term::choice(
+                Term::loop_feedback(Term::arr_foreign("fs.read", vec![])),
+                Term::app(
+                    Term::arr_native_lit("proj_env", vec![], "f"),
+                    vec![Term::arr_native_lit("const", vec![], Value::Bool(true))],
                 ),
             ),
         );

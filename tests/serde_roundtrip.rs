@@ -3,7 +3,7 @@
 
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow, Language,
-    Scheme, SchemeVersion, TokenKindDef,
+    Term, SchemeVersion, TokenKindDef,
 };
 use serde_json::Value;
 
@@ -34,11 +34,11 @@ fn nontrivial_language() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::arr_native(
+            Term::arr_native(
                 "add",
                 vec![
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
                 ],
             ),
         ))
@@ -47,9 +47,9 @@ fn nontrivial_language() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.io",
             "io",
-            Scheme::arr_foreign(
+            Term::arr_foreign(
                 "fs.read",
-                vec![Scheme::arr_native_lit(
+                vec![Term::arr_native_lit(
                     "proj_child",
                     vec![],
                     Value::from(0u64),
@@ -97,24 +97,24 @@ fn scheme_with_nested_foreign_roundtrips_through_language() {
             "eval.complex",
             "complex",
             // cond >>> arr(tag) >>> Choice(then, else)
-            Scheme::seq(
-                Scheme::seq(
-                    Scheme::arr_foreign(
+            Term::seq(
+                Term::seq(
+                    Term::arr_foreign(
                         "fs.stat",
-                        vec![Scheme::arr_native_lit("const", vec![], Value::from("/x"))],
+                        vec![Term::arr_native_lit("const", vec![], Value::from("/x"))],
                     ),
-                    Scheme::arr_native("tag", vec![]),
+                    Term::arr_native("tag", vec![]),
                 ),
-                Scheme::choice(
-                    Scheme::app(
-                        Scheme::arr_native_lit("proj_env", vec![], Value::String("f".into())),
-                        vec![Scheme::arr_native_lit(
+                Term::choice(
+                    Term::app(
+                        Term::arr_native_lit("proj_env", vec![], Value::String("f".into())),
+                        vec![Term::arr_native_lit(
                             "proj_child",
                             vec![],
                             Value::from(0u64),
                         )],
                     ),
-                    Scheme::arr_native_lit("const", vec![], Value::Bool(false)),
+                    Term::arr_native_lit("const", vec![], Value::Bool(false)),
                 ),
             ),
         ))

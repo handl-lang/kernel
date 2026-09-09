@@ -1,17 +1,17 @@
-//! Structural law inference over the production `Scheme` IR (ADR-0076 OQ#5).
+//! Structural law inference over the production `Term` IR (ADR-0076 OQ#5).
 //!
 //! The research PoC in `arrow-calculus-kernel-poc/src/law_inference.rs`
 //! implements law *inference*: given an arrow graph, discover which
 //! CutElim-proven structural laws it satisfies WITHOUT the user declaring
 //! them. The PoC operates on `PolyGraph` (a separate IR). This module ports
-//! the concept to the production [`Scheme`](crate::scheme::Scheme) kernel.
+//! the concept to the production [`Term`](crate::term::Term) kernel.
 //!
 //! # What this is
 //!
 //! ADR-0075's "primary mode" (trait inference), scoped to single-arrow laws.
 //! Instead of requiring the user to write `law map_id: first(id) = id`, the
 //! system has a *library* of known law patterns (the "law catalog") and
-//! checks each one against a `Scheme`:
+//! checks each one against a `Term`:
 //!
 //!   1. **Structural match** -- does the scheme's wiring match the law
 //!      pattern's expected structure? (e.g. functor laws need a `First`-shaped
@@ -38,18 +38,18 @@
 //!
 //! # Porting notes
 //!
-//! The PoC's `PolyGraph` has six rewrites; four are portable to `Scheme`:
+//! The PoC's `PolyGraph` has six rewrites; four are portable to `Term`:
 //!   - `ceIdLeft`    : `Seq(id, G) ==> G`
 //!   - `ceIdRight`   : `Seq(G, id) ==> G`
 //!   - `ceFirstFusion`: `Seq(First(G), First(H)) ==> First(Seq(G, H))`
 //!   - `ceFirstId`   : `First(id) ==> id`
 //!
 //! The two `Left` rewrites (`ceLeftFusion`, `ceLeftId`) are NOT portable:
-//! the production `Scheme` has no coproduct functor (`Left`) variant. The
+//! the production `Term` has no coproduct functor (`Left`) variant. The
 //! `Choice` variant routes on `Either` but is not a functor, so the
 //! coproduct functor laws are not inferable here.
 
-use crate::scheme::{ArrSource, Scheme};
+use crate::term::{ArrSource, Term};
 
 /// Fuel budget for normalization. Generous for these small graphs; the bound
 /// exists only as a termination safety net (the CutElim rewrite relation is
@@ -58,7 +58,7 @@ use crate::scheme::{ArrSource, Scheme};
 const NORMALIZE_FUEL: usize = 1024;
 
 // ============================================================================
-// 1. CutElim normalizer for `Scheme`
+// 1. CutElim normalizer for `Term`
 // ============================================================================
 //
 // The four portable CutElim rewrites, applied as local scheme-rewrite steps.
@@ -67,13 +67,13 @@ const NORMALIZE_FUEL: usize = 1024;
 
 /// Is this `Arr` the identity arrow (`op: "id"`, no args, native, no lit)?
 ///
-/// The production `Scheme` has no dedicated `Id` variant; identity is the
+/// The production `Term` has no dedicated `Id` variant; identity is the
 /// base arrow `Arr { op: "id", args: [], source: Native, lit: None }`. This
-/// is the PoC's `PolyGraph::Id` recognizer ported to `Scheme`.
-fn is_id(scheme: &Scheme) -> bool {
+/// is the PoC's `PolyGraph::Id` recognizer ported to `Term`.
+fn is_id(scheme: &Term) -> bool {
     matches!(
         scheme,
-        Scheme::Arr { op, args, source, lit }
+        Term::Arr { op, args, source, lit }
             if op == "id"
                 && args.is_empty()
                 && matches!(source, ArrSource::Native)
@@ -89,25 +89,25 @@ fn is_id(scheme: &Scheme) -> bool {
 ///   - `ce_id_right`    : `Seq(G, id) ==> G`
 ///   - `ce_first_fusion`: `Seq(First(G), First(H)) ==> First(Seq(G, H))`
 ///   - `ce_first_id`    : `First(id) ==> id`
-fn rewrite_root(scheme: &Scheme) -> Option<Scheme> {
+fn rewrite_root(scheme: &Term) -> Option<Term> {
     match scheme {
         // ce_id_left : Seq(id, G) ==> G
-        Scheme::Seq { fst, snd } if is_id(fst) => Some((**snd).clone()),
+        Term::Seq { fst, snd } if is_id(fst) => Some((**snd).clone()),
         // ce_id_right : Seq(G, id) ==> G
-        Scheme::Seq { fst, snd } if is_id(snd) => Some((**fst).clone()),
+        Term::Seq { fst, snd } if is_id(snd) => Some((**fst).clone()),
         // ce_first_fusion : Seq(First(G), First(H)) ==> First(Seq(G, H))
-        Scheme::Seq { fst, snd }
-            if matches!(**fst, Scheme::First { .. }) && matches!(**snd, Scheme::First { .. }) =>
+        Term::Seq { fst, snd }
+            if matches!(**fst, Term::First { .. }) && matches!(**snd, Term::First { .. }) =>
         {
             match (&**fst, &**snd) {
-                (Scheme::First { inner: g1 }, Scheme::First { inner: g2 }) => Some(Scheme::First {
-                    inner: Box::new(Scheme::seq((**g1).clone(), (**g2).clone())),
+                (Term::First { inner: g1 }, Term::First { inner: g2 }) => Some(Term::First {
+                    inner: Box::new(Term::seq((**g1).clone(), (**g2).clone())),
                 }),
                 _ => None,
             }
         }
         // ce_first_id : First(id) ==> id
-        Scheme::First { inner } if is_id(inner) => Some((**inner).clone()),
+        Term::First { inner } if is_id(inner) => Some((**inner).clone()),
         _ => None,
     }
 }
@@ -121,17 +121,17 @@ fn rewrite_root(scheme: &Scheme) -> Option<Scheme> {
 /// `Arr` (args), `Handle` (body, impl_). Then applies root rewrites to
 /// fixpoint so a cascade like `Seq(First(id), First(id)) -> First(Seq(id,
 /// id)) -> First(id) -> id` completes within a single pass.
-fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
+fn rewrite_pass(scheme: &Term) -> (Term, bool) {
     // First recurse into children (bottom-up).
     let (g_norm, child_changed) = match scheme {
-        Scheme::Arr {
+        Term::Arr {
             op,
             args,
             source,
             lit,
         } => {
             let mut changed = false;
-            let args2: Vec<Scheme> = args
+            let args2: Vec<Term> = args
                 .iter()
                 .map(|a| {
                     let (a2, c) = rewrite_pass(a);
@@ -140,7 +140,7 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
                 })
                 .collect();
             (
-                Scheme::Arr {
+                Term::Arr {
                     op: op.clone(),
                     args: args2,
                     source: source.clone(),
@@ -149,45 +149,45 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
                 changed,
             )
         }
-        Scheme::Seq { fst, snd } => {
+        Term::Seq { fst, snd } => {
             let (f2, cf) = rewrite_pass(fst);
             let (s2, cs) = rewrite_pass(snd);
             (
-                Scheme::Seq {
+                Term::Seq {
                     fst: Box::new(f2),
                     snd: Box::new(s2),
                 },
                 cf || cs,
             )
         }
-        Scheme::First { inner } => {
+        Term::First { inner } => {
             let (i2, c) = rewrite_pass(inner);
             (
-                Scheme::First {
+                Term::First {
                     inner: Box::new(i2),
                 },
                 c,
             )
         }
-        Scheme::Choice { l, r } => {
+        Term::Choice { l, r } => {
             let (l2, cl) = rewrite_pass(l);
             let (r2, cr) = rewrite_pass(r);
             (
-                Scheme::Choice {
+                Term::Choice {
                     l: Box::new(l2),
                     r: Box::new(r2),
                 },
                 cl || cr,
             )
         }
-        Scheme::Loop { body } => {
+        Term::Loop { body } => {
             let (b2, c) = rewrite_pass(body);
-            (Scheme::Loop { body: Box::new(b2) }, c)
+            (Term::Loop { body: Box::new(b2) }, c)
         }
-        Scheme::App { callee, args } => {
+        Term::App { callee, args } => {
             let (c2, cc) = rewrite_pass(callee);
             let mut changed = cc;
-            let args2: Vec<Scheme> = args
+            let args2: Vec<Term> = args
                 .iter()
                 .map(|a| {
                     let (a2, c) = rewrite_pass(a);
@@ -196,14 +196,14 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
                 })
                 .collect();
             (
-                Scheme::App {
+                Term::App {
                     callee: Box::new(c2),
                     args: args2,
                 },
                 changed,
             )
         }
-        Scheme::Handle {
+        Term::Handle {
             body,
             target,
             impl_,
@@ -211,7 +211,7 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
             let (b2, cb) = rewrite_pass(body);
             let (i2, ci) = rewrite_pass(impl_);
             (
-                Scheme::Handle {
+                Term::Handle {
                     body: Box::new(b2),
                     target: target.clone(),
                     impl_: Box::new(i2),
@@ -242,7 +242,7 @@ fn rewrite_pass(scheme: &Scheme) -> (Scheme, bool) {
 ///
 /// If fuel is exhausted before a fixpoint, the result is the
 /// partially-normalized scheme (`law_equal` may then report false negatives).
-pub fn normalize(scheme: &Scheme, fuel: usize) -> Scheme {
+pub fn normalize(scheme: &Term, fuel: usize) -> Term {
     let mut cur = scheme.clone();
     for _ in 0..fuel {
         let (next, changed) = rewrite_pass(&cur);
@@ -255,13 +255,13 @@ pub fn normalize(scheme: &Scheme, fuel: usize) -> Scheme {
 }
 
 /// Two schemes are `law_equal` iff they normalize to the same form under
-/// CutElim. `Scheme` derives `PartialEq`, so structural equality of the
+/// CutElim. `Term` derives `PartialEq`, so structural equality of the
 /// normalized forms is the comparison. `Arr` names are compared structurally
 /// (the name is opaque data -- two `Arr`s are equal only if their names,
 /// args, source, and lit match). This is what lets the composition law
 /// `First(Seq(f, g)) === Seq(First(f), First(g))` verify: both sides
 /// normalize to `First(Seq(f, g))` with matching `f`, `g`.
-pub fn law_equal(a: &Scheme, b: &Scheme) -> bool {
+pub fn law_equal(a: &Term, b: &Term) -> bool {
     normalize(a, NORMALIZE_FUEL) == normalize(b, NORMALIZE_FUEL)
 }
 
@@ -282,15 +282,15 @@ pub fn law_equal(a: &Scheme, b: &Scheme) -> bool {
 
 /// Does the scheme use the `First` combinator anywhere in its tree?
 /// Mirrors `UsesFirst` from the Lean mechanization.
-pub fn uses_first(scheme: &Scheme) -> bool {
+pub fn uses_first(scheme: &Term) -> bool {
     match scheme {
-        Scheme::First { .. } => true,
-        Scheme::Arr { args, .. } => args.iter().any(uses_first),
-        Scheme::Seq { fst, snd } => uses_first(fst) || uses_first(snd),
-        Scheme::Choice { l, r } => uses_first(l) || uses_first(r),
-        Scheme::Loop { body } => uses_first(body),
-        Scheme::App { callee, args } => uses_first(callee) || args.iter().any(uses_first),
-        Scheme::Handle { body, impl_, .. } => uses_first(body) || uses_first(impl_),
+        Term::First { .. } => true,
+        Term::Arr { args, .. } => args.iter().any(uses_first),
+        Term::Seq { fst, snd } => uses_first(fst) || uses_first(snd),
+        Term::Choice { l, r } => uses_first(l) || uses_first(r),
+        Term::Loop { body } => uses_first(body),
+        Term::App { callee, args } => uses_first(callee) || args.iter().any(uses_first),
+        Term::Handle { body, impl_, .. } => uses_first(body) || uses_first(impl_),
     }
 }
 
@@ -300,7 +300,7 @@ pub fn uses_first(scheme: &Scheme) -> bool {
 
 /// A known law pattern the system can check against an arrow. This is the
 /// "law catalog" -- a library of laws the system knows about. Given a
-/// `Scheme`, the inference engine checks each pattern.
+/// `Term`, the inference engine checks each pattern.
 ///
 /// This is the single-arrow analogue of ADR-0075's `CatalogEntry`. Where
 /// `CatalogEntry` bundles multiple laws under a named trait, a `LawPattern`
@@ -314,7 +314,7 @@ pub struct LawPattern {
     /// The law check: given a scheme, decide whether the law applies and
     /// holds. This combines the structural-match step and the CutElim-verify
     /// step into one function.
-    pub check: fn(&Scheme) -> LawCheckResult,
+    pub check: fn(&Term) -> LawCheckResult,
 }
 
 /// The outcome of checking a single law pattern against an arrow.
@@ -335,13 +335,13 @@ pub enum LawCheckResult {
 /// verify via `law_equal`. The law is a CutElim rewrite, so it holds for any
 /// `First`-shaped scheme. The inference: "G uses `First`, therefore it
 /// satisfies the functor identity law (by ceFirstId)."
-fn check_functor_identity(arrow: &Scheme) -> LawCheckResult {
+fn check_functor_identity(arrow: &Term) -> LawCheckResult {
     if !uses_first(arrow) {
         return LawCheckResult::NotApplicable;
     }
     // functor identity: first(id) = id  (ceFirstId)
-    let lhs = Scheme::first(Scheme::arr_native("id", vec![]));
-    let rhs = Scheme::arr_native("id", vec![]);
+    let lhs = Term::first(Term::arr_native("id", vec![]));
+    let rhs = Term::arr_native("id", vec![]);
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -356,15 +356,15 @@ fn check_functor_identity(arrow: &Scheme) -> LawCheckResult {
 /// `f`, `g` and verify via `law_equal`. The law is a CutElim rewrite, so it
 /// holds for any `First`-shaped scheme. The inference: "G uses `First`,
 /// therefore it satisfies the functor composition law (by ceFirstFusion)."
-fn check_functor_composition(arrow: &Scheme) -> LawCheckResult {
+fn check_functor_composition(arrow: &Term) -> LawCheckResult {
     if !uses_first(arrow) {
         return LawCheckResult::NotApplicable;
     }
     // functor composition: first(f;g) = first(f);first(g)  (ceFirstFusion)
-    let f = Scheme::arr_native("f", vec![]);
-    let g = Scheme::arr_native("g", vec![]);
-    let lhs = Scheme::first(Scheme::seq(f.clone(), g.clone()));
-    let rhs = Scheme::seq(Scheme::first(f), Scheme::first(g));
+    let f = Term::arr_native("f", vec![]);
+    let g = Term::arr_native("g", vec![]);
+    let lhs = Term::first(Term::seq(f.clone(), g.clone()));
+    let rhs = Term::seq(Term::first(f), Term::first(g));
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -428,7 +428,7 @@ pub struct InferredLaw {
 ///   - `NotApplicable` -> skipped (the law does not apply to this wiring).
 ///   - `Satisfied`     -> reported (the law holds, CutElim-proven).
 ///   - `Violated`      -> reported (the law applies but does not hold).
-pub fn infer_laws(arrow: &Scheme) -> Vec<InferredLaw> {
+pub fn infer_laws(arrow: &Term) -> Vec<InferredLaw> {
     let catalog = builtin_law_catalog();
     let mut results = Vec::new();
     for pattern in &catalog {
@@ -458,73 +458,73 @@ pub fn infer_laws(arrow: &Scheme) -> Vec<InferredLaw> {
 mod tests {
     use super::*;
 
-    fn id() -> Scheme {
-        Scheme::arr_native("id", vec![])
+    fn id() -> Term {
+        Term::arr_native("id", vec![])
     }
-    fn f() -> Scheme {
-        Scheme::arr_native("f", vec![])
+    fn f() -> Term {
+        Term::arr_native("f", vec![])
     }
-    fn g() -> Scheme {
-        Scheme::arr_native("g", vec![])
+    fn g() -> Term {
+        Term::arr_native("g", vec![])
     }
 
     #[test]
     fn is_id_recognizes_identity_arrow() {
-        assert!(is_id(&Scheme::arr_native("id", vec![])));
+        assert!(is_id(&Term::arr_native("id", vec![])));
         // A non-identity op is not the identity arrow.
-        assert!(!is_id(&Scheme::arr_native("add", vec![])));
+        assert!(!is_id(&Term::arr_native("add", vec![])));
         // An identity with args is not the bare identity arrow.
-        assert!(!is_id(&Scheme::arr_native(
+        assert!(!is_id(&Term::arr_native(
             "id",
-            vec![Scheme::arr_native("x", vec![])]
+            vec![Term::arr_native("x", vec![])]
         )));
         // A foreign "id" is not the native identity arrow.
-        assert!(!is_id(&Scheme::arr_foreign("id", vec![])));
+        assert!(!is_id(&Term::arr_foreign("id", vec![])));
         // An identity with a literal payload is not the bare identity arrow.
-        assert!(!is_id(&Scheme::arr_native_lit("id", vec![], 42)));
+        assert!(!is_id(&Term::arr_native_lit("id", vec![], 42)));
     }
 
     #[test]
     fn normalize_ce_id_left() {
         // Seq(Id, f) ==> f  (ceIdLeft)
-        let s = Scheme::seq(id(), f());
+        let s = Term::seq(id(), f());
         assert_eq!(normalize(&s, NORMALIZE_FUEL), f());
     }
 
     #[test]
     fn normalize_ce_id_right() {
         // Seq(f, Id) ==> f  (ceIdRight)
-        let s = Scheme::seq(f(), id());
+        let s = Term::seq(f(), id());
         assert_eq!(normalize(&s, NORMALIZE_FUEL), f());
     }
 
     #[test]
     fn normalize_ce_first_id() {
         // First(Id) ==> Id  (ceFirstId)
-        let s = Scheme::first(id());
+        let s = Term::first(id());
         assert_eq!(normalize(&s, NORMALIZE_FUEL), id());
     }
 
     #[test]
     fn normalize_ce_first_fusion() {
         // Seq(First(f), First(g)) ==> First(Seq(f, g))  (ceFirstFusion)
-        let s = Scheme::seq(Scheme::first(f()), Scheme::first(g()));
+        let s = Term::seq(Term::first(f()), Term::first(g()));
         assert_eq!(
             normalize(&s, NORMALIZE_FUEL),
-            Scheme::first(Scheme::seq(f(), g()))
+            Term::first(Term::seq(f(), g()))
         );
     }
 
     #[test]
     fn normalize_cascade_completes_in_one_pass() {
         // Seq(First(id), First(id)) -> First(Seq(id, id)) -> First(id) -> id
-        let s = Scheme::seq(Scheme::first(id()), Scheme::first(id()));
+        let s = Term::seq(Term::first(id()), Term::first(id()));
         assert_eq!(normalize(&s, NORMALIZE_FUEL), id());
     }
 
     #[test]
     fn normalize_is_idempotent_on_normal_form() {
-        let s = Scheme::first(Scheme::seq(f(), g()));
+        let s = Term::first(Term::seq(f(), g()));
         let once = normalize(&s, NORMALIZE_FUEL);
         let twice = normalize(&once, NORMALIZE_FUEL);
         assert_eq!(once, twice);
@@ -532,49 +532,49 @@ mod tests {
 
     #[test]
     fn law_equal_first_id_equals_id() {
-        assert!(law_equal(&Scheme::first(id()), &id()));
+        assert!(law_equal(&Term::first(id()), &id()));
     }
 
     #[test]
     fn law_equal_first_fusion() {
         // Seq(First(f), First(g)) === First(Seq(f, g))
-        let lhs = Scheme::seq(Scheme::first(f()), Scheme::first(g()));
-        let rhs = Scheme::first(Scheme::seq(f(), g()));
+        let lhs = Term::seq(Term::first(f()), Term::first(g()));
+        let rhs = Term::first(Term::seq(f(), g()));
         assert!(law_equal(&lhs, &rhs));
     }
 
     #[test]
     fn law_equal_distinguishes_distinct_arrows() {
         // first(f) is not law_equal to f -- they do not normalize together.
-        assert!(!law_equal(&Scheme::first(f()), &f()));
+        assert!(!law_equal(&Term::first(f()), &f()));
     }
 
     #[test]
     fn uses_first_detects_first() {
-        assert!(uses_first(&Scheme::first(f())));
+        assert!(uses_first(&Term::first(f())));
     }
 
     #[test]
     fn uses_first_false_for_plain_arr() {
-        assert!(!uses_first(&Scheme::arr_native("sort", vec![])));
+        assert!(!uses_first(&Term::arr_native("sort", vec![])));
     }
 
     #[test]
     fn uses_first_detects_nested() {
         // Seq(First(f), g) uses first (nested, not at root).
-        assert!(uses_first(&Scheme::seq(Scheme::first(f()), g())));
+        assert!(uses_first(&Term::seq(Term::first(f()), g())));
     }
 
     #[test]
     fn uses_first_recurses_into_choice_and_loop() {
-        assert!(uses_first(&Scheme::choice(Scheme::first(f()), g())));
-        assert!(uses_first(&Scheme::loop_feedback(Scheme::first(f()))));
-        assert!(!uses_first(&Scheme::choice(f(), g())));
+        assert!(uses_first(&Term::choice(Term::first(f()), g())));
+        assert!(uses_first(&Term::loop_feedback(Term::first(f()))));
+        assert!(!uses_first(&Term::choice(f(), g())));
     }
 
     #[test]
     fn infer_laws_first_reports_both_functor_laws() {
-        let inferred = infer_laws(&Scheme::first(f()));
+        let inferred = infer_laws(&Term::first(f()));
         // functor_identity (Satisfied) and functor_composition (Satisfied).
         assert_eq!(inferred.len(), 2);
         assert!(
@@ -591,13 +591,13 @@ mod tests {
 
     #[test]
     fn infer_laws_plain_arr_reports_no_laws() {
-        let inferred = infer_laws(&Scheme::arr_native("sort", vec![]));
+        let inferred = infer_laws(&Term::arr_native("sort", vec![]));
         assert!(inferred.is_empty());
     }
 
     #[test]
     fn infer_laws_seq_of_firsts_reports_both() {
-        let inferred = infer_laws(&Scheme::seq(Scheme::first(f()), Scheme::first(g())));
+        let inferred = infer_laws(&Term::seq(Term::first(f()), Term::first(g())));
         assert_eq!(inferred.len(), 2);
         assert!(
             inferred
@@ -615,9 +615,9 @@ mod tests {
     fn infer_laws_roundtrip_reports_no_laws() {
         // Non-functor laws are NOT inferable: a serialize/deserialize
         // roundtrip is a semantic fact, not a CutElim-proven structural law.
-        let s = Scheme::seq(
-            Scheme::arr_native("serialize", vec![]),
-            Scheme::arr_native("deserialize", vec![]),
+        let s = Term::seq(
+            Term::arr_native("serialize", vec![]),
+            Term::arr_native("deserialize", vec![]),
         );
         let inferred = infer_laws(&s);
         assert!(inferred.is_empty());
@@ -631,7 +631,7 @@ mod tests {
         assert!(names.contains(&"functor_identity"));
         assert!(names.contains(&"functor_composition"));
         // The coproduct functor laws are NOT in the catalog (no `Left` in
-        // `Scheme`).
+        // `Term`).
         assert!(!names.contains(&"coproduct_functor_identity"));
         assert!(!names.contains(&"coproduct_functor_composition"));
     }

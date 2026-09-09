@@ -3,7 +3,7 @@
 
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
-    GrammarRow, LangError, OptionSchema, Scheme, TokenKindDef,
+    GrammarRow, LangError, OptionSchema, Term, TokenKindDef,
 };
 use serde_json::Value;
 
@@ -118,14 +118,14 @@ fn eval_collision_same_node_kind_errors() {
     set.merge(EvalSchemeDef::new(
         "e1",
         "binary.add",
-        Scheme::arr_native_lit("const", vec![], Value::Null),
+        Term::arr_native_lit("const", vec![], Value::Null),
     ))
     .unwrap();
     let err = set
         .merge(EvalSchemeDef::new(
             "e2",
             "binary.add",
-            Scheme::arr_native_lit("const", vec![], Value::Null),
+            Term::arr_native_lit("const", vec![], Value::Null),
         ))
         .unwrap_err();
     assert_eq!(
@@ -143,14 +143,14 @@ fn eval_override_succeeds() {
     set.merge(EvalSchemeDef::new(
         "e1",
         "binary.add",
-        Scheme::arr_native_lit("const", vec![], Value::Null),
+        Term::arr_native_lit("const", vec![], Value::Null),
     ))
     .unwrap();
     set.merge(
         EvalSchemeDef::new(
             "e2",
             "binary.add",
-            Scheme::arr_native_lit("const", vec![], Value::from(1)),
+            Term::arr_native_lit("const", vec![], Value::from(1)),
         )
         .with_replaces(vec!["e1".into()]),
     )

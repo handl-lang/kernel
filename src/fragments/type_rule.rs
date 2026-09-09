@@ -3,16 +3,16 @@
 use serde::{Deserialize, Serialize};
 
 use crate::fragment::Fragment;
-use crate::scheme::Scheme;
+use crate::term::Term;
 
-/// A mapping from an AST node kind to its typechecking [`Scheme`]s.
+/// A mapping from an AST node kind to its typechecking [`Term`]s.
 ///
 /// A type rule has a **synth** scheme (`Γ ⊢ node ⇒ T` — synthesize the type)
 /// and an optional **check** scheme (`Γ ⊢ node ⇐ T` — verify against an
 /// expected type). When `check` is `None`, the node falls back to
 /// *synthesize-then-unify* against the expected type.
 ///
-/// The schemes reuse the arrow-calculus kernel (`Scheme`) that `lang.eval`
+/// The schemes reuse the arrow-calculus kernel (`Term`) that `lang.eval`
 /// uses, with judgment ops (`synth_child`, `check_child`, `unify`, `extend`,
 /// `fresh_meta`, `solve_meta`, `lookup`, `quote`, `normalize`, `construct`,
 /// `match_type`) available via `ArrSource::Judgment` (ADR-0054 §1, §2).
@@ -26,11 +26,11 @@ pub struct TypeRuleDef {
     /// The AST node kind this rule typechecks.
     pub node_kind: String,
     /// Synthesis scheme: `Γ ⊢ node ⇒ T` (computes the type value).
-    pub synth: Scheme,
+    pub synth: Term,
     /// Check scheme: `Γ ⊢ node ⇐ T` (directed checking). `None` ⇒
     /// synth-then-unify against the expected type.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub check: Option<Scheme>,
+    pub check: Option<Term>,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -41,7 +41,7 @@ pub struct TypeRuleDef {
 
 impl TypeRuleDef {
     /// Create a new type rule with a synth scheme and no check scheme.
-    pub fn new(id: impl Into<String>, node_kind: impl Into<String>, synth: Scheme) -> Self {
+    pub fn new(id: impl Into<String>, node_kind: impl Into<String>, synth: Term) -> Self {
         Self {
             id: id.into(),
             node_kind: node_kind.into(),
@@ -53,7 +53,7 @@ impl TypeRuleDef {
     }
 
     /// Attach a check scheme (builder style).
-    pub fn with_check(mut self, check: Scheme) -> Self {
+    pub fn with_check(mut self, check: Term) -> Self {
         self.check = Some(check);
         self
     }
@@ -96,7 +96,7 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lit",
             "lit",
-            Scheme::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
+            Term::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
         )
         .with_replaces(vec!["type.lit.old".into()])
         .with_requires(vec!["type.bool".into()]);
@@ -113,9 +113,9 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lambda",
             "lambda",
-            Scheme::arr_judgment("construct", vec![]),
+            Term::arr_judgment("construct", vec![]),
         )
-        .with_check(Scheme::arr_judgment("check_child", vec![]));
+        .with_check(Term::arr_judgment("check_child", vec![]));
         assert!(def.check.is_some());
     }
 
@@ -124,7 +124,7 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lit",
             "lit",
-            Scheme::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
+            Term::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
         );
         let j = serde_json::to_string(&def).unwrap();
         let back: TypeRuleDef = serde_json::from_str(&j).unwrap();
@@ -136,9 +136,9 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lambda",
             "lambda",
-            Scheme::arr_judgment("construct", vec![]),
+            Term::arr_judgment("construct", vec![]),
         )
-        .with_check(Scheme::arr_judgment("check_child", vec![]));
+        .with_check(Term::arr_judgment("check_child", vec![]));
         let j = serde_json::to_string(&def).unwrap();
         let back: TypeRuleDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn serde_omits_check_when_none() {
-        let def = TypeRuleDef::new("type.lit", "lit", Scheme::arr_judgment("id", vec![]));
+        let def = TypeRuleDef::new("type.lit", "lit", Term::arr_judgment("id", vec![]));
         let j = serde_json::to_string(&def).unwrap();
         assert!(
             !j.contains("check"),
@@ -156,8 +156,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        let a = TypeRuleDef::new("a", "k", Scheme::arr_judgment("id", vec![]));
-        let b = TypeRuleDef::new("a", "k", Scheme::arr_judgment("id", vec![]));
+        let a = TypeRuleDef::new("a", "k", Term::arr_judgment("id", vec![]));
+        let b = TypeRuleDef::new("a", "k", Term::arr_judgment("id", vec![]));
         assert_eq!(a, b);
     }
 }

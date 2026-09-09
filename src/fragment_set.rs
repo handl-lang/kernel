@@ -233,7 +233,7 @@ mod tests {
     use super::*;
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{CapabilityDecl, EvalSchemeDef, GrammarRow, OptionSchema, TokenKindDef};
-    use crate::scheme::Scheme;
+    use crate::term::Term;
     use serde_json::Value;
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "eval.x",
             "x",
-            Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+            Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
         ))
         .unwrap();
         // Same identity key (node_kind "x"), different id/content → collision.
@@ -300,7 +300,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.x2",
                 "x",
-                Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
             ))
             .unwrap_err();
         assert_eq!(
@@ -445,14 +445,14 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "e1",
             "binary.add",
-            Scheme::arr_native_lit("const", vec![], Value::Null),
+            Term::arr_native_lit("const", vec![], Value::Null),
         ))
         .unwrap();
         let err = set
             .merge(EvalSchemeDef::new(
                 "e2",
                 "binary.add",
-                Scheme::arr_native_lit("const", vec![], Value::Null),
+                Term::arr_native_lit("const", vec![], Value::Null),
             ))
             .unwrap_err();
         assert_eq!(
@@ -586,7 +586,7 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "e1",
             "binary.add",
-            Scheme::arr_native_lit("const", vec![], Value::Null),
+            Term::arr_native_lit("const", vec![], Value::Null),
         ))
         .unwrap();
         // Identity key for EvalSchemeDef is node_kind, not id.

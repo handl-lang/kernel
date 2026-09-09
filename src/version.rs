@@ -1,4 +1,4 @@
-//! Scheme combinator versioning (ADR-0044 §7, ADR-0052).
+//! Term combinator versioning (ADR-0044 §7, ADR-0052).
 //!
 //! A `Language` declares a `SchemeVersion`; engines declare which versions
 //! they support. The canonical kernel version is `"v2"` (the arrow-calculus

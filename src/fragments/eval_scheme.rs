@@ -3,11 +3,11 @@
 use serde::{Deserialize, Serialize};
 
 use crate::fragment::Fragment;
-use crate::scheme::Scheme;
+use crate::term::Term;
 
-/// A mapping from an AST node kind to its evaluation [`Scheme`].
+/// A mapping from an AST node kind to its evaluation [`Term`].
 ///
-/// Holds an arrow-calculus [`Scheme`] (the six arrow primitives). Used by
+/// Holds an arrow-calculus [`Term`] (the six arrow primitives). Used by
 /// engines that consume schemes directly.
 ///
 /// Identity key: `node_kind` (see ADR-0044 §5). Collision without `replaces`
@@ -19,7 +19,7 @@ pub struct EvalSchemeDef {
     /// The AST node kind this scheme evaluates.
     pub node_kind: String,
     /// The evaluation scheme describing *what* to evaluate.
-    pub scheme: Scheme,
+    pub scheme: Term,
     /// ids this fragment declares it replaces.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub replaces: Vec<String>,
@@ -30,7 +30,7 @@ pub struct EvalSchemeDef {
 
 impl EvalSchemeDef {
     /// Create a new eval scheme definition.
-    pub fn new(id: impl Into<String>, node_kind: impl Into<String>, scheme: Scheme) -> Self {
+    pub fn new(id: impl Into<String>, node_kind: impl Into<String>, scheme: Term) -> Self {
         Self {
             id: id.into(),
             node_kind: node_kind.into(),
@@ -78,11 +78,11 @@ mod tests {
         let def = EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::arr_native(
+            Term::arr_native(
                 "add",
                 vec![
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
                 ],
             ),
         )
@@ -100,7 +100,7 @@ mod tests {
         let def = EvalSchemeDef::new(
             "eval.lit",
             "lit",
-            Scheme::arr_native_lit("const", vec![], Value::from(42)),
+            Term::arr_native_lit("const", vec![], Value::from(42)),
         );
         let j = serde_json::to_string(&def).unwrap();
         let back: EvalSchemeDef = serde_json::from_str(&j).unwrap();
@@ -109,8 +109,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        let a = EvalSchemeDef::new("a", "k", Scheme::arr_native("id", vec![]));
-        let b = EvalSchemeDef::new("a", "k", Scheme::arr_native("id", vec![]));
+        let a = EvalSchemeDef::new("a", "k", Term::arr_native("id", vec![]));
+        let b = EvalSchemeDef::new("a", "k", Term::arr_native("id", vec![]));
         assert_eq!(a, b);
     }
 }

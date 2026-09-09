@@ -1,12 +1,12 @@
 //! Explicit `forall f g. lhs = rhs` quantified law syntax over the production
-//! `Scheme` IR (ADR-0076 Open Question #4).
+//! `Term` IR (ADR-0076 Open Question #4).
 //!
 //! The research PoC in `arrow-calculus-kernel-poc/src/quantified_laws.rs`
 //! prototypes higher-order law *quantifier* syntax: laws that explicitly
 //! universally quantify over arrows (`forall f g. first(f;g) = first(f);first(g)`),
 //! distinct from concrete base arrows. The PoC operates on `PolyGraph` (a
 //! separate research IR). This module ports the concept to the production
-//! [`Scheme`](crate::scheme::Scheme) kernel.
+//! [`Term`](crate::term::Term) kernel.
 //!
 //! # What this is
 //!
@@ -32,15 +32,15 @@
 //! # Porting notes
 //!
 //! The PoC's `PolyGraph` has a `Left` variant (coproduct functor) and an `Id`
-//! variant. The production `Scheme` has **no** `Left` variant (no coproduct
+//! variant. The production `Term` has **no** `Left` variant (no coproduct
 //! functor — `Choice` routes on `Either` but is not a functor) and **no** `Id`
 //! variant (identity is the base arrow `arr_native("id", [])`). Accordingly:
 //!
 //!   - [`LawExpr`] has **no** `Left` variant. The coproduct functor laws
 //!     (`coproduct_functor_identity`, `coproduct_functor_composition`) are NOT
 //!     ported.
-//!   - [`LawExpr::Id`] instantiates to `Scheme::arr_native("id", [])`.
-//!   - [`LawExpr::App`] mirrors `Scheme::App { callee, args: Vec<Scheme> }`
+//!   - [`LawExpr::Id`] instantiates to `Term::arr_native("id", [])`.
+//!   - [`LawExpr::App`] mirrors `Term::App { callee, args: Vec<Term> }`
 //!     (a callee plus a vector of argument schemes), not the PoC's unary `App`.
 //!
 //! The CutElim normalizer is NOT duplicated: this module reuses
@@ -48,7 +48,7 @@
 //! [`law_inference`](crate::law_inference).
 
 use crate::law_inference::law_equal;
-use crate::scheme::Scheme;
+use crate::term::Term;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -59,19 +59,19 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LawVar(pub String);
 
-/// A law expression: a [`Scheme`] graph with quantified variables.
+/// A law expression: a [`Term`] graph with quantified variables.
 ///
 /// Variables are explicitly bound by [`QuantifiedLaw::vars`], not free. Maps
-/// directly to [`Scheme`]:
+/// directly to [`Term`]:
 /// - [`Var`](LawExpr::Var)`(f)` is a quantified variable (instantiated to a
-///   concrete `Scheme` via [`LawSubst`]).
+///   concrete `Term` via [`LawSubst`]).
 /// - [`Const`](LawExpr::Const)`(name)` is a concrete base arrow:
-///   `Scheme::arr_native(name, [])`.
-/// - [`Id`](LawExpr::Id) is the identity: `Scheme::arr_native("id", [])`.
+///   `Term::arr_native(name, [])`.
+/// - [`Id`](LawExpr::Id) is the identity: `Term::arr_native("id", [])`.
 /// - [`Seq`](LawExpr::Seq), [`First`](LawExpr::First),
 ///   [`Choice`](LawExpr::Choice), [`Loop`](LawExpr::Loop),
-///   [`App`](LawExpr::App) mirror the corresponding `Scheme` variants.
-/// - There is **no** `Left` variant — `Scheme` has no coproduct functor.
+///   [`App`](LawExpr::App) mirror the corresponding `Term` variants.
+/// - There is **no** `Left` variant — `Term` has no coproduct functor.
 #[derive(Clone, Debug, PartialEq)]
 pub enum LawExpr {
     /// A quantified variable reference. Universally quantified — "for all
@@ -80,7 +80,7 @@ pub enum LawExpr {
     /// A concrete base arrow (a constant, not a variable).
     /// e.g. `Const("sort")` is a specific arrow; `Var("f")` is any arrow.
     Const(String),
-    /// Polymorphic identity: instantiates to `Scheme::arr_native("id", [])`.
+    /// Polymorphic identity: instantiates to `Term::arr_native("id", [])`.
     Id,
     /// Sequential composition: `f >>> g` (written `f ; g` in display).
     Seq(Box<LawExpr>, Box<LawExpr>),
@@ -91,7 +91,7 @@ pub enum LawExpr {
     /// `ArrowLoop` (trace/fixpoint): `loop(f)`.
     Loop(Box<LawExpr>),
     /// `app` / `ArrowApply`: `app(callee, args...)`. Mirrors
-    /// `Scheme::App { callee, args }` (a callee plus a vector of arguments).
+    /// `Term::App { callee, args }` (a callee plus a vector of arguments).
     App(Box<LawExpr>, Vec<LawExpr>),
 }
 
@@ -118,14 +118,14 @@ pub struct QuantifiedLaw {
     pub axiom: Option<String>,
 }
 
-/// A substitution mapping law variables to concrete [`Scheme`]s.
+/// A substitution mapping law variables to concrete [`Term`]s.
 ///
 /// Instantiating a [`LawExpr`] with a substitution produces a concrete
-/// `Scheme` that can be checked via
+/// `Term` that can be checked via
 /// [`law_equal`](crate::law_inference::law_equal) (CutElim normalization).
 #[derive(Clone, Debug, Default)]
 pub struct LawSubst {
-    map: HashMap<String, Scheme>,
+    map: HashMap<String, Term>,
 }
 
 impl LawSubst {
@@ -135,27 +135,27 @@ impl LawSubst {
     }
 
     /// Bind a law variable to a concrete scheme.
-    pub fn bind(&mut self, var: &str, scheme: Scheme) {
+    pub fn bind(&mut self, var: &str, scheme: Term) {
         self.map.insert(var.to_string(), scheme);
     }
 
     /// Look up the scheme bound to a variable.
-    pub fn get(&self, var: &str) -> Option<&Scheme> {
+    pub fn get(&self, var: &str) -> Option<&Term> {
         self.map.get(var)
     }
 }
 
 /// Instantiate a [`LawExpr`] with a substitution, producing a concrete
-/// [`Scheme`].
+/// [`Term`].
 ///
 /// - [`Var`](LawExpr::Var)`(f)` -> the scheme bound to `f` in the substitution
 ///   (panics if unbound — all quantified variables must be bound before
 ///   instantiation).
-/// - [`Const`](LawExpr::Const)`(name)` -> `Scheme::arr_native(name, [])` (a
+/// - [`Const`](LawExpr::Const)`(name)` -> `Term::arr_native(name, [])` (a
 ///   concrete base arrow, not a variable).
-/// - [`Id`](LawExpr::Id) -> `Scheme::arr_native("id", [])`.
-/// - Combinators -> recurse structurally, mirroring `Scheme`.
-pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Scheme {
+/// - [`Id`](LawExpr::Id) -> `Term::arr_native("id", [])`.
+/// - Combinators -> recurse structurally, mirroring `Term`.
+pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Term {
     match expr {
         LawExpr::Var(LawVar(name)) => subst.get(name).cloned().unwrap_or_else(|| {
             panic!(
@@ -163,23 +163,23 @@ pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Scheme {
                 name
             )
         }),
-        LawExpr::Const(name) => Scheme::arr_native(name, vec![]),
-        LawExpr::Id => Scheme::arr_native("id", vec![]),
-        LawExpr::Seq(a, b) => Scheme::Seq {
+        LawExpr::Const(name) => Term::arr_native(name, vec![]),
+        LawExpr::Id => Term::arr_native("id", vec![]),
+        LawExpr::Seq(a, b) => Term::Seq {
             fst: Box::new(instantiate(a, subst)),
             snd: Box::new(instantiate(b, subst)),
         },
-        LawExpr::First(a) => Scheme::First {
+        LawExpr::First(a) => Term::First {
             inner: Box::new(instantiate(a, subst)),
         },
-        LawExpr::Choice(a, b) => Scheme::Choice {
+        LawExpr::Choice(a, b) => Term::Choice {
             l: Box::new(instantiate(a, subst)),
             r: Box::new(instantiate(b, subst)),
         },
-        LawExpr::Loop(a) => Scheme::Loop {
+        LawExpr::Loop(a) => Term::Loop {
             body: Box::new(instantiate(a, subst)),
         },
-        LawExpr::App(callee, args) => Scheme::App {
+        LawExpr::App(callee, args) => Term::App {
             callee: Box::new(instantiate(callee, subst)),
             args: args.iter().map(|a| instantiate(a, subst)).collect(),
         },
@@ -217,25 +217,25 @@ impl fmt::Display for LawCheckResult {
 /// - `seq(arr("test_a"), arr("test_b"))`: a composed arrow (tests fusion:
 ///   ceFirstFusion).
 /// - `first(arr("test_h"))`: a first-shaped arrow (tests nesting).
-fn test_arrows() -> Vec<Scheme> {
+fn test_arrows() -> Vec<Term> {
     vec![
         // A generic opaque arrow. CutElim treats Arr(name) as opaque -- no
         // rewrite fires on it directly. This is the "default" case.
-        Scheme::arr_native("test_f", vec![]),
+        Term::arr_native("test_f", vec![]),
         // The identity arrow. Tests id-related rewrites: ceIdLeft
         // (seq(id, G) ==> G), ceIdRight (seq(G, id) ==> G), ceFirstId
         // (first(id) ==> id).
-        Scheme::arr_native("id", vec![]),
+        Term::arr_native("id", vec![]),
         // A composed arrow. Tests fusion rewrites: ceFirstFusion
         // (seq(first G, first H) ==> first(seq G H)).
-        Scheme::seq(
-            Scheme::arr_native("test_a", vec![]),
-            Scheme::arr_native("test_b", vec![]),
+        Term::seq(
+            Term::arr_native("test_a", vec![]),
+            Term::arr_native("test_b", vec![]),
         ),
         // A first-shaped arrow. Tests nesting: first(first(...)) and
         // interaction between first and other combinators.
-        Scheme::First {
-            inner: Box::new(Scheme::arr_native("test_h", vec![])),
+        Term::First {
+            inner: Box::new(Term::arr_native("test_h", vec![])),
         },
     ]
 }
@@ -321,7 +321,7 @@ pub fn check_quantified_law(law: &QuantifiedLaw) -> LawCheckResult {
 ///
 /// The two `Left`-based coproduct functor laws from the PoC
 /// (`coproduct_functor_identity`, `coproduct_functor_composition`) are NOT
-/// ported: `Scheme` has no coproduct functor (`Left`) variant.
+/// ported: `Term` has no coproduct functor (`Left`) variant.
 pub fn builtin_quantified_laws() -> Vec<QuantifiedLaw> {
     vec![
         // --- Functor laws (product functoriality, CutElim-proven) ---
@@ -446,16 +446,16 @@ impl fmt::Display for QuantifiedLaw {
 mod tests {
     use super::*;
 
-    fn id() -> Scheme {
-        Scheme::arr_native("id", vec![])
+    fn id() -> Term {
+        Term::arr_native("id", vec![])
     }
 
     #[test]
     fn instantiate_var_produces_bound_scheme() {
         let mut subst = LawSubst::new();
-        subst.bind("f", Scheme::arr_native("concrete_f", vec![]));
+        subst.bind("f", Term::arr_native("concrete_f", vec![]));
         let result = instantiate(&LawExpr::Var(LawVar("f".into())), &subst);
-        assert_eq!(result, Scheme::arr_native("concrete_f", vec![]));
+        assert_eq!(result, Term::arr_native("concrete_f", vec![]));
     }
 
     #[test]
@@ -469,7 +469,7 @@ mod tests {
     fn instantiate_const_produces_base_arrow() {
         let subst = LawSubst::new();
         let result = instantiate(&LawExpr::Const("sort".into()), &subst);
-        assert_eq!(result, Scheme::arr_native("sort", vec![]));
+        assert_eq!(result, Term::arr_native("sort", vec![]));
     }
 
     #[test]
@@ -482,8 +482,8 @@ mod tests {
     #[test]
     fn instantiate_seq_produces_scheme_seq() {
         let mut subst = LawSubst::new();
-        subst.bind("f", Scheme::arr_native("a", vec![]));
-        subst.bind("g", Scheme::arr_native("b", vec![]));
+        subst.bind("f", Term::arr_native("a", vec![]));
+        subst.bind("g", Term::arr_native("b", vec![]));
         let result = instantiate(
             &LawExpr::Seq(
                 Box::new(LawExpr::Var(LawVar("f".into()))),
@@ -493,9 +493,9 @@ mod tests {
         );
         assert_eq!(
             result,
-            Scheme::seq(
-                Scheme::arr_native("a", vec![]),
-                Scheme::arr_native("b", vec![])
+            Term::seq(
+                Term::arr_native("a", vec![]),
+                Term::arr_native("b", vec![])
             )
         );
     }
@@ -600,7 +600,7 @@ mod tests {
         assert_eq!(check_quantified_law(&bogus), LawCheckResult::Violated);
         // Specifically: it fails under the arr("test_f") substitution.
         let mut subst = LawSubst::new();
-        subst.bind("f", Scheme::arr_native("test_f", vec![]));
+        subst.bind("f", Term::arr_native("test_f", vec![]));
         let lhs = instantiate(&bogus.lhs, &subst);
         let rhs = instantiate(&bogus.rhs, &subst);
         assert!(

@@ -20,7 +20,7 @@ use crate::version::SchemeVersion;
 /// A language definition as pure serializable data.
 ///
 /// Built by merging fragments into typed fragment sets. The
-/// `scheme_version` field (ADR-0044 §7) declares which `Scheme` combinator
+/// `scheme_version` field (ADR-0044 §7) declares which `Term` combinator
 /// version the language targets; the canonical version is `"v2"` (the
 /// arrow-calculus kernel, ADR-0052).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -30,9 +30,9 @@ pub struct Language {
     /// Grammar table rows.
     pub grammar: FragmentSet<GrammarRow>,
     /// Eval scheme definitions mapping node kinds to
-    /// [`Scheme`](crate::Scheme)s (arrow-calculus kernel, ADR-0052).
+    /// [`Term`](crate::Term)s (arrow-calculus kernel, ADR-0052).
     pub eval: FragmentSet<EvalSchemeDef>,
-    /// Type rule definitions: node kind → synth/check `Scheme`
+    /// Type rule definitions: node kind → synth/check `Term`
     /// (ADR-0054 — Generic Typecheck Engine).
     pub types: FragmentSet<TypeRuleDef>,
     /// AST node shape definitions.
@@ -461,7 +461,7 @@ mod tests {
     use crate::fragments::ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule};
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{RewriteStep, TransformCondition, TransformRule};
-    use crate::scheme::Scheme;
+    use crate::term::Term;
 
     #[test]
     fn new_is_empty_with_v2() {
@@ -542,7 +542,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ))
             .unwrap();
         other
@@ -550,7 +550,7 @@ mod tests {
             .merge(TypeRuleDef::new(
                 "t1",
                 "lit",
-                Scheme::arr_judgment("synth_child", vec![]),
+                Term::arr_judgment("synth_child", vec![]),
             ))
             .unwrap();
         other
@@ -583,7 +583,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ))
             .unwrap();
         // Set up the base to collide on the eval set.
@@ -591,7 +591,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e0",
                 "binary.add",
-                Scheme::arr_native("add", vec![]),
+                Term::arr_native("add", vec![]),
             ))
             .unwrap();
         let snapshot = base.clone();

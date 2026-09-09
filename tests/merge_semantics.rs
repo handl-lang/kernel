@@ -6,7 +6,7 @@
 
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
-    GrammarRow, Language, Scheme, SchemeVersion, TokenKindDef, capabilities,
+    GrammarRow, Language, Term, SchemeVersion, TokenKindDef, capabilities,
 };
 use serde_json::Value;
 
@@ -36,11 +36,11 @@ fn add_lang() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Scheme::arr_native(
+            Term::arr_native(
                 "add",
                 vec![
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
                 ],
             ),
         ))
@@ -98,11 +98,11 @@ fn five_fragments_with_overrides_and_excludes() {
             EvalSchemeDef::new(
                 "eval.binary.add.v2",
                 "binary.add",
-                Scheme::arr_native(
+                Term::arr_native(
                     "add_checked",
                     vec![
-                        Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                        Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                        Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                        Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
                     ],
                 ),
             )
@@ -168,5 +168,5 @@ fn empty_fragment_set_default() {
 
 #[test]
 fn lit_value_in_scheme() {
-    let _ = Scheme::arr_native_lit("const", vec![], Value::from(42));
+    let _ = Term::arr_native_lit("const", vec![], Value::from(42));
 }

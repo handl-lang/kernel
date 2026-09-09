@@ -14,22 +14,22 @@ use std::collections::BTreeSet;
 
 use crate::fragment::Fragment;
 use crate::language::Language;
-use crate::scheme::{ArrSource, Scheme};
+use crate::term::{ArrSource, Term};
 
-/// Recursively walk a [`Scheme`] and collect every `Foreign(name)` source
+/// Recursively walk a [`Term`] and collect every `Foreign(name)` source
 /// name.
 ///
-/// Walks every `Scheme` node (recursing into `args`, `Seq`, `First`,
+/// Walks every `Term` node (recursing into `args`, `Seq`, `First`,
 /// `Choice`, `Loop`, and `App` children) and collects each foreign name.
-pub fn foreign_names(scheme: &Scheme) -> BTreeSet<String> {
+pub fn foreign_names(scheme: &Term) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     collect_foreign(scheme, &mut out);
     out
 }
 
-fn collect_foreign(scheme: &Scheme, out: &mut BTreeSet<String>) {
+fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
     match scheme {
-        Scheme::Arr { args, source, .. } => {
+        Term::Arr { args, source, .. } => {
             if let ArrSource::Foreign(name) = source {
                 out.insert(name.clone());
             }
@@ -37,27 +37,27 @@ fn collect_foreign(scheme: &Scheme, out: &mut BTreeSet<String>) {
                 collect_foreign(a, out);
             }
         }
-        Scheme::Seq { fst, snd } => {
+        Term::Seq { fst, snd } => {
             collect_foreign(fst, out);
             collect_foreign(snd, out);
         }
-        Scheme::First { inner } => {
+        Term::First { inner } => {
             collect_foreign(inner, out);
         }
-        Scheme::Choice { l, r } => {
+        Term::Choice { l, r } => {
             collect_foreign(l, out);
             collect_foreign(r, out);
         }
-        Scheme::Loop { body } => {
+        Term::Loop { body } => {
             collect_foreign(body, out);
         }
-        Scheme::App { callee, args } => {
+        Term::App { callee, args } => {
             collect_foreign(callee, out);
             for a in args {
                 collect_foreign(a, out);
             }
         }
-        Scheme::Handle { body, impl_, .. } => {
+        Term::Handle { body, impl_, .. } => {
             collect_foreign(body, out);
             collect_foreign(impl_, out);
         }
@@ -88,21 +88,21 @@ mod tests {
     use super::*;
     use crate::fragments::{CapabilityDecl, EvalSchemeDef};
     use crate::language::Language;
-    use crate::scheme::Scheme;
+    use crate::term::Term;
     use serde_json::Value;
 
     #[test]
     fn foreign_names_collects_recursively() {
-        let s = Scheme::Choice {
-            l: Box::new(Scheme::Arr {
+        let s = Term::Choice {
+            l: Box::new(Term::Arr {
                 op: "fs.read".into(),
-                args: vec![Scheme::arr_foreign("fs.open", vec![])],
+                args: vec![Term::arr_foreign("fs.open", vec![])],
                 source: ArrSource::Foreign("fs.read".into()),
                 lit: None,
             }),
-            r: Box::new(Scheme::App {
-                callee: Box::new(Scheme::arr_foreign("net.send", vec![])),
-                args: vec![Scheme::arr_native("id", vec![])],
+            r: Box::new(Term::App {
+                callee: Box::new(Term::arr_foreign("net.send", vec![])),
+                args: vec![Term::arr_native("id", vec![])],
             }),
         };
         let names = foreign_names(&s);
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn no_foreign_returns_empty() {
-        let s = Scheme::arr_native("add", vec![Scheme::arr_native("id", vec![])]);
+        let s = Term::arr_native("add", vec![Term::arr_native("id", vec![])]);
         assert!(foreign_names(&s).is_empty());
     }
 
@@ -125,9 +125,9 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.io",
                 "io",
-                Scheme::arr_foreign(
+                Term::arr_foreign(
                     "fs.read",
-                    vec![Scheme::arr_native_lit(
+                    vec![Term::arr_native_lit(
                         "proj_child",
                         vec![],
                         Value::from(0u64),
@@ -149,11 +149,11 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.add",
                 "binary.add",
-                Scheme::arr_native(
+                Term::arr_native(
                     "add",
                     vec![
-                        Scheme::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                        Scheme::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                        Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+                        Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
                     ],
                 ),
             ))
@@ -185,12 +185,12 @@ mod tests {
 
     #[test]
     fn foreign_names_nested_seq_loop() {
-        let s = Scheme::Seq {
-            fst: Box::new(Scheme::Loop {
-                body: Box::new(Scheme::arr_foreign("fs.read", vec![])),
+        let s = Term::Seq {
+            fst: Box::new(Term::Loop {
+                body: Box::new(Term::arr_foreign("fs.read", vec![])),
             }),
-            snd: Box::new(Scheme::First {
-                inner: Box::new(Scheme::arr_foreign("net.send", vec![])),
+            snd: Box::new(Term::First {
+                inner: Box::new(Term::arr_foreign("net.send", vec![])),
             }),
         };
         let names = foreign_names(&s);

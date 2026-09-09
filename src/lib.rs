@@ -6,10 +6,10 @@
 //! A `Language` is pure serializable data — no Rust trait objects, closures,
 //! or `Box<dyn Behavior>`. It is built by merging typed fragments into six
 //! [`FragmentSet`]s and is `serde`-serializable end to end. Evaluation
-//! semantics are expressed as [`Scheme`] combinators (a small, versioned
+//! semantics are expressed as [`Term`] combinators (a small, versioned
 //! core); surface constructs are [`DesugarRule`]s that lower to that core.
 //!
-//! Phase 1 provides the data schema, the `Ast` arena, the `Scheme` combinator
+//! Phase 1 provides the data schema, the `Ast` arena, the `Term` combinator
 //! set, desugar rules, staged dispatch signatures (returning
 //! [`LangError::NotImplemented`]), scheme versioning, and capability
 //! derivation. Engines, runtime, and migrations are later phases.
@@ -22,7 +22,7 @@ pub mod ast;
 pub mod capabilities;
 /// Desugar rules.
 pub mod desugar;
-/// Dynamic handler law verification over the `Scheme` IR (ADR-0076 OQ#2).
+/// Dynamic handler law verification over the `Term` IR (ADR-0076 OQ#2).
 pub mod dynamic_handlers;
 /// Row polymorphism for effect rows (ADR-0076 OQ#1).
 pub mod effects;
@@ -36,18 +36,18 @@ pub mod fragment_set;
 pub mod fragments;
 /// The `Language` struct.
 pub mod language;
-/// Structural law inference over the `Scheme` IR (ADR-0076 OQ#5).
+/// Structural law inference over the `Term` IR (ADR-0076 OQ#5).
 pub mod law_inference;
-/// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Scheme`
+/// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Term`
 /// IR (ADR-0076 OQ#4).
 pub mod quantified_laws;
-/// The arrow-calculus `Scheme` kernel (ADR-0052).
-pub mod scheme;
+/// The arrow-calculus `Term` kernel (ADR-0052).
+pub mod term;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
 pub mod staged;
 /// Proof verdicts for the partial-evaluator typechecker (ADR-0068).
 pub mod verdict;
-/// Scheme combinator versioning.
+/// Term combinator versioning.
 pub mod version;
 
 pub use ast::{Ast, AstNode, AstRef, Span};
@@ -77,7 +77,7 @@ pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
-pub use scheme::{ArrSource, Scheme, eliminate_all_handlers, eliminate_handler_in_scheme};
+pub use term::{ArrSource, Term, eliminate_all_handlers, eliminate_handler_in_scheme};
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use verdict::{Proof, Verdict};
 pub use version::SchemeVersion;
