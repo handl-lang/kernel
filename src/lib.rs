@@ -78,7 +78,45 @@ pub use quantified_laws::{
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
 pub use term::{ArrSource, RewriteWitness, Term, eliminate_all_handlers, eliminate_handler_in_scheme};
-pub use plugin_engine::{Model, ModelCtx, RewriteResult};
+pub use plugin_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
+
+impl plugin_engine::AstView for Ast {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn node_kind(&self, r: plugin_engine::AstRef) -> Option<&str> {
+        self.get(AstRef::new(r)).map(|n| n.kind.as_str())
+    }
+
+    fn node_child(&self, r: plugin_engine::AstRef, index: usize) -> Option<plugin_engine::AstRef> {
+        let node = self.get(AstRef::new(r))?;
+        node.payload
+            .get("children")?
+            .as_array()?
+            .get(index)?
+            .as_u64()
+            .map(|i| i as usize)
+    }
+}
+
+impl plugin_engine::LanguageView for Language {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn child_role_index(&self, kind: &str, role: &str) -> Option<usize> {
+        self.child_role_index(kind, role).ok().flatten()
+    }
+
+    fn eval_rule(&self, kind: &str) -> Option<&Term> {
+        self.eval.get_by_identity(kind).map(|def| &def.scheme)
+    }
+
+    fn type_rule(&self, kind: &str) -> Option<&Term> {
+        self.types.get_by_identity(kind).map(|def| &def.synth)
+    }
+}
 pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use verdict::{Proof, Verdict};
 pub use version::SchemeVersion;
