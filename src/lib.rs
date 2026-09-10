@@ -760,6 +760,74 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// 2-cell runtime helpers (ADR-0104b frontier value model)
+// ---------------------------------------------------------------------------
+
+/// Build a `Cell2` tagged record from its source, target, and witness value.
+pub fn cell2(src: TaggedValue, tgt: TaggedValue, value: TaggedValue) -> TaggedValue {
+    let mut map = FxHashMap::with_capacity_and_hasher(4, Default::default());
+    map.insert(Rc::from("__tag__"), TaggedValue::Str(Rc::from("Cell2")));
+    map.insert(Rc::from("__src__"), src);
+    map.insert(Rc::from("__tgt__"), tgt);
+    map.insert(Rc::from("value"), value);
+    TaggedValue::Obj(Rc::new(map))
+}
+
+/// Compose two 1-cell arrow values into a serializable `Arrow` record.
+pub fn compose1(first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
+    let mut map = FxHashMap::with_capacity_and_hasher(3, Default::default());
+    map.insert(Rc::from("__tag__"), TaggedValue::Str(Rc::from("Arrow")));
+    map.insert(Rc::from("first"), first.clone());
+    map.insert(Rc::from("second"), second.clone());
+    TaggedValue::Obj(Rc::new(map))
+}
+
+/// `CellId(arrow)` — wrap the arrow's result in a `Cell2`.
+pub fn cell2_id(arrow: &TaggedValue) -> TaggedValue {
+    cell2(arrow.clone(), arrow.clone(), arrow.clone())
+}
+
+/// `CellCompV(first, second)` — vertical cell composition metadata.
+pub fn cell2_comp_v(first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
+    let src = first.get("__src__").unwrap_or(first).clone();
+    let tgt = second.get("__tgt__").unwrap_or(second).clone();
+    let value = second.get("value").unwrap_or(second).clone();
+    cell2(src, tgt, value)
+}
+
+/// `Src(cell)` — project the source 1-cell, falling back to the value itself.
+pub fn cell2_src(cell: &TaggedValue) -> TaggedValue {
+    cell.get("__src__").cloned().unwrap_or(cell.clone())
+}
+
+/// `Tgt(cell)` — project the target 1-cell, falling back to the value itself.
+pub fn cell2_tgt(cell: &TaggedValue) -> TaggedValue {
+    cell.get("__tgt__").cloned().unwrap_or(cell.clone())
+}
+
+/// `Whisker` — attach a 1-cell `arrow` to the left or right side of a 2-cell.
+/// `side` is `"Left"` or `"Right"`.
+pub fn cell2_whisker(side: &str, arrow: &TaggedValue, cell: &TaggedValue) -> TaggedValue {
+    let src = cell.get("__src__").unwrap_or(cell);
+    let tgt = cell.get("__tgt__").unwrap_or(cell);
+    let value = cell.get("value").unwrap_or(cell).clone();
+    let (new_src, new_tgt) = if side == "Right" {
+        (compose1(src, arrow), compose1(tgt, arrow))
+    } else {
+        (compose1(arrow, src), compose1(arrow, tgt))
+    };
+    cell2(new_src, new_tgt, value)
+}
+
+/// `RecordProj` on tagged runtime values: `record[field]` or `Null`.
+pub fn record_proj(record: &TaggedValue, field: &str) -> TaggedValue {
+    match record {
+        TaggedValue::Obj(map) => map.get(field).cloned().unwrap_or(TaggedValue::Null),
+        _ => TaggedValue::Null,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // tval! macro (like serde_json::json! but produces TaggedValue)
 // ---------------------------------------------------------------------------
 
