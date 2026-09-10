@@ -456,6 +456,9 @@ impl Language {
     ///
     /// The `rest` check is data-driven — dispatch is on the child's
     /// `AstShapeDef::pattern_role`, never on a hardcoded kind string.
+    ///
+    /// Use [`is_array_pattern`](Self::is_array_pattern) to distinguish a
+    /// positional/`paren` param list from an array-destructuring pattern.
     pub fn param_names(
         &self,
         ast: &Ast,
@@ -505,6 +508,23 @@ impl Language {
             }
         }
         Ok((names, rest))
+    }
+
+    /// Whether a params node is an array-destructuring pattern.
+    ///
+    /// A positional parameter list (`(x, y) ~> body`) has no `pattern_role`
+    /// on its params node, while an array pattern (`[x, y] ~> body`) uses a
+    /// node whose `AstShapeDef` declares `pattern_role: "sequence"` and a
+    /// variadic child role (e.g. `elements` for `array`). This check is
+    /// data-driven over `AstShapeDef` metadata rather than a `kind == "array"`
+    /// test.
+    pub fn is_array_pattern(&self, params_node: &AstNode) -> bool {
+        self.ast
+            .get_by_identity(&params_node.kind)
+            .map_or(false, |def| {
+                def.pattern_role.as_deref() == Some("sequence")
+                    && self.has_variadic_role(&params_node.kind)
+            })
     }
 
     /// Extract the binding target name from a top-level binding node.
