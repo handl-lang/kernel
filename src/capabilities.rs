@@ -78,7 +78,10 @@ fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
             collect_foreign(initial, out);
         }
         Term::Child { .. } => {}
-        Term::Path { endpoints: (a, b), witness } => {
+        Term::Path {
+            endpoints: (a, b),
+            witness,
+        } => {
             collect_foreign(a, out);
             collect_foreign(b, out);
             if let Some(w) = witness {

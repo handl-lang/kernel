@@ -317,16 +317,10 @@ pub fn infer_effect_row(scheme: &Term) -> EffectRow {
         Term::CellCompV { first, second } => {
             infer_effect_row(first).union(&infer_effect_row(second))
         }
-        Term::Whisker { arrow, cell, .. } => {
-            infer_effect_row(arrow).union(&infer_effect_row(cell))
-        }
+        Term::Whisker { arrow, cell, .. } => infer_effect_row(arrow).union(&infer_effect_row(cell)),
         Term::Univalence { equiv } => infer_effect_row(equiv),
-        Term::Glue { family, path } => {
-            infer_effect_row(family).union(&infer_effect_row(path))
-        }
-        Term::Fibrant { base, family } => {
-            infer_effect_row(base).union(&infer_effect_row(family))
-        }
+        Term::Glue { family, path } => infer_effect_row(family).union(&infer_effect_row(path)),
+        Term::Fibrant { base, family } => infer_effect_row(base).union(&infer_effect_row(family)),
         Term::JElim { path, motive, base } => infer_effect_row(path)
             .union(&infer_effect_row(motive))
             .union(&infer_effect_row(base)),
@@ -452,9 +446,7 @@ mod tests {
                 contains_handle(callee) || args.iter().any(contains_handle)
             }
             Term::CellId { arrow } => contains_handle(arrow),
-            Term::CellCompV { first, second } => {
-                contains_handle(first) || contains_handle(second)
-            }
+            Term::CellCompV { first, second } => contains_handle(first) || contains_handle(second),
             Term::Const { .. } => false,
             Term::Src { cell } => contains_handle(cell),
             Term::Tgt { cell } => contains_handle(cell),
@@ -463,25 +455,15 @@ mod tests {
                 contains_handle(record) || contains_handle(value)
             }
             Term::Tag { value, .. } => contains_handle(value),
-            Term::Whisker { arrow, cell, .. } => {
-                contains_handle(arrow) || contains_handle(cell)
-            }
+            Term::Whisker { arrow, cell, .. } => contains_handle(arrow) || contains_handle(cell),
             Term::Univalence { equiv } => contains_handle(equiv),
-            Term::Glue { family, path } => {
-                contains_handle(family) || contains_handle(path)
-            }
-            Term::Fibrant { base, family } => {
-                contains_handle(base) || contains_handle(family)
-            }
+            Term::Glue { family, path } => contains_handle(family) || contains_handle(path),
+            Term::Fibrant { base, family } => contains_handle(base) || contains_handle(family),
             Term::JElim { path, motive, base } => {
                 contains_handle(path) || contains_handle(motive) || contains_handle(base)
             }
-            Term::Refine { sort, predicate } => {
-                contains_handle(sort) || contains_handle(predicate)
-            }
-            Term::Cobind { grade, body } => {
-                contains_handle(grade) || contains_handle(body)
-            }
+            Term::Refine { sort, predicate } => contains_handle(sort) || contains_handle(predicate),
+            Term::Cobind { grade, body } => contains_handle(grade) || contains_handle(body),
             Term::Handle { .. } => true,
             Term::Arr { .. }
             | Term::Iter { .. }

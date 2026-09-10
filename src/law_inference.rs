@@ -302,7 +302,12 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 ca || cb || cp,
             )
         }
-        Term::Const { value } => (Term::Const { value: value.clone() }, false),
+        Term::Const { value } => (
+            Term::Const {
+                value: value.clone(),
+            },
+            false,
+        ),
         Term::Src { cell } => {
             let (c2, cc) = rewrite_pass(cell);
             (Term::Src { cell: Box::new(c2) }, cc)
@@ -321,7 +326,11 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
                 cr,
             )
         }
-        Term::RecordWith { record, field, value } => {
+        Term::RecordWith {
+            record,
+            field,
+            value,
+        } => {
             let (r2, cr) = rewrite_pass(record);
             let (v2, cv) = rewrite_pass(value);
             (
@@ -345,7 +354,12 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
         }
         Term::CellId { arrow } => {
             let (a2, ca) = rewrite_pass(arrow);
-            (Term::CellId { arrow: Box::new(a2) }, ca)
+            (
+                Term::CellId {
+                    arrow: Box::new(a2),
+                },
+                ca,
+            )
         }
         Term::CellCompV { first, second } => {
             let (f2, cf) = rewrite_pass(first);
@@ -372,7 +386,12 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
         }
         Term::Univalence { equiv } => {
             let (e2, ce) = rewrite_pass(equiv);
-            (Term::Univalence { equiv: Box::new(e2) }, ce)
+            (
+                Term::Univalence {
+                    equiv: Box::new(e2),
+                },
+                ce,
+            )
         }
         Term::Glue { family, path } => {
             let (f2, cf) = rewrite_pass(family);

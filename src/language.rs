@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+use crate::Value;
 use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
@@ -16,7 +17,6 @@ use crate::fragments::{
     AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, LintRuleDef,
     OptionSchema, TokenKindDef, TransformDef, TypeRuleDef,
 };
-use crate::Value;
 use crate::version::SchemeVersion;
 
 /// A language definition as pure serializable data.
@@ -114,12 +114,15 @@ impl Language {
         if let Some(v) = self.handlers_by_grade.get(grade) {
             return Some(v.clone());
         }
-        self.handlers.values().find(|h| {
-            h.get("grades")
-                .and_then(Value::as_array)
-                .map(|arr| arr.iter().any(|v| v.as_str() == Some(grade)))
-                .unwrap_or(false)
-        }).cloned()
+        self.handlers
+            .values()
+            .find(|h| {
+                h.get("grades")
+                    .and_then(Value::as_array)
+                    .map(|arr| arr.iter().any(|v| v.as_str() == Some(grade)))
+                    .unwrap_or(false)
+            })
+            .cloned()
     }
 
     /// Register an evaluated `op` declaration under its name.
