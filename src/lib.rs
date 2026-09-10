@@ -177,6 +177,11 @@ pub enum TaggedValue {
     /// receiving or returning a closure), so the receiving engine can route
     /// application back to the frame that owns the body. On the JSON side
     /// the key is `"__home__"` inside the `__arrow__` object.
+    ///
+    /// `array_pattern` is `true` when the params node is an array-destructuring
+    /// pattern (e.g. `[x, y] ~> body`). In that case the arrow expects a single
+    /// array argument whose elements bind to the pattern's variables. On the
+    /// JSON side the key is `"array_pattern"` inside the `__arrow__` object.
     Arrow {
         params: Rc<[String]>,
         /// Rest/variadic parameter name (`[a, ...rest] ~> body`): when
@@ -187,6 +192,8 @@ pub enum TaggedValue {
         body: usize, // AstRef index
         env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
         home: Option<u64>,
+        /// Whether the arrow's params are an array-destructuring pattern.
+        array_pattern: bool,
     },
     /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
     /// optional finalizer that runs when the last `Rc` reference drops
@@ -280,7 +287,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
         };
     }
     // Arrow-value: {"__arrow__": true, "params": [...], "body": <idx>,
-    // "env": {...}}
+    // "env": {...}, "array_pattern": <bool>}
     if o.get("__arrow__").and_then(|v| v.as_bool()) == Some(true) {
         let params: Rc<[String]> = match o.get("params") {
             Some(Value::Array(a)) => {
@@ -303,12 +310,17 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
         };
         let rest = o.get("rest").and_then(|v| v.as_str()).map(Rc::from);
         let home = o.get("__home__").and_then(|v| v.as_u64());
+        let array_pattern = o
+            .get("array_pattern")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         return TaggedValue::Arrow {
             params,
             rest,
             body,
             env,
             home,
+            array_pattern,
         };
     }
     // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
@@ -387,6 +399,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             body,
             env,
             home,
+            array_pattern,
         } => {
             let mut env_map = Map::new();
             for (k, val) in env.iter() {
@@ -403,6 +416,9 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             }
             if let Some(h) = home {
                 v["__home__"] = Value::from(*h);
+            }
+            if *array_pattern {
+                v["array_pattern"] = Value::Bool(true);
             }
             v
         }
@@ -731,6 +747,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 rest: r1,
                 body: b1,
                 env: e1,
+                array_pattern: ap1,
                 ..
             },
             TaggedValue::Arrow {
@@ -738,10 +755,12 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 rest: r2,
                 body: b2,
                 env: e2,
+                array_pattern: ap2,
                 ..
             },
         ) => {
             r1 == r2
+                && ap1 == ap2
                 && p1.len() == p2.len()
                 && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
                 && b1 == b2
