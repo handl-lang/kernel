@@ -446,44 +446,129 @@ pub fn eliminate_and_check(scheme: &Term) -> Result<Term, EffectRowError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use plugin_engine::ArrSource;
 
-    /// Helper: does this `Term` contain any `Handle` node?
-    fn contains_handle(s: &Term) -> bool {
-        match s {
-            Term::Op { args, .. } => args.iter().any(contains_handle),
-            Term::Seq { fst, snd } => contains_handle(fst) || contains_handle(snd),
-            Term::First { inner } => contains_handle(inner),
-            Term::Choice { l, r } => contains_handle(l) || contains_handle(r),
-            Term::Loop { body } => contains_handle(body),
-            Term::App { callee, args } => {
-                contains_handle(callee) || args.iter().any(contains_handle)
+    // --- TermData thin wrappers (ADR-0103 Phase 6 migration) ---
+
+    /// Convert `TermData` back to `Term` for APIs that require `Term`.
+    fn td(t: TermData) -> Term {
+        t.to_term().expect("TermData -> Term conversion")
+    }
+
+    /// Native op without a literal payload (mirrors `Term::arr_native`).
+    fn op_native(name: &str, args: Vec<TermData>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(serde_json::Value::Null)
+        } else {
+            TermData::op(name, args, &ArrSource::Native, None)
+        }
+    }
+
+    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<serde_json::Value>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(lit)
+        } else {
+            TermData::op(name, args, &ArrSource::Native, Some(lit.into()))
+        }
+    }
+
+    /// Foreign op (mirrors `Term::arr_foreign`).
+    fn op_foreign(name: &str, args: Vec<TermData>) -> TermData {
+        TermData::op(name, args, &ArrSource::Foreign(name.to_string()), None)
+    }
+
+    /// Handle (mirrors `Term::handle`).
+    fn handle(body: TermData, target: &str, impl_: TermData) -> TermData {
+        TermData::handle(body, target, impl_)
+    }
+
+    /// Sequential composition (mirrors `Term::seq`).
+    fn seq(fst: TermData, snd: TermData) -> TermData {
+        TermData::seq(fst, snd)
+    }
+
+    /// First (mirrors `Term::first`).
+    fn first(inner: TermData) -> TermData {
+        TermData::first(inner)
+    }
+
+    /// Choice routing (mirrors `Term::choice`).
+    fn choice(l: TermData, r: TermData) -> TermData {
+        TermData::choice(l, r)
+    }
+
+    /// Loop feedback (mirrors `Term::loop_feedback`).
+    fn loop_feedback(body: TermData) -> TermData {
+        TermData::loop_feedback(body)
+    }
+
+    /// Application (mirrors `Term::app`).
+    fn app(callee: TermData, args: Vec<TermData>) -> TermData {
+        TermData::app(callee, args)
+    }
+
+    /// Helper: does this `TermData` contain any `Handle` node?
+    fn contains_handle(td: &TermData) -> bool {
+        match td.tag() {
+            "Op" => td.get_term_list("args").iter().any(contains_handle),
+            "Seq" => {
+                td.get_term("fst").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("snd").map(|t| contains_handle(&t)).unwrap_or(false)
             }
-            Term::CellId { arrow } => contains_handle(arrow),
-            Term::CellCompV { first, second } => contains_handle(first) || contains_handle(second),
-            Term::Const { .. } => false,
-            Term::Src { cell } => contains_handle(cell),
-            Term::Tgt { cell } => contains_handle(cell),
-            Term::RecordProj { record, .. } => contains_handle(record),
-            Term::RecordWith { record, value, .. } => {
-                contains_handle(record) || contains_handle(value)
+            "First" => td.get_term("inner").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Choice" => {
+                td.get_term("l").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("r").map(|t| contains_handle(&t)).unwrap_or(false)
             }
-            Term::Tag { value, .. } => contains_handle(value),
-            Term::Whisker { arrow, cell, .. } => contains_handle(arrow) || contains_handle(cell),
-            Term::Univalence { equiv } => contains_handle(equiv),
-            Term::Glue { family, path } => contains_handle(family) || contains_handle(path),
-            Term::Fibrant { base, family } => contains_handle(base) || contains_handle(family),
-            Term::JElim { path, motive, base } => {
-                contains_handle(path) || contains_handle(motive) || contains_handle(base)
+            "Loop" => td.get_term("body").map(|t| contains_handle(&t)).unwrap_or(false),
+            "App" => {
+                td.get_term("callee").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term_list("args").iter().any(contains_handle)
             }
-            Term::Refine { sort, predicate } => contains_handle(sort) || contains_handle(predicate),
-            Term::Cobind { grade, body } => contains_handle(grade) || contains_handle(body),
-            Term::Handle { .. } => true,
-            Term::Arr { .. }
-            | Term::Iter { .. }
-            | Term::Child { .. }
-            | Term::Rewrite { .. }
-            | Term::Path { .. }
-            | Term::Equiv { .. } => false,
+            "CellId" => td.get_term("arrow").map(|t| contains_handle(&t)).unwrap_or(false),
+            "CellCompV" => {
+                td.get_term("first").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("second").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Const" => false,
+            "Src" => td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Tgt" => td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false),
+            "RecordProj" => td.get_term("record").map(|t| contains_handle(&t)).unwrap_or(false),
+            "RecordWith" => {
+                td.get_term("record").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("value").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Tag" => td.get_term("value").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Whisker" => {
+                td.get_term("arrow").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Univalence" => td.get_term("equiv").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Glue" => {
+                td.get_term("family").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("path").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Fibrant" => {
+                td.get_term("base").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("family").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "JElim" => {
+                td.get_term("path").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("motive").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("base").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Refine" => {
+                td.get_term("sort").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("predicate").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Cobind" => {
+                td.get_term("grade").map(|t| contains_handle(&t)).unwrap_or(false)
+                    || td.get_term("body").map(|t| contains_handle(&t)).unwrap_or(false)
+            }
+            "Handle" => true,
+            // Conservative fallback: Arr, Iter, Child, Rewrite, Path, Equiv, unknown.
+            _ => false,
         }
     }
 
@@ -592,24 +677,24 @@ mod tests {
     #[test]
     fn infer_row_of_arr_is_empty() {
         // A concrete base arrow manages no capability.
-        let s = Term::arr_native("add", vec![Term::arr_native_lit("const", vec![], 1)]);
+        let s = td(op_native("add", vec![op_lit("const", vec![], 1)]));
         assert!(infer_effect_row(&s).is_empty());
     }
 
     #[test]
     fn infer_row_of_foreign_arr_is_empty() {
-        let s = Term::arr_foreign("fs.read", vec![]);
+        let s = td(op_foreign("fs.read", vec![]));
         assert!(infer_effect_row(&s).is_empty());
     }
 
     #[test]
     fn infer_row_of_handle_contains_target() {
         // handle(arr("map"), "map", impl) manages "map" -> row {map}.
-        let s = Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(handle(
+            op_native("map", vec![]),
             "map",
-            Term::arr_native("add", vec![]),
-        );
+            op_native("add", vec![]),
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
         assert!(!row.is_empty());
@@ -619,18 +704,18 @@ mod tests {
     fn infer_row_of_seq_unions_children() {
         // seq(handle(..., "map", ...), handle(..., "serialize", ...))
         // -> row {map, serialize}
-        let s = Term::seq(
-            Term::handle(
-                Term::arr_native("map", vec![]),
+        let s = td(seq(
+            handle(
+                op_native("map", vec![]),
                 "map",
-                Term::arr_native("add", vec![]),
+                op_native("add", vec![]),
             ),
-            Term::handle(
-                Term::arr_native("serialize", vec![]),
+            handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             ),
-        );
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
         assert!(row.contains("serialize"));
@@ -641,15 +726,15 @@ mod tests {
     fn infer_row_of_handle_unions_body_and_impl() {
         // handle(body, "map", impl) where impl manages "serialize".
         // -> row {map, serialize}
-        let s = Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(handle(
+            op_native("map", vec![]),
             "map",
-            Term::handle(
-                Term::arr_native("serialize", vec![]),
+            handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             ),
-        );
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
         assert!(row.contains("serialize"));
@@ -657,29 +742,29 @@ mod tests {
 
     #[test]
     fn infer_row_of_first_threads_inner() {
-        let s = Term::first(Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(first(handle(
+            op_native("map", vec![]),
             "map",
-            Term::arr_native("add", vec![]),
-        ));
+            op_native("add", vec![]),
+        )));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
     }
 
     #[test]
     fn infer_row_of_choice_unions_branches() {
-        let s = Term::choice(
-            Term::handle(
-                Term::arr_native("map", vec![]),
+        let s = td(choice(
+            handle(
+                op_native("map", vec![]),
                 "map",
-                Term::arr_native("add", vec![]),
+                op_native("add", vec![]),
             ),
-            Term::handle(
-                Term::arr_native("serialize", vec![]),
+            handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             ),
-        );
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
         assert!(row.contains("serialize"));
@@ -687,29 +772,29 @@ mod tests {
 
     #[test]
     fn infer_row_of_loop_threads_body() {
-        let s = Term::loop_feedback(Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(loop_feedback(handle(
+            op_native("map", vec![]),
             "map",
-            Term::arr_native("add", vec![]),
-        ));
+            op_native("add", vec![]),
+        )));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
     }
 
     #[test]
     fn infer_row_of_app_unions_callee_and_args() {
-        let s = Term::app(
-            Term::handle(
-                Term::arr_native("map", vec![]),
+        let s = td(app(
+            handle(
+                op_native("map", vec![]),
                 "map",
-                Term::arr_native("add", vec![]),
+                op_native("add", vec![]),
             ),
-            vec![Term::handle(
-                Term::arr_native("serialize", vec![]),
+            vec![handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             )],
-        );
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("map"));
         assert!(row.contains("serialize"));
@@ -719,15 +804,15 @@ mod tests {
     fn infer_row_of_nested_handles() {
         // handle(handle(arr("a"), "a", impl_a), "b", impl_b)
         // -> row {a, b}
-        let s = Term::handle(
-            Term::handle(
-                Term::arr_native("a", vec![]),
+        let s = td(handle(
+            handle(
+                op_native("a", vec![]),
                 "a",
-                Term::arr_native("impl_a", vec![]),
+                op_native("impl_a", vec![]),
             ),
             "b",
-            Term::arr_native("impl_b", vec![]),
-        );
+            op_native("impl_b", vec![]),
+        ));
         let row = infer_effect_row(&s);
         assert!(row.contains("a"));
         assert!(row.contains("b"));
@@ -736,10 +821,10 @@ mod tests {
     #[test]
     fn infer_row_of_no_handles_is_empty() {
         // A graph with no Handle nodes manages no capabilities.
-        let s = Term::seq(
-            Term::arr_native("add", vec![]),
-            Term::first(Term::arr_foreign("fs.read", vec![])),
-        );
+        let s = td(seq(
+            op_native("add", vec![]),
+            first(op_foreign("fs.read", vec![])),
+        ));
         assert!(infer_effect_row(&s).is_empty());
     }
 
@@ -747,11 +832,11 @@ mod tests {
 
     #[test]
     fn typed_scheme_from_scheme_infers_row() {
-        let s = Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(handle(
+            op_native("map", vec![]),
             "map",
-            Term::arr_native("add", vec![]),
-        );
+            op_native("add", vec![]),
+        ));
         let ts = TypedScheme::from_scheme(&s);
         assert!(!ts.is_clean());
         assert!(ts.row.contains("map"));
@@ -759,10 +844,10 @@ mod tests {
 
     #[test]
     fn typed_scheme_clean_when_no_handles() {
-        let s = Term::seq(
-            Term::arr_native("add", vec![]),
-            Term::arr_native("id", vec![]),
-        );
+        let s = td(seq(
+            op_native("add", vec![]),
+            op_native("id", vec![]),
+        ));
         let ts = TypedScheme::from_scheme(&s);
         assert!(ts.is_clean());
     }
@@ -772,60 +857,60 @@ mod tests {
     #[test]
     fn eliminate_and_check_clean_scheme_ok() {
         // A scheme with no handles is already clean.
-        let s = Term::seq(
-            Term::arr_native("add", vec![]),
-            Term::arr_native("id", vec![]),
-        );
+        let s = td(seq(
+            op_native("add", vec![]),
+            op_native("id", vec![]),
+        ));
         let eliminated = eliminate_and_check(&s).expect("clean scheme");
-        assert!(!contains_handle(&eliminated));
+        assert!(!contains_handle(&TermData::from_term(&eliminated)));
         assert_eq!(eliminated, s);
     }
 
     #[test]
     fn eliminate_and_check_handle_becomes_clean() {
         // handle(arr(target), "target", add) -> add. Row empty after elim.
-        let s = Term::handle(
-            Term::arr_native("target", vec![]),
+        let s = td(handle(
+            op_native("target", vec![]),
             "target",
-            Term::arr_native("add", vec![]),
-        );
+            op_native("add", vec![]),
+        ));
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
-        assert!(!contains_handle(&eliminated));
-        assert_eq!(eliminated, Term::arr_native("add", vec![]));
+        assert!(!contains_handle(&TermData::from_term(&eliminated)));
+        assert_eq!(eliminated, td(op_native("add", vec![])));
     }
 
     #[test]
     fn eliminate_and_check_nested_handles_becomes_clean() {
-        let s = Term::handle(
-            Term::handle(
-                Term::arr_native("a", vec![]),
+        let s = td(handle(
+            handle(
+                op_native("a", vec![]),
                 "a",
-                Term::arr_native("impl_a", vec![]),
+                op_native("impl_a", vec![]),
             ),
             "b",
-            Term::arr_native("impl_b", vec![]),
-        );
+            op_native("impl_b", vec![]),
+        ));
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
-        assert!(!contains_handle(&eliminated));
-        assert_eq!(eliminated, Term::arr_native("impl_a", vec![]));
+        assert!(!contains_handle(&TermData::from_term(&eliminated)));
+        assert_eq!(eliminated, td(op_native("impl_a", vec![])));
     }
 
     #[test]
     fn eliminate_and_check_seq_of_handles_becomes_clean() {
-        let s = Term::seq(
-            Term::handle(
-                Term::arr_native("map", vec![]),
+        let s = td(seq(
+            handle(
+                op_native("map", vec![]),
                 "map",
-                Term::arr_native("add", vec![]),
+                op_native("add", vec![]),
             ),
-            Term::handle(
-                Term::arr_native("serialize", vec![]),
+            handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             ),
-        );
+        ));
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
-        assert!(!contains_handle(&eliminated));
+        assert!(!contains_handle(&TermData::from_term(&eliminated)));
         assert!(infer_effect_row(&eliminated).is_empty());
     }
 
@@ -833,17 +918,17 @@ mod tests {
     fn eliminate_and_check_impl_with_handle_becomes_clean() {
         // handle(arr("map"), "map", handle(arr("serialize"), "serialize", impl))
         // -> impl (after eliminating both handles)
-        let s = Term::handle(
-            Term::arr_native("map", vec![]),
+        let s = td(handle(
+            op_native("map", vec![]),
             "map",
-            Term::handle(
-                Term::arr_native("serialize", vec![]),
+            handle(
+                op_native("serialize", vec![]),
                 "serialize",
-                Term::arr_native("to_json", vec![]),
+                op_native("to_json", vec![]),
             ),
-        );
+        ));
         let eliminated = eliminate_and_check(&s).expect("clean after elimination");
-        assert!(!contains_handle(&eliminated));
+        assert!(!contains_handle(&TermData::from_term(&eliminated)));
         assert!(infer_effect_row(&eliminated).is_empty());
     }
 
