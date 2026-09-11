@@ -49,6 +49,9 @@
 //! `Choice` variant routes on `Either` but is not a functor, so the
 //! coproduct functor laws are not inferable here.
 
+use plugin_engine::TermData;
+use serde_json::Value;
+
 use crate::term::{ArrSource, Term};
 
 /// Fuel budget for normalization. Generous for these small graphs; the bound
@@ -70,45 +73,107 @@ const NORMALIZE_FUEL: usize = 1024;
 /// The production `Term` has no dedicated `Id` variant; identity is the
 /// base arrow `Arr { op: "id", args: [], source: Native, lit: None }`. This
 /// is the PoC's `PolyGraph::Id` recognizer ported to `Term`.
-fn is_id(scheme: &Term) -> bool {
-    matches!(
-        scheme,
-        Term::Op { name: op, args, source, lit }
-            if op == "id"
-                && args.is_empty()
-                && matches!(source, ArrSource::Native)
-                && lit.is_none()
-    )
+fn is_id_td(td: &TermData) -> bool {
+    td.tag() == "Op"
+        && td.get_str("name") == Some("id")
+        && td.get_term_list("args").is_empty()
+        && td.arr_source() == Some(ArrSource::Native)
+        && td.get("lit").map_or(true, |v| v.is_null())
 }
 
-/// Try to apply ONE CutElim rewrite at the root of `scheme`. Returns the
-/// rewritten scheme if a rule fired, else `None`.
+/// Is this `Arr` the identity arrow? Thin `&Term` wrapper around
+/// [`is_id_td`] for callers (and tests) that hold a `Term`.
+#[cfg(test)]
+fn is_id(scheme: &Term) -> bool {
+    is_id_td(&TermData::from_term(scheme))
+}
+
+/// Try to apply ONE CutElim rewrite at the root of `scheme` (TermData form).
+/// Returns the rewritten scheme if a rule fired, else `None`.
 ///
 /// The four portable rewrites:
 ///   - `ce_id_left`     : `Seq(id, G) ==> G`
 ///   - `ce_id_right`    : `Seq(G, id) ==> G`
 ///   - `ce_first_fusion`: `Seq(First(G), First(H)) ==> First(Seq(G, H))`
 ///   - `ce_first_id`    : `First(id) ==> id`
-fn rewrite_root(scheme: &Term) -> Option<Term> {
-    match scheme {
-        // ce_id_left : Seq(id, G) ==> G
-        Term::Seq { fst, snd } if is_id(fst) => Some((**snd).clone()),
-        // ce_id_right : Seq(G, id) ==> G
-        Term::Seq { fst, snd } if is_id(snd) => Some((**fst).clone()),
-        // ce_first_fusion : Seq(First(G), First(H)) ==> First(Seq(G, H))
-        Term::Seq { fst, snd }
-            if matches!(**fst, Term::First { .. }) && matches!(**snd, Term::First { .. }) =>
-        {
-            match (&**fst, &**snd) {
-                (Term::First { inner: g1 }, Term::First { inner: g2 }) => Some(Term::First {
-                    inner: Box::new(Term::seq((**g1).clone(), (**g2).clone())),
-                }),
-                _ => None,
+fn rewrite_root_td(td: &TermData) -> Option<TermData> {
+    match td.tag() {
+        "Seq" => {
+            let fst = td.get_term("fst")?;
+            let snd = td.get_term("snd")?;
+            // ce_id_left : Seq(id, G) ==> G
+            if is_id_td(&fst) {
+                return Some(snd);
             }
+            // ce_id_right : Seq(G, id) ==> G
+            if is_id_td(&snd) {
+                return Some(fst);
+            }
+            // ce_first_fusion : Seq(First(G), First(H)) ==> First(Seq(G, H))
+            if fst.tag() == "First" && snd.tag() == "First" {
+                let g1 = fst.get_term("inner")?;
+                let g2 = snd.get_term("inner")?;
+                return Some(TermData::first(TermData::seq(g1, g2)));
+            }
+            None
         }
         // ce_first_id : First(id) ==> id
-        Term::First { inner } if is_id(inner) => Some((**inner).clone()),
+        "First" => {
+            let inner = td.get_term("inner")?;
+            if is_id_td(&inner) {
+                Some(inner)
+            } else {
+                None
+            }
+        }
         _ => None,
+    }
+}
+
+/// Rebuild `td` with the given child fields replaced by normalized children.
+/// Non-child fields (names, roles, witnesses, sides, …) are preserved by
+/// cloning the original tagged record and overwriting only the listed fields.
+fn with_children(td: &TermData, children: &[(&str, TermData)]) -> TermData {
+    let mut value = td.as_value().clone();
+    if let Some(obj) = value.as_object_mut() {
+        for (field, child) in children {
+            obj.insert((*field).to_string(), child.as_value().clone());
+        }
+    }
+    TermData(value)
+}
+
+/// Rebuild `td` with a list child field replaced by normalized children.
+fn with_child_list(td: &TermData, field: &str, children: Vec<TermData>) -> TermData {
+    let mut value = td.as_value().clone();
+    if let Some(obj) = value.as_object_mut() {
+        let arr: Vec<Value> = children.into_iter().map(|t| t.into_value()).collect();
+        obj.insert(field.to_string(), Value::Array(arr));
+    }
+    TermData(value)
+}
+
+/// Recurse into a required child field, returning the normalized child and
+/// whether it changed. A missing/null field is returned unchanged (no change).
+fn pass_req(td: &TermData, field: &str) -> (TermData, bool) {
+    match td.get_term(field) {
+        Some(child) if !child.as_value().is_null() => rewrite_pass_td(&child),
+        Some(child) => (child, false),
+        None => (TermData(Value::Null), false),
+    }
+}
+
+/// Recurse into an optional child field (Null/absent → no child, no change).
+fn pass_opt(td: &TermData, field: &str) -> (Option<TermData>, bool) {
+    match td.get(field) {
+        Some(Value::Null) | None => (None, false),
+        Some(_) => match td.get_term(field) {
+            Some(child) => {
+                let (c2, c) = rewrite_pass_td(&child);
+                (Some(c2), c)
+            }
+            None => (None, false),
+        },
     }
 }
 
@@ -121,335 +186,170 @@ fn rewrite_root(scheme: &Term) -> Option<Term> {
 /// `Arr` (args), `Handle` (body, impl_). Then applies root rewrites to
 /// fixpoint so a cascade like `Seq(First(id), First(id)) -> First(Seq(id,
 /// id)) -> First(id) -> id` completes within a single pass.
-fn rewrite_pass(scheme: &Term) -> (Term, bool) {
-    // First recurse into children (bottom-up).
-    let (g_norm, child_changed) = match scheme {
-        Term::Op {
-            name: op,
-            args,
-            source,
-            lit,
-        } => {
+fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
+    // First recurse into children (bottom-up). The non-child fields are
+    // preserved by cloning the original tagged record and overwriting only
+    // the child fields with their normalized forms.
+    let (g_norm, child_changed) = match td.tag() {
+        "Op" => {
             let mut changed = false;
-            let args2: Vec<Term> = args
-                .iter()
+            let args2: Vec<TermData> = td
+                .get_term_list("args")
+                .into_iter()
                 .map(|a| {
-                    let (a2, c) = rewrite_pass(a);
+                    let (a2, c) = rewrite_pass_td(&a);
                     changed = changed || c;
                     a2
                 })
                 .collect();
-            (
-                Term::Op {
-                    name: op.clone(),
-                    args: args2,
-                    source: source.clone(),
-                    lit: lit.clone(),
-                },
-                changed,
-            )
+            (with_child_list(td, "args", args2), changed)
         }
-        Term::Seq { fst, snd } => {
-            let (f2, cf) = rewrite_pass(fst);
-            let (s2, cs) = rewrite_pass(snd);
-            (
-                Term::Seq {
-                    fst: Box::new(f2),
-                    snd: Box::new(s2),
-                },
-                cf || cs,
-            )
+        "Seq" => {
+            let (f2, cf) = pass_req(td, "fst");
+            let (s2, cs) = pass_req(td, "snd");
+            (with_children(td, &[("fst", f2), ("snd", s2)]), cf || cs)
         }
-        Term::First { inner } => {
-            let (i2, c) = rewrite_pass(inner);
-            (
-                Term::First {
-                    inner: Box::new(i2),
-                },
-                c,
-            )
+        "First" => {
+            let (i2, c) = pass_req(td, "inner");
+            (with_children(td, &[("inner", i2)]), c)
         }
-        Term::Choice { l, r } => {
-            let (l2, cl) = rewrite_pass(l);
-            let (r2, cr) = rewrite_pass(r);
-            (
-                Term::Choice {
-                    l: Box::new(l2),
-                    r: Box::new(r2),
-                },
-                cl || cr,
-            )
+        "Choice" => {
+            let (l2, cl) = pass_req(td, "l");
+            let (r2, cr) = pass_req(td, "r");
+            (with_children(td, &[("l", l2), ("r", r2)]), cl || cr)
         }
-        Term::Loop { body } => {
-            let (b2, c) = rewrite_pass(body);
-            (Term::Loop { body: Box::new(b2) }, c)
+        "Loop" => {
+            let (b2, c) = pass_req(td, "body");
+            (with_children(td, &[("body", b2)]), c)
         }
-        Term::App { callee, args } => {
-            let (c2, cc) = rewrite_pass(callee);
+        "App" => {
+            let (c2, cc) = pass_req(td, "callee");
             let mut changed = cc;
-            let args2: Vec<Term> = args
-                .iter()
+            let args2: Vec<TermData> = td
+                .get_term_list("args")
+                .into_iter()
                 .map(|a| {
-                    let (a2, c) = rewrite_pass(a);
+                    let (a2, c) = rewrite_pass_td(&a);
                     changed = changed || c;
                     a2
                 })
                 .collect();
-            (
-                Term::App {
-                    callee: Box::new(c2),
-                    args: args2,
-                },
-                changed,
-            )
+            let rebuilt = with_child_list(&with_children(td, &[("callee", c2)]), "args", args2);
+            (rebuilt, changed)
         }
-        Term::Handle {
-            body,
-            target,
-            impl_,
-        } => {
-            let (b2, cb) = rewrite_pass(body);
-            let (i2, ci) = rewrite_pass(impl_);
-            (
-                Term::Handle {
-                    body: Box::new(b2),
-                    target: target.clone(),
-                    impl_: Box::new(i2),
-                },
-                cb || ci,
-            )
+        "Handle" => {
+            let (b2, cb) = pass_req(td, "body");
+            let (i2, ci) = pass_req(td, "impl_");
+            (with_children(td, &[("body", b2), ("impl_", i2)]), cb || ci)
         }
-        Term::Rewrite {
-            source,
-            target,
-            witness,
-        } => {
-            let (s2, cs) = rewrite_pass(source);
-            let (t2, ct) = rewrite_pass(target);
-            (
-                Term::Rewrite {
-                    source: Box::new(s2),
-                    target: Box::new(t2),
-                    witness: witness.clone(),
-                },
-                cs || ct,
-            )
+        "Rewrite" => {
+            let (s2, cs) = pass_req(td, "source");
+            let (t2, ct) = pass_req(td, "target");
+            (with_children(td, &[("source", s2), ("target", t2)]), cs || ct)
         }
-        Term::Arr { value } => (
-            Term::Arr {
-                value: value.clone(),
-            },
-            false,
-        ),
-        Term::Child { role } => (Term::Child { role: role.clone() }, false),
-        Term::Iter {
-            fuel,
-            predicate,
-            step,
-            initial,
-        } => {
-            let (f2, cf) = rewrite_pass(fuel);
-            let (p2, cp) = rewrite_pass(predicate);
-            let (s2, cs) = rewrite_pass(step);
-            let (i2, ci) = rewrite_pass(initial);
+        "Iter" => {
+            let (f2, cf) = pass_req(td, "fuel");
+            let (p2, cp) = pass_req(td, "predicate");
+            let (s2, cs) = pass_req(td, "step");
+            let (i2, ci) = pass_req(td, "initial");
             (
-                Term::Iter {
-                    fuel: Box::new(f2),
-                    predicate: Box::new(p2),
-                    step: Box::new(s2),
-                    initial: Box::new(i2),
-                },
+                with_children(
+                    td,
+                    &[("fuel", f2), ("predicate", p2), ("step", s2), ("initial", i2)],
+                ),
                 cf || cp || cs || ci,
             )
         }
-        Term::Path {
-            endpoints: (a, b),
-            witness,
-        } => {
-            let (a2, ca) = rewrite_pass(a);
-            let (b2, cb) = rewrite_pass(b);
-            let (w2, cw) = witness
-                .as_ref()
-                .map(|w| {
-                    let (w2, c) = rewrite_pass(w);
-                    (Some(Box::new(w2)), c)
-                })
-                .unwrap_or((None, false));
+        "Path" => {
+            let (a2, ca) = pass_req(td, "from");
+            let (b2, cb) = pass_req(td, "to");
+            let (w2, cw) = pass_opt(td, "witness");
+            let mut children = vec![("from", a2), ("to", b2)];
+            if let Some(w) = w2 {
+                children.push(("witness", w));
+            }
+            (with_children(td, &children), ca || cb || cw)
+        }
+        "Equiv" => {
+            let (a2, ca) = pass_req(td, "a");
+            let (b2, cb) = pass_req(td, "b");
+            let (p2, cp) = pass_opt(td, "path");
+            let mut children = vec![("a", a2), ("b", b2)];
+            if let Some(p) = p2 {
+                children.push(("path", p));
+            }
+            (with_children(td, &children), ca || cb || cp)
+        }
+        "Src" => {
+            let (c2, cc) = pass_req(td, "cell");
+            (with_children(td, &[("cell", c2)]), cc)
+        }
+        "Tgt" => {
+            let (c2, cc) = pass_req(td, "cell");
+            (with_children(td, &[("cell", c2)]), cc)
+        }
+        "RecordProj" => {
+            let (r2, cr) = pass_req(td, "record");
+            (with_children(td, &[("record", r2)]), cr)
+        }
+        "RecordWith" => {
+            let (r2, cr) = pass_req(td, "record");
+            let (v2, cv) = pass_req(td, "value");
+            (with_children(td, &[("record", r2), ("value", v2)]), cr || cv)
+        }
+        "Tag" => {
+            let (v2, cv) = pass_req(td, "value");
+            (with_children(td, &[("value", v2)]), cv)
+        }
+        "CellId" => {
+            let (a2, ca) = pass_req(td, "arrow");
+            (with_children(td, &[("arrow", a2)]), ca)
+        }
+        "CellCompV" => {
+            let (f2, cf) = pass_req(td, "first");
+            let (s2, cs) = pass_req(td, "second");
+            (with_children(td, &[("first", f2), ("second", s2)]), cf || cs)
+        }
+        "Whisker" => {
+            let (a2, ca) = pass_req(td, "arrow");
+            let (c2, cc) = pass_req(td, "cell");
+            (with_children(td, &[("arrow", a2), ("cell", c2)]), ca || cc)
+        }
+        "Univalence" => {
+            let (e2, ce) = pass_req(td, "equiv");
+            (with_children(td, &[("equiv", e2)]), ce)
+        }
+        "Glue" => {
+            let (f2, cf) = pass_req(td, "family");
+            let (p2, cp) = pass_req(td, "path");
+            (with_children(td, &[("family", f2), ("path", p2)]), cf || cp)
+        }
+        "Fibrant" => {
+            let (b2, cb) = pass_req(td, "base");
+            let (f2, cf) = pass_req(td, "family");
+            (with_children(td, &[("base", b2), ("family", f2)]), cb || cf)
+        }
+        "JElim" => {
+            let (p2, cp) = pass_req(td, "path");
+            let (m2, cm) = pass_req(td, "motive");
+            let (b2, cb) = pass_req(td, "base");
             (
-                Term::Path {
-                    endpoints: (Box::new(a2), Box::new(b2)),
-                    witness: w2,
-                },
-                ca || cb || cw,
-            )
-        }
-        Term::Equiv { a, b, path } => {
-            let (a2, ca) = rewrite_pass(a);
-            let (b2, cb) = rewrite_pass(b);
-            let (p2, cp) = path
-                .as_ref()
-                .map(|p| {
-                    let (p2, c) = rewrite_pass(p);
-                    (Some(Box::new(p2)), c)
-                })
-                .unwrap_or((None, false));
-            (
-                Term::Equiv {
-                    a: Box::new(a2),
-                    b: Box::new(b2),
-                    path: p2,
-                },
-                ca || cb || cp,
-            )
-        }
-        Term::Const { value } => (
-            Term::Const {
-                value: value.clone(),
-            },
-            false,
-        ),
-        Term::Src { cell } => {
-            let (c2, cc) = rewrite_pass(cell);
-            (Term::Src { cell: Box::new(c2) }, cc)
-        }
-        Term::Tgt { cell } => {
-            let (c2, cc) = rewrite_pass(cell);
-            (Term::Tgt { cell: Box::new(c2) }, cc)
-        }
-        Term::RecordProj { record, field } => {
-            let (r2, cr) = rewrite_pass(record);
-            (
-                Term::RecordProj {
-                    record: Box::new(r2),
-                    field: field.clone(),
-                },
-                cr,
-            )
-        }
-        Term::RecordWith {
-            record,
-            field,
-            value,
-        } => {
-            let (r2, cr) = rewrite_pass(record);
-            let (v2, cv) = rewrite_pass(value);
-            (
-                Term::RecordWith {
-                    record: Box::new(r2),
-                    field: field.clone(),
-                    value: Box::new(v2),
-                },
-                cr || cv,
-            )
-        }
-        Term::Tag { tag, value } => {
-            let (v2, cv) = rewrite_pass(value);
-            (
-                Term::Tag {
-                    tag: tag.clone(),
-                    value: Box::new(v2),
-                },
-                cv,
-            )
-        }
-        Term::CellId { arrow } => {
-            let (a2, ca) = rewrite_pass(arrow);
-            (
-                Term::CellId {
-                    arrow: Box::new(a2),
-                },
-                ca,
-            )
-        }
-        Term::CellCompV { first, second } => {
-            let (f2, cf) = rewrite_pass(first);
-            let (s2, cs) = rewrite_pass(second);
-            (
-                Term::CellCompV {
-                    first: Box::new(f2),
-                    second: Box::new(s2),
-                },
-                cf || cs,
-            )
-        }
-        Term::Whisker { side, arrow, cell } => {
-            let (a2, ca) = rewrite_pass(arrow);
-            let (c2, cc) = rewrite_pass(cell);
-            (
-                Term::Whisker {
-                    side: side.clone(),
-                    arrow: Box::new(a2),
-                    cell: Box::new(c2),
-                },
-                ca || cc,
-            )
-        }
-        Term::Univalence { equiv } => {
-            let (e2, ce) = rewrite_pass(equiv);
-            (
-                Term::Univalence {
-                    equiv: Box::new(e2),
-                },
-                ce,
-            )
-        }
-        Term::Glue { family, path } => {
-            let (f2, cf) = rewrite_pass(family);
-            let (p2, cp) = rewrite_pass(path);
-            (
-                Term::Glue {
-                    family: Box::new(f2),
-                    path: Box::new(p2),
-                },
-                cf || cp,
-            )
-        }
-        Term::Fibrant { base, family } => {
-            let (b2, cb) = rewrite_pass(base);
-            let (f2, cf) = rewrite_pass(family);
-            (
-                Term::Fibrant {
-                    base: Box::new(b2),
-                    family: Box::new(f2),
-                },
-                cb || cf,
-            )
-        }
-        Term::JElim { path, motive, base } => {
-            let (p2, cp) = rewrite_pass(path);
-            let (m2, cm) = rewrite_pass(motive);
-            let (b2, cb) = rewrite_pass(base);
-            (
-                Term::JElim {
-                    path: Box::new(p2),
-                    motive: Box::new(m2),
-                    base: Box::new(b2),
-                },
+                with_children(td, &[("path", p2), ("motive", m2), ("base", b2)]),
                 cp || cm || cb,
             )
         }
-        Term::Refine { sort, predicate } => {
-            let (s2, cs) = rewrite_pass(sort);
-            let (p2, cp) = rewrite_pass(predicate);
-            (
-                Term::Refine {
-                    sort: Box::new(s2),
-                    predicate: Box::new(p2),
-                },
-                cs || cp,
-            )
+        "Refine" => {
+            let (s2, cs) = pass_req(td, "sort");
+            let (p2, cp) = pass_req(td, "predicate");
+            (with_children(td, &[("sort", s2), ("predicate", p2)]), cs || cp)
         }
-        Term::Cobind { grade, body } => {
-            let (g2, cg) = rewrite_pass(grade);
-            let (b2, cb) = rewrite_pass(body);
-            (
-                Term::Cobind {
-                    grade: Box::new(g2),
-                    body: Box::new(b2),
-                },
-                cg || cb,
-            )
+        "Cobind" => {
+            let (g2, cg) = pass_req(td, "grade");
+            let (b2, cb) = pass_req(td, "body");
+            (with_children(td, &[("grade", g2), ("body", b2)]), cg || cb)
         }
+        // Leaf variants (no child schemes) and unknown tags: unchanged.
+        _ => (td.clone(), false),
     };
 
     // Then try root rewrites on the (children-normalized) scheme. Repeat at
@@ -457,7 +357,7 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
     let mut cur = g_norm;
     let mut root_changed = false;
     loop {
-        match rewrite_root(&cur) {
+        match rewrite_root_td(&cur) {
             Some(next) => {
                 cur = next;
                 root_changed = true;
@@ -474,15 +374,15 @@ fn rewrite_pass(scheme: &Term) -> (Term, bool) {
 /// If fuel is exhausted before a fixpoint, the result is the
 /// partially-normalized scheme (`law_equal` may then report false negatives).
 pub fn normalize(scheme: &Term, fuel: usize) -> Term {
-    let mut cur = scheme.clone();
+    let mut cur = TermData::from_term(scheme);
     for _ in 0..fuel {
-        let (next, changed) = rewrite_pass(&cur);
+        let (next, changed) = rewrite_pass_td(&cur);
         if !changed {
             break;
         }
         cur = next;
     }
-    cur
+    cur.to_term().unwrap_or_else(|_| scheme.clone())
 }
 
 /// Two schemes are `law_equal` iff they normalize to the same form under
@@ -511,60 +411,75 @@ pub fn law_equal(a: &Term, b: &Term) -> bool {
 // (the outer `First` is the trigger) and `Seq(First(f), arr("h"))` (where
 // `First` is not at the root).
 
-/// Does the scheme use the `First` combinator anywhere in its tree?
-/// Mirrors `UsesFirst` from the Lean mechanization.
-pub fn uses_first(scheme: &Term) -> bool {
-    match scheme {
-        Term::First { .. } => true,
-        Term::Op { args, .. } => args.iter().any(uses_first),
-        Term::Seq { fst, snd } => uses_first(fst) || uses_first(snd),
-        Term::Choice { l, r } => uses_first(l) || uses_first(r),
-        Term::Loop { body } => uses_first(body),
-        Term::App { callee, args } => uses_first(callee) || args.iter().any(uses_first),
-        Term::Handle { body, impl_, .. } => uses_first(body) || uses_first(impl_),
-        Term::Rewrite { source, target, .. } => uses_first(source) || uses_first(target),
-        Term::Arr { .. } | Term::Child { .. } => false,
-        Term::Iter {
-            fuel,
-            predicate,
-            step,
-            initial,
-        } => uses_first(fuel) || uses_first(predicate) || uses_first(step) || uses_first(initial),
-        Term::Path {
-            endpoints: (a, b),
-            witness,
-        } => {
-            let mut r = uses_first(a) || uses_first(b);
-            if let Some(w) = witness {
-                r = r || uses_first(w);
-            }
-            r
-        }
-        Term::Equiv { a, b, path } => {
-            let mut r = uses_first(a) || uses_first(b);
-            if let Some(p) = path {
-                r = r || uses_first(p);
-            }
-            r
-        }
-        Term::Const { .. } => false,
-        Term::Src { cell } => uses_first(cell),
-        Term::Tgt { cell } => uses_first(cell),
-        Term::RecordProj { record, .. } => uses_first(record),
-        Term::RecordWith { record, value, .. } => uses_first(record) || uses_first(value),
-        Term::Tag { value, .. } => uses_first(value),
-        Term::CellId { arrow } => uses_first(arrow),
-        Term::CellCompV { first, second } => uses_first(first) || uses_first(second),
-        Term::Whisker { arrow, cell, .. } => uses_first(arrow) || uses_first(cell),
-        Term::Univalence { equiv } => uses_first(equiv),
-        Term::Glue { family, path } => uses_first(family) || uses_first(path),
-        Term::Fibrant { base, family } => uses_first(base) || uses_first(family),
-        Term::JElim { path, motive, base } => {
-            uses_first(path) || uses_first(motive) || uses_first(base)
-        }
-        Term::Refine { sort, predicate } => uses_first(sort) || uses_first(predicate),
-        Term::Cobind { grade, body } => uses_first(grade) || uses_first(body),
+/// Does a child field of `td` use the `First` combinator? Missing/null
+/// fields do not.
+fn child_uses_first(td: &TermData, field: &str) -> bool {
+    match td.get_term(field) {
+        Some(child) if !child.as_value().is_null() => uses_first_td(&child),
+        _ => false,
     }
+}
+
+/// Does a list child field of `td` use the `First` combinator in any element?
+fn children_uses_first(td: &TermData, field: &str) -> bool {
+    td.get_term_list(field).iter().any(uses_first_td)
+}
+
+/// Does the scheme use the `First` combinator anywhere in its tree
+/// (TermData form)? Mirrors `UsesFirst` from the Lean mechanization.
+fn uses_first_td(td: &TermData) -> bool {
+    match td.tag() {
+        "First" => true,
+        "Op" => children_uses_first(td, "args"),
+        "App" => child_uses_first(td, "callee") || children_uses_first(td, "args"),
+        "Seq" => child_uses_first(td, "fst") || child_uses_first(td, "snd"),
+        "Choice" => child_uses_first(td, "l") || child_uses_first(td, "r"),
+        "Loop" => child_uses_first(td, "body"),
+        "Handle" => child_uses_first(td, "body") || child_uses_first(td, "impl_"),
+        "Rewrite" => child_uses_first(td, "source") || child_uses_first(td, "target"),
+        "Iter" => {
+            child_uses_first(td, "fuel")
+                || child_uses_first(td, "predicate")
+                || child_uses_first(td, "step")
+                || child_uses_first(td, "initial")
+        }
+        "Path" => {
+            child_uses_first(td, "from")
+                || child_uses_first(td, "to")
+                || child_uses_first(td, "witness")
+        }
+        "Equiv" => {
+            child_uses_first(td, "a")
+                || child_uses_first(td, "b")
+                || child_uses_first(td, "path")
+        }
+        "Src" | "Tgt" => child_uses_first(td, "cell"),
+        "RecordProj" => child_uses_first(td, "record"),
+        "RecordWith" => child_uses_first(td, "record") || child_uses_first(td, "value"),
+        "Tag" => child_uses_first(td, "value"),
+        "CellId" => child_uses_first(td, "arrow"),
+        "CellCompV" => child_uses_first(td, "first") || child_uses_first(td, "second"),
+        "Whisker" => child_uses_first(td, "arrow") || child_uses_first(td, "cell"),
+        "Univalence" => child_uses_first(td, "equiv"),
+        "Glue" => child_uses_first(td, "family") || child_uses_first(td, "path"),
+        "Fibrant" => child_uses_first(td, "base") || child_uses_first(td, "family"),
+        "JElim" => {
+            child_uses_first(td, "path")
+                || child_uses_first(td, "motive")
+                || child_uses_first(td, "base")
+        }
+        "Refine" => child_uses_first(td, "sort") || child_uses_first(td, "predicate"),
+        "Cobind" => child_uses_first(td, "grade") || child_uses_first(td, "body"),
+        // Leaf variants and unknown tags do not use `First`.
+        _ => false,
+    }
+}
+
+/// Does the scheme use the `First` combinator anywhere in its tree?
+/// Mirrors `UsesFirst` from the Lean mechanization. Thin `&Term` wrapper
+/// around [`uses_first_td`].
+pub fn uses_first(scheme: &Term) -> bool {
+    uses_first_td(&TermData::from_term(scheme))
 }
 
 // ============================================================================

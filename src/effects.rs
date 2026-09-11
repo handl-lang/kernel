@@ -46,6 +46,8 @@
 
 use std::collections::BTreeSet;
 
+use plugin_engine::TermData;
+
 use crate::term::Term;
 
 /// An effect row: a set of operation names (the "labelled" part) plus an
@@ -200,18 +202,110 @@ impl std::fmt::Display for EffectRow {
     }
 }
 
-/// Extract a grade name from a grade term.
-fn grade_name(grade: &Term) -> String {
-    match grade {
-        Term::Arr { value } => value.as_str().unwrap_or("?").to_string(),
-        _ => "?".to_string(),
+/// Extract a grade name from a grade term (TermData form).
+fn grade_name_td(grade: &TermData) -> String {
+    if grade.tag() == "Arr" {
+        grade
+            .get("value")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?")
+            .to_string()
+    } else {
+        "?".to_string()
     }
+}
+
+/// Infer a coeffect row (TermData form): the body row with every operation
+/// marked by the grade.
+fn infer_coeffect_td(grade: &TermData, body: &TermData) -> EffectRow {
+    let grade = grade_name_td(grade);
+    infer_effect_row_td(body).coeffect(&grade)
 }
 
 /// Infer a coeffect row: the body row with every operation marked by the grade.
 pub fn infer_coeffect(grade: &Term, body: &Term) -> EffectRow {
-    let grade = grade_name(grade);
-    infer_effect_row(body).coeffect(&grade)
+    infer_coeffect_td(&TermData::from_term(grade), &TermData::from_term(body))
+}
+
+/// Recurse into a child field of `td` and return its inferred effect row.
+/// Missing or null fields contribute an empty row (no managed capabilities).
+fn row_of_child(td: &TermData, field: &str) -> EffectRow {
+    match td.get_term(field) {
+        Some(child) if !child.as_value().is_null() => infer_effect_row_td(&child),
+        _ => EffectRow::empty(),
+    }
+}
+
+/// Recurse into a list child field of `td` and return the union of every
+/// element's inferred effect row.
+fn row_of_children(td: &TermData, field: &str) -> EffectRow {
+    let mut row = EffectRow::empty();
+    for child in td.get_term_list(field) {
+        row = row.union(&infer_effect_row_td(&child));
+    }
+    row
+}
+
+/// Infer the effect row of a [`TermData`] (tagged-record form) by structural
+/// inspection. This is the data-driven counterpart of [`infer_effect_row`];
+/// the public [`infer_effect_row`] is a thin wrapper that converts a `&Term`
+/// via [`TermData::from_term`] and dispatches here.
+fn infer_effect_row_td(td: &TermData) -> EffectRow {
+    match td.tag() {
+        // Concrete base arrows and pure constants manage no capability.
+        "Op" | "Arr" | "Child" | "Const" => EffectRow::empty(),
+        // Combinators: thread/union the children's rows.
+        "Seq" => row_of_child(td, "fst").union(&row_of_child(td, "snd")),
+        "First" => row_of_child(td, "inner"),
+        "Choice" => row_of_child(td, "l").union(&row_of_child(td, "r")),
+        "Loop" => row_of_child(td, "body"),
+        "App" => row_of_child(td, "callee").union(&row_of_children(td, "args")),
+        // The handler site: `target` is a capability this graph manages, so
+        // it is added to the row. The body and impl may manage further
+        // capabilities (their own nested handles), which are unioned in.
+        "Handle" => {
+            let target = td.get_str("target").unwrap_or("").to_string();
+            row_of_child(td, "body")
+                .union(&row_of_child(td, "impl_"))
+                .insert(&target)
+        }
+        "Rewrite" => row_of_child(td, "source").union(&row_of_child(td, "target")),
+        "Iter" => row_of_child(td, "fuel")
+            .union(&row_of_child(td, "predicate"))
+            .union(&row_of_child(td, "step"))
+            .union(&row_of_child(td, "initial")),
+        "Path" => {
+            let mut row = row_of_child(td, "from").union(&row_of_child(td, "to"));
+            row = row.union(&row_of_child(td, "witness"));
+            row
+        }
+        "Equiv" => {
+            let mut row = row_of_child(td, "a").union(&row_of_child(td, "b"));
+            row = row.union(&row_of_child(td, "path"));
+            row
+        }
+        "Src" => row_of_child(td, "cell"),
+        "Tgt" => row_of_child(td, "cell"),
+        "RecordProj" => row_of_child(td, "record"),
+        "RecordWith" => row_of_child(td, "record").union(&row_of_child(td, "value")),
+        "Tag" => row_of_child(td, "value"),
+        "CellId" => row_of_child(td, "arrow"),
+        "CellCompV" => row_of_child(td, "first").union(&row_of_child(td, "second")),
+        "Whisker" => row_of_child(td, "arrow").union(&row_of_child(td, "cell")),
+        "Univalence" => row_of_child(td, "equiv"),
+        "Glue" => row_of_child(td, "family").union(&row_of_child(td, "path")),
+        "Fibrant" => row_of_child(td, "base").union(&row_of_child(td, "family")),
+        "JElim" => row_of_child(td, "path")
+            .union(&row_of_child(td, "motive"))
+            .union(&row_of_child(td, "base")),
+        "Refine" => row_of_child(td, "sort").union(&row_of_child(td, "predicate")),
+        "Cobind" => match (td.get_term("grade"), td.get_term("body")) {
+            (Some(g), Some(b)) => infer_coeffect_td(&g, &b),
+            _ => EffectRow::empty(),
+        },
+        // Unknown / malformed tags contribute no managed capabilities.
+        _ => EffectRow::empty(),
+    }
 }
 
 /// Infer the effect row of a [`Term`] by structural inspection.
@@ -247,88 +341,7 @@ pub fn infer_coeffect(grade: &Term, body: &Term) -> EffectRow {
 ///   handle manages the `target` capability), unioned with the body's and
 ///   impl's rows. The result is `{target} ∪ infer(body) ∪ infer(impl_)`.
 pub fn infer_effect_row(scheme: &Term) -> EffectRow {
-    match scheme {
-        // Concrete base arrows manage no capability.
-        Term::Op { .. } => EffectRow::empty(),
-        // Combinators: thread/union the children's rows.
-        Term::Seq { fst, snd } => infer_effect_row(fst).union(&infer_effect_row(snd)),
-        Term::First { inner } => infer_effect_row(inner),
-        Term::Choice { l, r } => infer_effect_row(l).union(&infer_effect_row(r)),
-        Term::Loop { body } => infer_effect_row(body),
-        Term::App { callee, args } => {
-            let mut row = infer_effect_row(callee);
-            for a in args {
-                row = row.union(&infer_effect_row(a));
-            }
-            row
-        }
-        // The handler site: `target` is a capability this graph manages, so
-        // it is added to the row. The body and impl may manage further
-        // capabilities (their own nested handles), which are unioned in.
-        Term::Handle {
-            body,
-            target,
-            impl_,
-        } => {
-            let body_row = infer_effect_row(body);
-            let impl_row = infer_effect_row(impl_);
-            body_row.union(&impl_row).insert(target)
-        }
-        Term::Rewrite { source, target, .. } => {
-            infer_effect_row(source).union(&infer_effect_row(target))
-        }
-        // Pure constants and child projections have no effects.
-        Term::Arr { .. } | Term::Child { .. } => EffectRow::empty(),
-        Term::Iter {
-            fuel,
-            predicate,
-            step,
-            initial,
-        } => infer_effect_row(fuel)
-            .union(&infer_effect_row(predicate))
-            .union(&infer_effect_row(step))
-            .union(&infer_effect_row(initial)),
-        Term::Path {
-            endpoints: (a, b),
-            witness,
-        } => {
-            let mut row = infer_effect_row(a).union(&infer_effect_row(b));
-            if let Some(w) = witness {
-                row = row.union(&infer_effect_row(w));
-            }
-            row
-        }
-        Term::Equiv { a, b, path } => {
-            let mut row = infer_effect_row(a).union(&infer_effect_row(b));
-            if let Some(p) = path {
-                row = row.union(&infer_effect_row(p));
-            }
-            row
-        }
-        Term::Const { .. } => EffectRow::empty(),
-        Term::Src { cell } => infer_effect_row(cell),
-        Term::Tgt { cell } => infer_effect_row(cell),
-        Term::RecordProj { record, .. } => infer_effect_row(record),
-        Term::RecordWith { record, value, .. } => {
-            infer_effect_row(record).union(&infer_effect_row(value))
-        }
-        Term::Tag { value, .. } => infer_effect_row(value),
-        Term::CellId { arrow } => infer_effect_row(arrow),
-        Term::CellCompV { first, second } => {
-            infer_effect_row(first).union(&infer_effect_row(second))
-        }
-        Term::Whisker { arrow, cell, .. } => infer_effect_row(arrow).union(&infer_effect_row(cell)),
-        Term::Univalence { equiv } => infer_effect_row(equiv),
-        Term::Glue { family, path } => infer_effect_row(family).union(&infer_effect_row(path)),
-        Term::Fibrant { base, family } => infer_effect_row(base).union(&infer_effect_row(family)),
-        Term::JElim { path, motive, base } => infer_effect_row(path)
-            .union(&infer_effect_row(motive))
-            .union(&infer_effect_row(base)),
-        Term::Refine { sort, predicate } => {
-            infer_effect_row(sort).union(&infer_effect_row(predicate))
-        }
-        Term::Cobind { grade, body } => infer_coeffect(grade, body),
-    }
+    infer_effect_row_td(&TermData::from_term(scheme))
 }
 
 /// A [`Term`] paired with its inferred [`EffectRow`].
