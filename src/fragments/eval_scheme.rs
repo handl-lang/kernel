@@ -71,20 +71,45 @@ impl Fragment for EvalSchemeDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::term::{ArrSource, Term};
+    use plugin_engine::TermData;
     use serde_json::Value;
+
+    /// Convert `TermData` back to `Term` for APIs that require `Term`.
+    fn t(td: TermData) -> Term {
+        td.to_term().expect("TermData -> Term conversion")
+    }
+
+    /// Native op without a literal payload (mirrors `Term::arr_native`).
+    fn op_native(name: &str, args: Vec<TermData>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(Value::Null)
+        } else {
+            TermData::op(name, args, &ArrSource::Native, None)
+        }
+    }
+
+    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(lit.into())
+        } else {
+            TermData::op(name, args, &ArrSource::Native, Some(lit.into()))
+        }
+    }
 
     #[test]
     fn construct_and_accessors() {
         let def = EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Term::arr_native(
+            t(op_native(
                 "add",
                 vec![
-                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    op_lit("proj_child", vec![], Value::from(0u64)),
+                    op_lit("proj_child", vec![], Value::from(1u64)),
                 ],
-            ),
+            )),
         )
         .with_replaces(vec!["eval.add.old".into()])
         .with_requires(vec!["token.plus".into()]);
@@ -100,7 +125,7 @@ mod tests {
         let def = EvalSchemeDef::new(
             "eval.lit",
             "lit",
-            Term::arr_native_lit("const", vec![], Value::from(42)),
+            t(op_lit("const", vec![], Value::from(42))),
         );
         let j = serde_json::to_string(&def).unwrap();
         let back: EvalSchemeDef = serde_json::from_str(&j).unwrap();
@@ -109,8 +134,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        let a = EvalSchemeDef::new("a", "k", Term::arr_native("id", vec![]));
-        let b = EvalSchemeDef::new("a", "k", Term::arr_native("id", vec![]));
+        let a = EvalSchemeDef::new("a", "k", t(op_native("id", vec![])));
+        let b = EvalSchemeDef::new("a", "k", t(op_native("id", vec![])));
         assert_eq!(a, b);
     }
 }

@@ -89,14 +89,31 @@ impl Fragment for TypeRuleDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::term::{ArrSource, Term};
+    use plugin_engine::TermData;
     use serde_json::Value;
+
+    /// Convert `TermData` back to `Term` for APIs that require `Term`.
+    fn t(td: TermData) -> Term {
+        td.to_term().expect("TermData -> Term conversion")
+    }
+
+    /// Judgment op without a literal payload (mirrors `Term::arr_judgment`).
+    fn op_judgment(name: &str, args: Vec<TermData>) -> TermData {
+        TermData::op(name, args, &ArrSource::Judgment, None)
+    }
+
+    /// Judgment op with a literal payload (mirrors `Term::arr_judgment_lit`).
+    fn op_judgment_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
+        TermData::op(name, args, &ArrSource::Judgment, Some(lit.into()))
+    }
 
     #[test]
     fn construct_and_accessors() {
         let def = TypeRuleDef::new(
             "type.lit",
             "lit",
-            Term::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
+            t(op_judgment_lit("synth_child", vec![], Value::from(0u64))),
         )
         .with_replaces(vec!["type.lit.old".into()])
         .with_requires(vec!["type.bool".into()]);
@@ -113,9 +130,9 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lambda",
             "lambda",
-            Term::arr_judgment("construct", vec![]),
+            t(op_judgment("construct", vec![])),
         )
-        .with_check(Term::arr_judgment("check_child", vec![]));
+        .with_check(t(op_judgment("check_child", vec![])));
         assert!(def.check.is_some());
     }
 
@@ -124,7 +141,7 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lit",
             "lit",
-            Term::arr_judgment_lit("synth_child", vec![], Value::from(0u64)),
+            t(op_judgment_lit("synth_child", vec![], Value::from(0u64))),
         );
         let j = serde_json::to_string(&def).unwrap();
         let back: TypeRuleDef = serde_json::from_str(&j).unwrap();
@@ -136,9 +153,9 @@ mod tests {
         let def = TypeRuleDef::new(
             "type.lambda",
             "lambda",
-            Term::arr_judgment("construct", vec![]),
+            t(op_judgment("construct", vec![])),
         )
-        .with_check(Term::arr_judgment("check_child", vec![]));
+        .with_check(t(op_judgment("check_child", vec![])));
         let j = serde_json::to_string(&def).unwrap();
         let back: TypeRuleDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);
@@ -146,7 +163,7 @@ mod tests {
 
     #[test]
     fn serde_omits_check_when_none() {
-        let def = TypeRuleDef::new("type.lit", "lit", Term::arr_judgment("id", vec![]));
+        let def = TypeRuleDef::new("type.lit", "lit", t(op_judgment("id", vec![])));
         let j = serde_json::to_string(&def).unwrap();
         assert!(
             !j.contains("check"),
@@ -156,8 +173,8 @@ mod tests {
 
     #[test]
     fn equality() {
-        let a = TypeRuleDef::new("a", "k", Term::arr_judgment("id", vec![]));
-        let b = TypeRuleDef::new("a", "k", Term::arr_judgment("id", vec![]));
+        let a = TypeRuleDef::new("a", "k", t(op_judgment("id", vec![])));
+        let b = TypeRuleDef::new("a", "k", t(op_judgment("id", vec![])));
         assert_eq!(a, b);
     }
 }

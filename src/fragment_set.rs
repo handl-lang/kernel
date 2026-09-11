@@ -233,8 +233,23 @@ mod tests {
     use super::*;
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{CapabilityDecl, EvalSchemeDef, GrammarRow, OptionSchema, TokenKindDef};
-    use crate::term::Term;
+    use crate::term::{ArrSource, Term};
+    use plugin_engine::TermData;
     use serde_json::Value;
+
+    /// Convert `TermData` back to `Term` for APIs that require `Term`.
+    fn t(td: TermData) -> Term {
+        td.to_term().expect("TermData -> Term conversion")
+    }
+
+    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(lit.into())
+        } else {
+            TermData::op(name, args, &ArrSource::Native, Some(lit.into()))
+        }
+    }
 
     #[test]
     fn empty_set() {
@@ -292,7 +307,7 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "eval.x",
             "x",
-            Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
+            t(op_lit("proj_child", vec![], Value::from(0u64))),
         ))
         .unwrap();
         // Same identity key (node_kind "x"), different id/content → collision.
@@ -300,7 +315,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.x2",
                 "x",
-                Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                t(op_lit("proj_child", vec![], Value::from(1u64))),
             ))
             .unwrap_err();
         assert_eq!(
@@ -445,14 +460,14 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "e1",
             "binary.add",
-            Term::arr_native_lit("const", vec![], Value::Null),
+            t(op_lit("const", vec![], Value::Null)),
         ))
         .unwrap();
         let err = set
             .merge(EvalSchemeDef::new(
                 "e2",
                 "binary.add",
-                Term::arr_native_lit("const", vec![], Value::Null),
+                t(op_lit("const", vec![], Value::Null)),
             ))
             .unwrap_err();
         assert_eq!(
@@ -586,7 +601,7 @@ mod tests {
         set.merge(EvalSchemeDef::new(
             "e1",
             "binary.add",
-            Term::arr_native_lit("const", vec![], Value::Null),
+            t(op_lit("const", vec![], Value::Null)),
         ))
         .unwrap();
         // Identity key for EvalSchemeDef is node_kind, not id.
