@@ -67,10 +67,12 @@
 
 use std::collections::HashMap;
 
+use plugin_engine::TermData;
+
 use crate::law_inference::{
     LawCheckResult, LawPattern, LawStatus, infer_laws, law_equal, uses_first,
 };
-use crate::term::Term;
+use crate::term::{ArrSource, Term};
 
 // ============================================================================
 // 1. VerifiedImpl and VerifiedImplStore (Mode 2)
@@ -291,8 +293,17 @@ fn check_functor_identity_runtime(scheme: &Term) -> LawCheckResult {
         return LawCheckResult::Violated;
     }
     // functor identity: first(id) = id  (ceFirstId)
-    let lhs = Term::first(Term::arr_native("id", vec![]));
-    let rhs = Term::arr_native("id", vec![]);
+    let lhs = TermData::first(TermData::op(
+        "id".to_string(),
+        vec![],
+        &ArrSource::Native,
+        None,
+    ))
+    .to_term()
+    .expect("check_functor_identity_runtime: TermData -> Term failed");
+    let rhs = TermData::op("id".to_string(), vec![], &ArrSource::Native, None)
+        .to_term()
+        .expect("check_functor_identity_runtime: TermData -> Term failed");
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -316,10 +327,14 @@ fn check_functor_composition_runtime(scheme: &Term) -> LawCheckResult {
         return LawCheckResult::Violated;
     }
     // functor composition: first(f;g) = first(f);first(g)  (ceFirstFusion)
-    let f = Term::arr_native("f", vec![]);
-    let g = Term::arr_native("g", vec![]);
-    let lhs = Term::first(Term::seq(f.clone(), g.clone()));
-    let rhs = Term::seq(Term::first(f), Term::first(g));
+    let f = TermData::op("f".to_string(), vec![], &ArrSource::Native, None);
+    let g = TermData::op("g".to_string(), vec![], &ArrSource::Native, None);
+    let lhs = TermData::first(TermData::seq(f.clone(), g.clone()))
+        .to_term()
+        .expect("check_functor_composition_runtime: TermData -> Term failed");
+    let rhs = TermData::seq(TermData::first(f), TermData::first(g))
+        .to_term()
+        .expect("check_functor_composition_runtime: TermData -> Term failed");
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {

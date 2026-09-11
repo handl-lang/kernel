@@ -47,8 +47,10 @@
 //! [`law_equal`](crate::law_inference::law_equal) from
 //! [`law_inference`](crate::law_inference).
 
+use plugin_engine::TermData;
+
 use crate::law_inference::law_equal;
-use crate::term::Term;
+use crate::term::{ArrSource, Term};
 use std::collections::HashMap;
 use std::fmt;
 
@@ -156,33 +158,45 @@ impl LawSubst {
 /// - [`Id`](LawExpr::Id) -> `Term::arr_native("id", [])`.
 /// - Combinators -> recurse structurally, mirroring `Term`.
 pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Term {
+    instantiate_td(expr, subst)
+        .to_term()
+        .expect("instantiate: TermData -> Term conversion failed")
+}
+
+/// Data-driven counterpart of [`instantiate`], operating on [`TermData`].
+///
+/// Constructs a `TermData` for each [`LawExpr`] variant, using the
+/// `TermData` constructors. The public [`instantiate`] wraps this and
+/// converts back to `Term`.
+fn instantiate_td(expr: &LawExpr, subst: &LawSubst) -> TermData {
     match expr {
-        LawExpr::Var(LawVar(name)) => subst.get(name).cloned().unwrap_or_else(|| {
-            panic!(
-                "unbound law variable: {} (all quantified vars must be bound)",
-                name
-            )
-        }),
-        LawExpr::Const(name) => Term::arr_native(name, vec![]),
-        LawExpr::Id => Term::arr_native("id", vec![]),
-        LawExpr::Seq(a, b) => Term::Seq {
-            fst: Box::new(instantiate(a, subst)),
-            snd: Box::new(instantiate(b, subst)),
-        },
-        LawExpr::First(a) => Term::First {
-            inner: Box::new(instantiate(a, subst)),
-        },
-        LawExpr::Choice(a, b) => Term::Choice {
-            l: Box::new(instantiate(a, subst)),
-            r: Box::new(instantiate(b, subst)),
-        },
-        LawExpr::Loop(a) => Term::Loop {
-            body: Box::new(instantiate(a, subst)),
-        },
-        LawExpr::App(callee, args) => Term::App {
-            callee: Box::new(instantiate(callee, subst)),
-            args: args.iter().map(|a| instantiate(a, subst)).collect(),
-        },
+        LawExpr::Var(LawVar(name)) => {
+            let scheme = subst.get(name).unwrap_or_else(|| {
+                panic!(
+                    "unbound law variable: {} (all quantified vars must be bound)",
+                    name
+                )
+            });
+            TermData::from_term(scheme)
+        }
+        LawExpr::Const(name) => {
+            // Preserve the `arr_native` special case: `arr_native("const", [])`
+            // produces `Const { value: Null }`, not `Op { name: "const" }`.
+            if name == "const" {
+                TermData::const_value(serde_json::Value::Null)
+            } else {
+                TermData::op(name.clone(), vec![], &ArrSource::Native, None)
+            }
+        }
+        LawExpr::Id => TermData::op("id".to_string(), vec![], &ArrSource::Native, None),
+        LawExpr::Seq(a, b) => TermData::seq(instantiate_td(a, subst), instantiate_td(b, subst)),
+        LawExpr::First(a) => TermData::first(instantiate_td(a, subst)),
+        LawExpr::Choice(a, b) => TermData::choice(instantiate_td(a, subst), instantiate_td(b, subst)),
+        LawExpr::Loop(a) => TermData::loop_feedback(instantiate_td(a, subst)),
+        LawExpr::App(callee, args) => {
+            let args_td: Vec<TermData> = args.iter().map(|a| instantiate_td(a, subst)).collect();
+            TermData::app(instantiate_td(callee, subst), args_td)
+        }
     }
 }
 
@@ -218,26 +232,33 @@ impl fmt::Display for LawCheckResult {
 ///   ceFirstFusion).
 /// - `first(arr("test_h"))`: a first-shaped arrow (tests nesting).
 fn test_arrows() -> Vec<Term> {
-    vec![
+    let arrows_td: Vec<TermData> = vec![
         // A generic opaque arrow. CutElim treats Arr(name) as opaque -- no
         // rewrite fires on it directly. This is the "default" case.
-        Term::arr_native("test_f", vec![]),
+        TermData::op("test_f".to_string(), vec![], &ArrSource::Native, None),
         // The identity arrow. Tests id-related rewrites: ceIdLeft
         // (seq(id, G) ==> G), ceIdRight (seq(G, id) ==> G), ceFirstId
         // (first(id) ==> id).
-        Term::arr_native("id", vec![]),
+        TermData::op("id".to_string(), vec![], &ArrSource::Native, None),
         // A composed arrow. Tests fusion rewrites: ceFirstFusion
         // (seq(first G, first H) ==> first(seq G H)).
-        Term::seq(
-            Term::arr_native("test_a", vec![]),
-            Term::arr_native("test_b", vec![]),
+        TermData::seq(
+            TermData::op("test_a".to_string(), vec![], &ArrSource::Native, None),
+            TermData::op("test_b".to_string(), vec![], &ArrSource::Native, None),
         ),
         // A first-shaped arrow. Tests nesting: first(first(...)) and
         // interaction between first and other combinators.
-        Term::First {
-            inner: Box::new(Term::arr_native("test_h", vec![])),
-        },
-    ]
+        TermData::first(TermData::op(
+            "test_h".to_string(),
+            vec![],
+            &ArrSource::Native,
+            None,
+        )),
+    ];
+    arrows_td
+        .into_iter()
+        .map(|td| td.to_term().expect("test_arrows: TermData -> Term conversion failed"))
+        .collect()
 }
 
 /// Generate test substitutions for a set of variables. Each variable gets

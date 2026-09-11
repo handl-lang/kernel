@@ -12,6 +12,8 @@
 
 use std::collections::BTreeSet;
 
+use plugin_engine::TermData;
+
 use crate::fragment::Fragment;
 use crate::language::Language;
 use crate::term::{ArrSource, Term};
@@ -22,119 +24,173 @@ use crate::term::{ArrSource, Term};
 /// Walks every `Term` node (recursing into `args`, `Seq`, `First`,
 /// `Choice`, `Loop`, and `App` children) and collects each foreign name.
 pub fn foreign_names(scheme: &Term) -> BTreeSet<String> {
+    let td = TermData::from_term(scheme);
     let mut out = BTreeSet::new();
-    collect_foreign(scheme, &mut out);
+    collect_foreign_td(&td, &mut out);
     out
 }
 
-fn collect_foreign(scheme: &Term, out: &mut BTreeSet<String>) {
-    match scheme {
-        Term::Op { args, source, .. } => {
-            if let ArrSource::Foreign(name) = source {
-                out.insert(name.clone());
+/// Data-driven counterpart of `collect_foreign`, operating on [`TermData`].
+///
+/// Dispatches on `td.tag()` and accesses fields via `get_term` /
+/// `get_term_list` / `arr_source`, recursing into child terms.
+fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
+    match td.tag() {
+        "Op" => {
+            if let Some(ArrSource::Foreign(name)) = td.arr_source() {
+                out.insert(name);
             }
-            for a in args {
-                collect_foreign(a, out);
-            }
-        }
-        Term::Seq { fst, snd } => {
-            collect_foreign(fst, out);
-            collect_foreign(snd, out);
-        }
-        Term::First { inner } => {
-            collect_foreign(inner, out);
-        }
-        Term::Choice { l, r } => {
-            collect_foreign(l, out);
-            collect_foreign(r, out);
-        }
-        Term::Loop { body } => {
-            collect_foreign(body, out);
-        }
-        Term::App { callee, args } => {
-            collect_foreign(callee, out);
-            for a in args {
-                collect_foreign(a, out);
+            for a in td.get_term_list("args") {
+                collect_foreign_td(&a, out);
             }
         }
-        Term::Handle { body, impl_, .. } => {
-            collect_foreign(body, out);
-            collect_foreign(impl_, out);
+        "Seq" => {
+            let fst = td.get_term("fst").expect("Seq: missing fst");
+            let snd = td.get_term("snd").expect("Seq: missing snd");
+            collect_foreign_td(&fst, out);
+            collect_foreign_td(&snd, out);
         }
-        Term::Rewrite { source, target, .. } => {
-            collect_foreign(source, out);
-            collect_foreign(target, out);
+        "First" => {
+            let inner = td.get_term("inner").expect("First: missing inner");
+            collect_foreign_td(&inner, out);
         }
-        Term::Arr { .. } => {}
-        Term::Iter {
-            fuel,
-            predicate,
-            step,
-            initial,
-        } => {
-            collect_foreign(fuel, out);
-            collect_foreign(predicate, out);
-            collect_foreign(step, out);
-            collect_foreign(initial, out);
+        "Choice" => {
+            let l = td.get_term("l").expect("Choice: missing l");
+            let r = td.get_term("r").expect("Choice: missing r");
+            collect_foreign_td(&l, out);
+            collect_foreign_td(&r, out);
         }
-        Term::Child { .. } => {}
-        Term::Path {
-            endpoints: (a, b),
-            witness,
-        } => {
-            collect_foreign(a, out);
-            collect_foreign(b, out);
-            if let Some(w) = witness {
-                collect_foreign(w, out);
+        "Loop" => {
+            let body = td.get_term("body").expect("Loop: missing body");
+            collect_foreign_td(&body, out);
+        }
+        "App" => {
+            let callee = td.get_term("callee").expect("App: missing callee");
+            collect_foreign_td(&callee, out);
+            for a in td.get_term_list("args") {
+                collect_foreign_td(&a, out);
             }
         }
-        Term::Equiv { a, b, path } => {
-            collect_foreign(a, out);
-            collect_foreign(b, out);
-            if let Some(p) = path {
-                collect_foreign(p, out);
+        "Handle" => {
+            let body = td.get_term("body").expect("Handle: missing body");
+            let impl_ = td.get_term("impl_").expect("Handle: missing impl_");
+            collect_foreign_td(&body, out);
+            collect_foreign_td(&impl_, out);
+        }
+        "Rewrite" => {
+            let source = td.get_term("source").expect("Rewrite: missing source");
+            let target = td.get_term("target").expect("Rewrite: missing target");
+            collect_foreign_td(&source, out);
+            collect_foreign_td(&target, out);
+        }
+        "Arr" | "Child" | "Const" => {}
+        "Iter" => {
+            let fuel = td.get_term("fuel").expect("Iter: missing fuel");
+            let predicate = td.get_term("predicate").expect("Iter: missing predicate");
+            let step = td.get_term("step").expect("Iter: missing step");
+            let initial = td.get_term("initial").expect("Iter: missing initial");
+            collect_foreign_td(&fuel, out);
+            collect_foreign_td(&predicate, out);
+            collect_foreign_td(&step, out);
+            collect_foreign_td(&initial, out);
+        }
+        "Path" => {
+            let from = td.get_term("from").expect("Path: missing from");
+            let to = td.get_term("to").expect("Path: missing to");
+            collect_foreign_td(&from, out);
+            collect_foreign_td(&to, out);
+            if let Some(witness) = td.get_term("witness") {
+                if !witness.as_value().is_null() {
+                    collect_foreign_td(&witness, out);
+                }
             }
         }
-        Term::Const { .. } => {}
-        Term::Src { cell } => collect_foreign(cell, out),
-        Term::Tgt { cell } => collect_foreign(cell, out),
-        Term::RecordProj { record, .. } => collect_foreign(record, out),
-        Term::RecordWith { record, value, .. } => {
-            collect_foreign(record, out);
-            collect_foreign(value, out);
+        "Equiv" => {
+            let a = td.get_term("a").expect("Equiv: missing a");
+            let b = td.get_term("b").expect("Equiv: missing b");
+            collect_foreign_td(&a, out);
+            collect_foreign_td(&b, out);
+            if let Some(path) = td.get_term("path") {
+                if !path.as_value().is_null() {
+                    collect_foreign_td(&path, out);
+                }
+            }
         }
-        Term::Tag { value, .. } => collect_foreign(value, out),
-        Term::CellId { arrow } => collect_foreign(arrow, out),
-        Term::CellCompV { first, second } => {
-            collect_foreign(first, out);
-            collect_foreign(second, out);
+        "Src" => {
+            let cell = td.get_term("cell").expect("Src: missing cell");
+            collect_foreign_td(&cell, out);
         }
-        Term::Whisker { arrow, cell, .. } => {
-            collect_foreign(arrow, out);
-            collect_foreign(cell, out);
+        "Tgt" => {
+            let cell = td.get_term("cell").expect("Tgt: missing cell");
+            collect_foreign_td(&cell, out);
         }
-        Term::Univalence { equiv } => collect_foreign(equiv, out),
-        Term::Glue { family, path } => {
-            collect_foreign(family, out);
-            collect_foreign(path, out);
+        "RecordProj" => {
+            let record = td.get_term("record").expect("RecordProj: missing record");
+            collect_foreign_td(&record, out);
         }
-        Term::Fibrant { base, family } => {
-            collect_foreign(base, out);
-            collect_foreign(family, out);
+        "RecordWith" => {
+            let record = td.get_term("record").expect("RecordWith: missing record");
+            let value = td.get_term("value").expect("RecordWith: missing value");
+            collect_foreign_td(&record, out);
+            collect_foreign_td(&value, out);
         }
-        Term::JElim { path, motive, base } => {
-            collect_foreign(path, out);
-            collect_foreign(motive, out);
-            collect_foreign(base, out);
+        "Tag" => {
+            let value = td.get_term("value").expect("Tag: missing value");
+            collect_foreign_td(&value, out);
         }
-        Term::Refine { sort, predicate } => {
-            collect_foreign(sort, out);
-            collect_foreign(predicate, out);
+        "CellId" => {
+            let arrow = td.get_term("arrow").expect("CellId: missing arrow");
+            collect_foreign_td(&arrow, out);
         }
-        Term::Cobind { grade, body } => {
-            collect_foreign(grade, out);
-            collect_foreign(body, out);
+        "CellCompV" => {
+            let first = td.get_term("first").expect("CellCompV: missing first");
+            let second = td.get_term("second").expect("CellCompV: missing second");
+            collect_foreign_td(&first, out);
+            collect_foreign_td(&second, out);
         }
+        "Whisker" => {
+            let arrow = td.get_term("arrow").expect("Whisker: missing arrow");
+            let cell = td.get_term("cell").expect("Whisker: missing cell");
+            collect_foreign_td(&arrow, out);
+            collect_foreign_td(&cell, out);
+        }
+        "Univalence" => {
+            let equiv = td.get_term("equiv").expect("Univalence: missing equiv");
+            collect_foreign_td(&equiv, out);
+        }
+        "Glue" => {
+            let family = td.get_term("family").expect("Glue: missing family");
+            let path = td.get_term("path").expect("Glue: missing path");
+            collect_foreign_td(&family, out);
+            collect_foreign_td(&path, out);
+        }
+        "Fibrant" => {
+            let base = td.get_term("base").expect("Fibrant: missing base");
+            let family = td.get_term("family").expect("Fibrant: missing family");
+            collect_foreign_td(&base, out);
+            collect_foreign_td(&family, out);
+        }
+        "JElim" => {
+            let path = td.get_term("path").expect("JElim: missing path");
+            let motive = td.get_term("motive").expect("JElim: missing motive");
+            let base = td.get_term("base").expect("JElim: missing base");
+            collect_foreign_td(&path, out);
+            collect_foreign_td(&motive, out);
+            collect_foreign_td(&base, out);
+        }
+        "Refine" => {
+            let sort = td.get_term("sort").expect("Refine: missing sort");
+            let predicate = td.get_term("predicate").expect("Refine: missing predicate");
+            collect_foreign_td(&sort, out);
+            collect_foreign_td(&predicate, out);
+        }
+        "Cobind" => {
+            let grade = td.get_term("grade").expect("Cobind: missing grade");
+            let body = td.get_term("body").expect("Cobind: missing body");
+            collect_foreign_td(&grade, out);
+            collect_foreign_td(&body, out);
+        }
+        _ => unreachable!(),
     }
 }
 
