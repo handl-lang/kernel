@@ -559,7 +559,12 @@ mod tests {
     use crate::fragments::ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule};
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{RewriteStep, TransformCondition, TransformRule};
-    use crate::term::Term;
+    use crate::term::{ArrSource, Term};
+    use plugin_engine::TermData;
+
+    fn td(t: TermData) -> Term {
+        t.to_term().expect("TermData -> Term")
+    }
 
     #[test]
     fn new_is_empty_with_v2() {
@@ -640,7 +645,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Term::arr_native("add", vec![]),
+                td(TermData::op("add", vec![], &ArrSource::Native, None)),
             ))
             .unwrap();
         other
@@ -648,7 +653,7 @@ mod tests {
             .merge(TypeRuleDef::new(
                 "t1",
                 "lit",
-                Term::arr_judgment("synth_child", vec![]),
+                td(TermData::op("synth_child", vec![], &ArrSource::Judgment, None)),
             ))
             .unwrap();
         other
@@ -681,7 +686,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e1",
                 "binary.add",
-                Term::arr_native("add", vec![]),
+                td(TermData::op("add", vec![], &ArrSource::Native, None)),
             ))
             .unwrap();
         // Set up the base to collide on the eval set.
@@ -689,7 +694,7 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "e0",
                 "binary.add",
-                Term::arr_native("add", vec![]),
+                td(TermData::op("add", vec![], &ArrSource::Native, None)),
             ))
             .unwrap();
         let snapshot = base.clone();

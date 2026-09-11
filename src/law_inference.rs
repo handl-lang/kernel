@@ -528,8 +528,11 @@ fn check_functor_identity(arrow: &Term) -> LawCheckResult {
         return LawCheckResult::NotApplicable;
     }
     // functor identity: first(id) = id  (ceFirstId)
-    let lhs = Term::first(Term::arr_native("id", vec![]));
-    let rhs = Term::arr_native("id", vec![]);
+    let id_td = TermData::op("id", vec![], &ArrSource::Native, None);
+    let lhs = TermData::first(id_td.clone())
+        .to_term()
+        .expect("TermData -> Term");
+    let rhs = id_td.to_term().expect("TermData -> Term");
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {
@@ -549,10 +552,14 @@ fn check_functor_composition(arrow: &Term) -> LawCheckResult {
         return LawCheckResult::NotApplicable;
     }
     // functor composition: first(f;g) = first(f);first(g)  (ceFirstFusion)
-    let f = Term::arr_native("f", vec![]);
-    let g = Term::arr_native("g", vec![]);
-    let lhs = Term::first(Term::seq(f.clone(), g.clone()));
-    let rhs = Term::seq(Term::first(f), Term::first(g));
+    let f = TermData::op("f", vec![], &ArrSource::Native, None);
+    let g = TermData::op("g", vec![], &ArrSource::Native, None);
+    let lhs = TermData::first(TermData::seq(f.clone(), g.clone()))
+        .to_term()
+        .expect("TermData -> Term");
+    let rhs = TermData::seq(TermData::first(f), TermData::first(g))
+        .to_term()
+        .expect("TermData -> Term");
     if law_equal(&lhs, &rhs) {
         LawCheckResult::Satisfied
     } else {

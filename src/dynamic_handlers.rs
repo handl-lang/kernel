@@ -414,15 +414,21 @@ mod tests {
     use super::*;
 
     fn first_f() -> Term {
-        Term::first(Term::arr_native("f", vec![]))
+        TermData::first(TermData::op("f", vec![], &ArrSource::Native, None))
+            .to_term()
+            .expect("TermData -> Term")
     }
 
     fn arr_sort() -> Term {
-        Term::arr_native("sort", vec![])
+        TermData::op("sort", vec![], &ArrSource::Native, None)
+            .to_term()
+            .expect("TermData -> Term")
     }
 
     fn arr_not_a_functor() -> Term {
-        Term::arr_native("not_a_functor", vec![])
+        TermData::op("not_a_functor", vec![], &ArrSource::Native, None)
+            .to_term()
+            .expect("TermData -> Term")
     }
 
     // --- Mode 2: registration ---
