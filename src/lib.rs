@@ -22,8 +22,9 @@
 
 use std::ffi::c_void;
 use std::fmt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use rustc_hash::FxHashMap;
 use serde_json::{Map, Number, Value};
@@ -133,6 +134,157 @@ impl fmt::Debug for ForeignResource {
             .finish()
     }
 }
+// ---------------------------------------------------------------------------
+// Sym — nominal identity (ADR-0106 §2, Phase 2 kernel primitives)
+// ---------------------------------------------------------------------------
+
+/// Global counter minting fresh nominal handles.
+///
+/// `sym()` mutates this global identity space (ADR-0106 "Negative":
+/// cross-process/restart identity needs a stable naming or session-identity
+/// story — follow-up ADR). Identity is the `handle`, not the display name:
+/// two distinct syms with equal names are never equal, and a deserialized
+/// sym compares equal to the live sym it was serialized from because the
+/// handle is part of the explicit serialized data.
+static SYM_NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
+
+/// A nominal identity object — the `sym()` primitive of ADR-0106 §2.
+///
+/// A `Sym` is a first-class nominal identity with:
+///
+/// - a unique `handle` minted from a global counter (the identity — used
+///   for equality and hashing),
+/// - a display `name` (presentation only; two syms with the same name are
+///   never equal — only the handle decides),
+/// - an optional `parent`, which must itself be a [`Sym`]. The parent
+///   structure is a single-parent tree by construction (diamonds are
+///   impossible: each sym has exactly one parent, fixed at construction),
+///   and cycles are impossible because a parent is always constructed
+///   before its child (and JSON decoding is a tree, so it cannot create
+///   one either).
+///
+/// # Equality
+///
+/// Identity equality, not structural equality: a sym equals itself, and two
+/// distinct syms are never equal — even with identical names and identical
+/// parent chains. `Sym`'s `PartialEq` compares handles; the display name is
+/// not part of identity. Hashing agrees (`Hash` hashes the handle), so
+/// hash/eq consistency holds.
+///
+/// # Serializability
+///
+/// The JSON encoding is `{"__sym__": {"handle": <n>, "name": "...",
+/// "parent": <nested sym or null>}}` — explicit data with no closures and
+/// no hidden state. Round-tripping preserves the handle, so a deserialized
+/// sym compares equal to the live sym it was serialized from (within a
+/// process; cross-process identity is a follow-up ADR per ADR-0106).
+#[derive(Clone, Debug)]
+pub struct Sym {
+    /// The unique nominal handle (identity). Minted from
+    /// [`SYM_NEXT_HANDLE`] at construction; preserved by serialization.
+    handle: u64,
+    /// Display name — presentation only, never part of identity.
+    name: Rc<str>,
+    /// Optional nominal parent (also a `Sym`). Single parent, no cycles.
+    parent: Option<Rc<Sym>>,
+}
+
+impl Sym {
+    /// Mint a fresh root nominal identity (no parent), with `name` as its
+    /// display name.
+    pub fn fresh(name: &str) -> Sym {
+        let handle = SYM_NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
+        Sym {
+            handle,
+            name: Rc::from(name),
+            parent: None,
+        }
+    }
+
+    /// Mint a fresh nominal identity whose parent is `parent` (also
+    /// nominal). The parent chain is fixed at construction.
+    pub fn fresh_with_parent(name: &str, parent: &Sym) -> Sym {
+        let handle = SYM_NEXT_HANDLE.fetch_add(1, Ordering::SeqCst);
+        Sym {
+            handle,
+            name: Rc::from(name),
+            parent: Some(Rc::new(parent.clone())),
+        }
+    }
+
+    /// The unique nominal handle — the identity of this sym.
+    pub fn handle(&self) -> u64 {
+        self.handle
+    }
+
+    /// The display name (presentation only — see the type docs).
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The nominal parent, or `None` for a root sym.
+    pub fn parent(&self) -> Option<&Sym> {
+        self.parent.as_deref()
+    }
+
+    /// Strict descendant check: `true` iff `other` appears in this sym's
+    /// parent chain (excluding the sym itself — a sym is not its own
+    /// strict descendant).
+    pub fn is_descendant_of(&self, other: &Sym) -> bool {
+        let mut cur = self.parent.as_deref();
+        while let Some(p) = cur {
+            if p == other {
+                return true;
+            }
+            cur = p.parent.as_deref();
+        }
+        false
+    }
+
+    /// Inclusive ancestor check: `true` iff this sym equals `other` or
+    /// `other` appears in its parent chain. This is the `instanceof` walk
+    /// of ADR-0106 §2 (`Float instanceof Number`, `Float instanceof Float`).
+    pub fn has_ancestor(&self, other: &Sym) -> bool {
+        self == other || self.is_descendant_of(other)
+    }
+
+    /// The parent chain as a vector, root first, ending with `self`.
+    /// Linear by construction (single parent, no cycles).
+    pub fn chain(&self) -> Vec<Rc<Sym>> {
+        let mut rev = Vec::new();
+        let mut cur = Some(self);
+        while let Some(s) = cur {
+            rev.push(Rc::new(s.clone()));
+            cur = s.parent.as_deref();
+        }
+        rev.reverse();
+        rev
+    }
+}
+
+impl PartialEq for Sym {
+    fn eq(&self, other: &Sym) -> bool {
+        // Identity is the handle, not the name: distinct syms with equal
+        // display names are never equal (ADR-0106 §2).
+        self.handle == other.handle
+    }
+}
+
+impl Eq for Sym {}
+
+impl Hash for Sym {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.handle.hash(state);
+    }
+}
+
+impl fmt::Display for Sym {
+    /// Debug-friendly display: `name#handle` (the handle disambiguates
+    /// same-named syms).
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}#{}", self.name, self.handle)
+    }
+}
 
 /// Fast tagged value representation for eval engines.
 ///
@@ -141,12 +293,20 @@ impl fmt::Debug for ForeignResource {
 /// - `Pair`/`Either` are dedicated variants, not JSON objects with string keys
 /// - Strings are `Rc<str>` for cheap cloning
 /// - Arrays/Objects are `Rc`-backed for cheap cloning
-#[derive(Clone, Debug, PartialEq)]
+/// - [`TaggedValue::Sym`] is a nominal identity (ADR-0106 §2): identity
+///   equality by handle, not structural equality. `PartialEq`/`Hash` are
+///   hand-written for this reason (see the [`Sym`] docs).
+#[derive(Clone, Debug)]
 pub enum TaggedValue {
     Null,
     Bool(bool),
     Int(i64),
     Float(f64),
+    /// Nominal identity (ADR-0106 §2): the `sym()` primitive. Identity
+    /// equality by handle; the display name inside is presentation only.
+    /// JSON encoding: `{"__sym__": {"handle": <n>, "name": "...",
+    /// "parent": <sym or null>}}`.
+    Sym(Rc<Sym>),
     Str(Rc<str>),
     /// Contiguous byte buffer (`Rc<Vec<u8>>`). Declared as the `Bytes`
     /// scalar type in `value_types.yaml` (ADR-0078 Phase 2 / ADR-0083
@@ -212,6 +372,121 @@ impl Default for TaggedValue {
 }
 
 // ---------------------------------------------------------------------------
+// Equality & hashing (hand-written — `Sym` is identity-equal, not
+// structurally equal; ADR-0106 §2)
+// ---------------------------------------------------------------------------
+
+impl PartialEq for TaggedValue {
+    fn eq(&self, other: &TaggedValue) -> bool {
+        eq(self, other)
+    }
+}
+
+impl Eq for TaggedValue {}
+
+impl Hash for TaggedValue {
+    /// Hash consistent with [`eq`]:
+    ///
+    /// - `Sym` hashes its handle only (identity equality).
+    /// - Numerics hash as `f64` bits, because [`eq`] treats `Int`/`Float`
+    ///   as cross-comparable (`Int(1) == Float(1.0)`).
+    /// - Objects/arrows hash order-independently (sum of per-entry hashes),
+    ///   because [`eq`] compares them unordered.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            TaggedValue::Null => 0u8.hash(state),
+            TaggedValue::Bool(b) => {
+                1u8.hash(state);
+                b.hash(state);
+            }
+            // Cross-numeric with Float (see `eq`): hash as f64 bits.
+            TaggedValue::Int(i) => {
+                2u8.hash(state);
+                (*i as f64).to_bits().hash(state);
+            }
+            TaggedValue::Float(f) => {
+                2u8.hash(state);
+                f.to_bits().hash(state);
+            }
+            TaggedValue::Str(s) => {
+                3u8.hash(state);
+                s.hash(state);
+            }
+            TaggedValue::Bytes(b) => {
+                4u8.hash(state);
+                b.hash(state);
+            }
+            TaggedValue::Arr(a) => {
+                5u8.hash(state);
+                a.hash(state);
+            }
+            TaggedValue::Obj(o) => {
+                6u8.hash(state);
+                hash_map_entries(o.iter().map(|(k, v)| (k, v)), state);
+            }
+            TaggedValue::Pair(p) => {
+                7u8.hash(state);
+                p.hash(state);
+            }
+            TaggedValue::EitherLeft(v) => {
+                8u8.hash(state);
+                v.hash(state);
+            }
+            TaggedValue::EitherRight(v) => {
+                9u8.hash(state);
+                v.hash(state);
+            }
+            TaggedValue::Arrow {
+                params,
+                rest,
+                body,
+                env,
+                home,
+                array_pattern,
+            } => {
+                10u8.hash(state);
+                params.hash(state);
+                rest.hash(state);
+                body.hash(state);
+                hash_map_entries(
+                    env.iter().map(|(k, v)| (k.as_ref(), v)),
+                    state,
+                );
+                home.hash(state);
+                array_pattern.hash(state);
+            }
+            TaggedValue::Resource(r) => {
+                11u8.hash(state);
+                (r.ptr as usize).hash(state);
+            }
+            TaggedValue::Sym(s) => {
+                12u8.hash(state);
+                s.hash(state);
+            }
+        }
+    }
+}
+
+/// Order-independent hashing for `TaggedValue::Obj` and arrow `env` maps:
+/// sum of per-entry hashes (equal maps hash equally regardless of
+/// insertion order; collisions are allowed by the `Hash` contract).
+fn hash_map_entries<'a, I, K, V>(entries: I, state: &mut impl Hasher)
+where
+    I: Iterator<Item = (K, V)> + 'a,
+    K: Hash,
+    V: Hash,
+{
+    let mut acc: u64 = 0;
+    for (k, v) in entries {
+        let mut h = DefaultHasher::new();
+        k.hash(&mut h);
+        v.hash(&mut h);
+        acc = acc.wrapping_add(h.finish());
+    }
+    acc.hash(state);
+}
+
+// ---------------------------------------------------------------------------
 // Conversions: serde_json::Value <-> TaggedValue
 // ---------------------------------------------------------------------------
 
@@ -255,6 +530,16 @@ fn json_array_to_bytes(arr: &[Value]) -> Option<Vec<u8>> {
 }
 
 fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
+    // Sym: {"__sym__": {"handle": <n>, "name": "...", "parent": <sym or
+    // null>}} — a nominal identity (ADR-0106 §2). Malformed payloads fall
+    // back to a plain object (matching the lenient `__bytes__` style).
+    // Decoding is a pure tree walk: JSON cannot express the parent cycle,
+    // so no cycle check is needed.
+    if let Some(sym_val) = o.get("__sym__").and_then(|v| v.as_object()) {
+        if let Some(s) = sym_from_json(sym_val) {
+            return s;
+        }
+    }
     // Bytes: {"__bytes__": [n, ...]} — a byte buffer (ADR-0083 §2.1).
     if let Some(bytes_val) = o.get("__bytes__") {
         if let Some(arr) = bytes_val.as_array() {
@@ -343,6 +628,37 @@ fn map_to_obj(o: Map<String, Value>) -> TaggedValue {
     TaggedValue::Obj(Rc::new(obj_map_to_hashmap(o)))
 }
 
+/// Decode the inner payload of a `{"__sym__": {...}}` JSON object into a
+/// nominal [`TaggedValue`]. Returns `None` when the payload is malformed
+/// (missing/invalid `handle` or `name`, or a `parent` that is not itself a
+/// sym encoding or `null`), so the caller can fall back to a plain object.
+fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
+    let handle = sym_val.get("handle").and_then(|v| v.as_u64())?;
+    if handle == 0 {
+        return None;
+    }
+    let name = sym_val.get("name").and_then(|v| v.as_str())?;
+    let parent = match sym_val.get("parent") {
+        None | Some(Value::Null) => None,
+        // The encoder nests the parent as a full {"__sym__": {...}} value;
+        // unwrap the wrapper before recursing.
+        Some(Value::Object(parent_obj)) => {
+            let parent_sym = parent_obj.get("__sym__").and_then(|v| v.as_object())?;
+            match sym_from_json(parent_sym) {
+                Some(TaggedValue::Sym(p)) => Some(p),
+                _ => return None,
+            }
+        }
+        Some(_) => return None,
+    };
+    let sym = Sym {
+        handle,
+        name: Rc::from(name),
+        parent,
+    };
+    Some(TaggedValue::Sym(Rc::new(sym)))
+}
+
 fn obj_map_to_hashmap(o: Map<String, Value>) -> FxHashMap<Rc<str>, TaggedValue> {
     o.into_iter()
         .map(|(k, v)| (Rc::from(k), TaggedValue::from(v)))
@@ -375,6 +691,23 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             .map(Value::Number)
             .unwrap_or(Value::Null),
         TaggedValue::Str(s) => Value::String((*s).to_string()),
+        TaggedValue::Sym(s) => {
+            // Nominal identity (ADR-0106 §2): explicit data — handle (the
+            // identity), name (presentation), and the parent chain nested
+            // inline. The nested encoding keeps the value self-contained
+            // (O(depth) per sym; chains in this kernel are short).
+            let parent = match s.parent() {
+                Some(p) => tagged_to_value(&TaggedValue::Sym(Rc::new(p.clone()))),
+                None => Value::Null,
+            };
+            serde_json::json!({
+                "__sym__": {
+                    "handle": s.handle(),
+                    "name": s.name(),
+                    "parent": parent,
+                }
+            })
+        }
         TaggedValue::Bytes(b) => bytes_to_value(b),
         TaggedValue::Arr(a) => Value::Array(a.iter().map(tagged_to_value).collect()),
         TaggedValue::Obj(o) => {
@@ -503,6 +836,20 @@ impl TaggedValue {
         }
     }
 
+    /// Returns the value as a [`Sym`] if it is a nominal identity
+    /// (ADR-0106 §2).
+    pub fn as_sym(&self) -> Option<&Sym> {
+        match self {
+            TaggedValue::Sym(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value is a nominal identity (`Sym`).
+    pub fn is_sym(&self) -> bool {
+        matches!(self, TaggedValue::Sym(_))
+    }
+
     /// Indexes an object value by key, mirroring `serde_json::Value::get`
     /// for string keys. Returns `None` for non-objects or missing keys.
     pub fn get(&self, key: &str) -> Option<&TaggedValue> {
@@ -551,6 +898,66 @@ pub fn bytes(b: impl Into<Vec<u8>>) -> TaggedValue {
 /// when called with `ptr`.
 pub unsafe fn resource(ptr: *mut c_void, finalizer: Option<unsafe fn(*mut c_void)>) -> TaggedValue {
     TaggedValue::Resource(Rc::new(ForeignResource::new(ptr, finalizer)))
+}
+
+// ---------------------------------------------------------------------------
+// Nominal identity helpers (ADR-0106 §2 — sym / parent chain / instanceof)
+// ---------------------------------------------------------------------------
+
+/// Mint a fresh root nominal identity (`sym()` of ADR-0106 §2) as a
+/// [`TaggedValue`].
+pub fn sym(name: &str) -> TaggedValue {
+    TaggedValue::Sym(Rc::new(Sym::fresh(name)))
+}
+
+/// Mint a fresh nominal identity with `parent` (a [`Sym`]) as its nominal
+/// parent (`sym(A)` of ADR-0106 §2), as a [`TaggedValue`].
+pub fn sym_with_parent(name: &str, parent: &Sym) -> TaggedValue {
+    TaggedValue::Sym(Rc::new(Sym::fresh_with_parent(name, parent)))
+}
+
+/// Mint a fresh nominal identity whose parent is taken from a
+/// [`TaggedValue`] (`sym(A)` where `A` arrives as a value).
+///
+/// Returns an error when `parent` is not a nominal (`Sym`) value —
+/// matching the VM primitive's `sym(A)` contract: `A` must itself be a
+/// nominal object.
+pub fn sym_from_parent_value(name: &str, parent: &TaggedValue) -> Result<TaggedValue, String> {
+    match parent {
+        TaggedValue::Sym(p) => Ok(sym_with_parent(name, p)),
+        _ => Err("sym: parent is not a nominal object".to_string()),
+    }
+}
+
+/// Whether a [`TaggedValue`] is a nominal (`Sym`) value.
+pub fn is_nominal(v: &TaggedValue) -> bool {
+    matches!(v, TaggedValue::Sym(_))
+}
+
+/// The nominal parent of a value, or `None` if the value is not nominal or
+/// is a root sym.
+pub fn nominal_parent(v: &TaggedValue) -> Option<&Sym> {
+    v.as_sym().and_then(|s| s.parent())
+}
+
+/// Strict descendant check over values: `true` iff both are nominal and
+/// `v` is a strict descendant of `other`. Non-nominal operands yield
+/// `false`.
+pub fn is_descendant_of(v: &TaggedValue, other: &TaggedValue) -> bool {
+    match (v.as_sym(), other.as_sym()) {
+        (Some(a), Some(b)) => a.is_descendant_of(b),
+        _ => false,
+    }
+}
+
+/// Inclusive ancestor check over values (`instanceof` semantics): `true`
+/// iff both are nominal and `v` equals `other` or descends from it.
+/// Non-nominal operands yield `false`.
+pub fn has_ancestor(v: &TaggedValue, other: &TaggedValue) -> bool {
+    match (v.as_sym(), other.as_sym()) {
+        (Some(a), Some(b)) => a.has_ancestor(b),
+        _ => false,
+    }
 }
 
 /// Extract the first component of a pair value, or `None` if not a pair.
@@ -611,6 +1018,8 @@ pub fn truthy(v: &TaggedValue) -> bool {
         TaggedValue::Bytes(b) => !b.is_empty(),
         // Resources are always truthy (an opaque handle exists).
         TaggedValue::Resource(_) => true,
+        // Nominal identities are always truthy (a sym exists).
+        TaggedValue::Sym(_) => true,
         _ => true,
     }
 }
@@ -720,6 +1129,9 @@ pub fn lt(a: &TaggedValue, b: &TaggedValue) -> Result<bool, String> {
 pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
     match (a, b) {
         (TaggedValue::Null, TaggedValue::Null) => true,
+        // Nominal identity (ADR-0106 §2): handle-based identity equality,
+        // not structural equality.
+        (TaggedValue::Sym(x), TaggedValue::Sym(y)) => x == y,
         (TaggedValue::Bool(x), TaggedValue::Bool(y)) => x == y,
         (TaggedValue::Int(x), TaggedValue::Int(y)) => x == y,
         (TaggedValue::Float(x), TaggedValue::Float(y)) => x == y,
