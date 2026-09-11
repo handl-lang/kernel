@@ -467,16 +467,20 @@ impl fmt::Display for QuantifiedLaw {
 mod tests {
     use super::*;
 
+    fn t(td: TermData) -> Term {
+        td.to_term().expect("TermData -> Term conversion")
+    }
+
     fn id() -> Term {
-        Term::arr_native("id", vec![])
+        t(TermData::op("id", vec![], &ArrSource::Native, None))
     }
 
     #[test]
     fn instantiate_var_produces_bound_scheme() {
         let mut subst = LawSubst::new();
-        subst.bind("f", Term::arr_native("concrete_f", vec![]));
+        subst.bind("f", t(TermData::op("concrete_f", vec![], &ArrSource::Native, None)));
         let result = instantiate(&LawExpr::Var(LawVar("f".into())), &subst);
-        assert_eq!(result, Term::arr_native("concrete_f", vec![]));
+        assert_eq!(result, t(TermData::op("concrete_f", vec![], &ArrSource::Native, None)));
     }
 
     #[test]
@@ -490,7 +494,7 @@ mod tests {
     fn instantiate_const_produces_base_arrow() {
         let subst = LawSubst::new();
         let result = instantiate(&LawExpr::Const("sort".into()), &subst);
-        assert_eq!(result, Term::arr_native("sort", vec![]));
+        assert_eq!(result, t(TermData::op("sort", vec![], &ArrSource::Native, None)));
     }
 
     #[test]
@@ -502,9 +506,11 @@ mod tests {
 
     #[test]
     fn instantiate_seq_produces_scheme_seq() {
+        let f = TermData::op("a", vec![], &ArrSource::Native, None);
+        let g = TermData::op("b", vec![], &ArrSource::Native, None);
         let mut subst = LawSubst::new();
-        subst.bind("f", Term::arr_native("a", vec![]));
-        subst.bind("g", Term::arr_native("b", vec![]));
+        subst.bind("f", t(f.clone()));
+        subst.bind("g", t(g.clone()));
         let result = instantiate(
             &LawExpr::Seq(
                 Box::new(LawExpr::Var(LawVar("f".into()))),
@@ -512,10 +518,7 @@ mod tests {
             ),
             &subst,
         );
-        assert_eq!(
-            result,
-            Term::seq(Term::arr_native("a", vec![]), Term::arr_native("b", vec![]))
-        );
+        assert_eq!(result, t(TermData::seq(f, g)));
     }
 
     #[test]
@@ -618,7 +621,7 @@ mod tests {
         assert_eq!(check_quantified_law(&bogus), LawCheckResult::Violated);
         // Specifically: it fails under the arr("test_f") substitution.
         let mut subst = LawSubst::new();
-        subst.bind("f", Term::arr_native("test_f", vec![]));
+        subst.bind("f", t(TermData::op("test_f", vec![], &ArrSource::Native, None)));
         let lhs = instantiate(&bogus.lhs, &subst);
         let rhs = instantiate(&bogus.rhs, &subst);
         assert!(

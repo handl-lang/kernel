@@ -190,7 +190,8 @@ fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
             collect_foreign_td(&grade, out);
             collect_foreign_td(&body, out);
         }
-        _ => unreachable!(),
+        // Unknown / malformed tags: no foreign names to collect.
+        _ => {}
     }
 }
 
@@ -218,23 +219,48 @@ mod tests {
     use super::*;
     use crate::fragments::{CapabilityDecl, EvalSchemeDef};
     use crate::language::Language;
-    use crate::term::Term;
     use serde_json::Value;
+
+    /// Convert `TermData` back to `Term` for APIs that require `Term`.
+    fn t(td: TermData) -> Term {
+        td.to_term().expect("TermData -> Term conversion")
+    }
+
+    /// Native op without a literal payload (mirrors `Term::arr_native`).
+    fn op_native(name: &str, args: Vec<TermData>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(Value::Null)
+        } else {
+            TermData::op(name, args, &ArrSource::Native, None)
+        }
+    }
+
+    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
+        if name == "const" && args.is_empty() {
+            TermData::arr(lit.into())
+        } else {
+            TermData::op(name, args, &ArrSource::Native, Some(lit.into()))
+        }
+    }
+
+    /// Foreign op (mirrors `Term::arr_foreign`).
+    fn op_foreign(name: &str, args: Vec<TermData>) -> TermData {
+        TermData::op(name, args, &ArrSource::Foreign(name.to_string()), None)
+    }
 
     #[test]
     fn foreign_names_collects_recursively() {
-        let s = Term::Choice {
-            l: Box::new(Term::Op {
-                name: "fs.read".into(),
-                args: vec![Term::arr_foreign("fs.open", vec![])],
-                source: ArrSource::Foreign("fs.read".into()),
-                lit: None,
-            }),
-            r: Box::new(Term::App {
-                callee: Box::new(Term::arr_foreign("net.send", vec![])),
-                args: vec![Term::arr_native("id", vec![])],
-            }),
-        };
+        let s = t(TermData::choice(
+            op_foreign(
+                "fs.read",
+                vec![op_foreign("fs.open", vec![])],
+            ),
+            TermData::app(
+                op_foreign("net.send", vec![]),
+                vec![op_native("id", vec![])],
+            ),
+        ));
         let names = foreign_names(&s);
         assert!(names.contains("fs.read"));
         assert!(names.contains("fs.open"));
@@ -244,7 +270,10 @@ mod tests {
 
     #[test]
     fn no_foreign_returns_empty() {
-        let s = Term::arr_native("add", vec![Term::arr_native("id", vec![])]);
+        let s = t(op_native(
+            "add",
+            vec![op_native("id", vec![])],
+        ));
         assert!(foreign_names(&s).is_empty());
     }
 
@@ -255,14 +284,14 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.io",
                 "io",
-                Term::arr_foreign(
+                t(op_foreign(
                     "fs.read",
-                    vec![Term::arr_native_lit(
+                    vec![op_lit(
                         "proj_child",
                         vec![],
                         Value::from(0u64),
                     )],
-                ),
+                )),
             ))
             .unwrap();
         lang.caps.merge(CapabilityDecl::new("net.connect")).unwrap();
@@ -279,13 +308,13 @@ mod tests {
             .merge(EvalSchemeDef::new(
                 "eval.add",
                 "binary.add",
-                Term::arr_native(
+                t(op_native(
                     "add",
                     vec![
-                        Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                        Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                        op_lit("proj_child", vec![], Value::from(0u64)),
+                        op_lit("proj_child", vec![], Value::from(1u64)),
                     ],
-                ),
+                )),
             ))
             .unwrap();
         lang.caps.merge(CapabilityDecl::new("pure")).unwrap();
@@ -315,14 +344,10 @@ mod tests {
 
     #[test]
     fn foreign_names_nested_seq_loop() {
-        let s = Term::Seq {
-            fst: Box::new(Term::Loop {
-                body: Box::new(Term::arr_foreign("fs.read", vec![])),
-            }),
-            snd: Box::new(Term::First {
-                inner: Box::new(Term::arr_foreign("net.send", vec![])),
-            }),
-        };
+        let s = t(TermData::seq(
+            TermData::loop_feedback(op_foreign("fs.read", vec![])),
+            TermData::first(op_foreign("net.send", vec![])),
+        ));
         let names = foreign_names(&s);
         assert!(names.contains("fs.read"));
         assert!(names.contains("net.send"));
