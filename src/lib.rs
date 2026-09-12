@@ -324,7 +324,11 @@ pub enum TaggedValue {
     /// Arrow-calculus `Either`: `right v` — used by `Choice`/`Loop`.
     EitherRight(Rc<TaggedValue>),
     /// Arrow-value (closure): `{"__arrow__": true, "params": [...], "body":
-    /// <idx>, "env": {...}}`.
+    /// <idx>, "env": {...}}`, optionally `"body_def": <tv>`.
+    ///
+    /// `body_def` (ADR-0106 item 2) carries the body as explicit, serializable
+    /// structure — see the field docs below. It is optional and additive; the
+    /// `body`/`env`/`home` fields remain the fallback.
     ///
     /// `home` is the provenance of the closure: the id of the eval frame
     /// (AST + Language + module chain) that minted it, registered in the
@@ -354,6 +358,25 @@ pub enum TaggedValue {
         home: Option<u64>,
         /// Whether the arrow's params are an array-destructuring pattern.
         array_pattern: bool,
+        /// The arrow's body as **explicit, serializable structure that lives
+        /// in the value** (ADR-0106 §3/§6 item 2) — the fix for `body` being
+        /// a process-local AST index. When present it holds an opaque tagged
+        /// value carrying the language-level AST encoding
+        /// `{"__ast__": <serialized Ast>}` (see `handl_language::ast_value`).
+        ///
+        /// `None` (the default) means the arrow relies on the `body`/`home`
+        /// fallback exactly as before, so this field is purely additive. On
+        /// the JSON side the key is `"body_def"`, emitted only when set.
+        ///
+        /// Because it is *derived* from `body` (the same body, pre-extracted
+        /// into a standalone arena), it is deliberately **not part of the
+        /// value's identity**: `eq` and `Hash` both ignore it, so two arrows
+        /// with the same `params`/`rest`/`body`/`env`/`home`/`array_pattern`
+        /// remain equal whether or not either carries a definition.
+        ///
+        /// The apply path does not yet consume this field (see the ADR's
+        /// "serializable arrow representation (item 2)" migration order).
+        body_def: Option<Rc<TaggedValue>>,
     },
     /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
     /// optional finalizer that runs when the last `Rc` reference drops
@@ -443,6 +466,13 @@ impl Hash for TaggedValue {
                 env,
                 home,
                 array_pattern,
+                // ADR-0106 item 2 step 1: `body_def` is **derived** data (the
+                // same body, pre-extracted into a standalone arena), so it is
+                // deliberately NOT part of the arrow's identity — `eq` ignores
+                // it, and so must `Hash` (a field in neither keeps the
+                // `Hash`/`Eq` contract intact). Binding it here with `_`
+                // documents that omission.
+                body_def: _,
             } => {
                 10u8.hash(state);
                 params.hash(state);
@@ -572,7 +602,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
         };
     }
     // Arrow-value: {"__arrow__": true, "params": [...], "body": <idx>,
-    // "env": {...}, "array_pattern": <bool>}
+    // "env": {...}, "array_pattern": <bool>, "body_def": <tv>}
     if o.get("__arrow__").and_then(|v| v.as_bool()) == Some(true) {
         let params: Rc<[String]> = match o.get("params") {
             Some(Value::Array(a)) => {
@@ -599,6 +629,13 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             .get("array_pattern")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        // Optional serialized body definition (ADR-0106 item 2): an opaque
+        // tagged value (`{"__ast__": <serialized Ast>}`) carried by the arrow
+        // so its body is self-contained. Absent -> `None`, preserving the
+        // legacy `body`/`home` fallback.
+        let body_def = o
+            .get("body_def")
+            .map(|v| Rc::new(TaggedValue::from(v.clone())));
         return TaggedValue::Arrow {
             params,
             rest,
@@ -606,6 +643,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             env,
             home,
             array_pattern,
+            body_def,
         };
     }
     // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
@@ -733,6 +771,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             env,
             home,
             array_pattern,
+            body_def,
         } => {
             let mut env_map = Map::new();
             for (k, val) in env.iter() {
@@ -752,6 +791,11 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             }
             if *array_pattern {
                 v["array_pattern"] = Value::Bool(true);
+            }
+            // Serialized body definition (ADR-0106 item 2): emitted only when
+            // present, so the default arrow shape is unchanged.
+            if let Some(bd) = body_def {
+                v["body_def"] = tagged_to_value(bd);
             }
             v
         }
