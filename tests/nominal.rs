@@ -283,6 +283,27 @@ fn sym_malformed_json_falls_back_to_plain_object() {
     assert!(!v.is_sym());
 }
 
+#[test]
+fn sym_nested_malformed_parent_falls_back_to_plain_object() {
+    // The parent wrapper is a well-formed `{"__sym__": {...}}` object, but
+    // its inner payload is itself malformed (handle 0 is rejected). The
+    // recursive decode returns `None`, so the whole sym is rejected and the
+    // value falls back to a plain object. This exercises the decoder's
+    // inner-payload rejection arm (`sym_from_json` -> `_ => return None`):
+    // the `?` on the wrapper hop succeeds, yet the recursive decode still
+    // fails, so the outer sym must not be minted from a half-decoded parent.
+    let v: TaggedValue = json!({
+        "__sym__": {
+            "handle": 1,
+            "name": "Child",
+            "parent": {"__sym__": {"handle": 0, "name": "Bad"}}
+        }
+    })
+    .into();
+    assert!(!v.is_sym(), "a malformed nested parent must reject the sym");
+    assert!(v.as_object().is_some(), "falls back to a plain object");
+}
+
 // ---------------------------------------------------------------------------
 // Deep chains and the diamond-free (single parent) invariant
 // ---------------------------------------------------------------------------
