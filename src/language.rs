@@ -14,7 +14,7 @@ use crate::ast::{Ast, AstNode, AstRef};
 use crate::error::LangError;
 use crate::fragment_set::FragmentSet;
 use crate::fragments::{
-    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, LintRuleDef,
+    AstShapeDef, CapabilityDecl, EvalSchemeDef, GrammarRow, LexerRuleDef, LintRuleDef, LspDef,
     OptionSchema, TokenKindDef, TransformDef, TypeRuleDef,
 };
 use crate::version::SchemeVersion;
@@ -56,6 +56,10 @@ pub struct Language {
     /// before ADR-0097, hence `serde(default)`.
     #[serde(default)]
     pub lints: FragmentSet<LintRuleDef>,
+    /// LSP surface definitions (ADR-0100).  Absent in serialized languages
+    /// written before ADR-0100, hence `serde(default)`.
+    #[serde(default)]
+    pub lsp: FragmentSet<LspDef>,
     /// Evaluated `op` declarations keyed by op name (ADR-0098/0100).
     #[serde(default)]
     pub ops: BTreeMap<String, crate::Value>,
@@ -95,6 +99,7 @@ impl Language {
             options: FragmentSet::new(),
             lexer_rules: FragmentSet::new(),
             lints: FragmentSet::new(),
+            lsp: FragmentSet::new(),
             ops: BTreeMap::new(),
             handlers: BTreeMap::new(),
             handlers_by_grade: BTreeMap::new(),
@@ -209,6 +214,9 @@ impl Language {
         }
         for frag in other.lints.fragments().cloned() {
             clone.lints.merge(frag)?;
+        }
+        for frag in other.lsp.fragments().cloned() {
+            clone.lsp.merge(frag)?;
         }
         *self = clone;
         Ok(())

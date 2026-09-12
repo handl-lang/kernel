@@ -16,6 +16,8 @@ pub mod grammar;
 pub mod lexer_rule;
 /// Lint rule fragment definitions (ADR-0097 — Lint Rules as Language Data).
 pub mod lint_rule;
+/// LSP surface fragment definitions (ADR-0100).
+pub mod lsp;
 /// Option schema fragment definitions.
 pub mod option;
 /// Token kind fragment definitions.
@@ -37,6 +39,7 @@ pub use grammar::{
 };
 pub use lexer_rule::{LexerPattern, LexerRuleDef};
 pub use lint_rule::{LintCheck, LintFix, LintRuleDef};
+pub use lsp::{LspDef, LspMatch, LspRule};
 pub use option::OptionSchema;
 pub use token_kind::{LiteralKind, TokenKindDef};
 pub use transform_def::{RewriteStep, TransformCondition, TransformDef, TransformRule};
