@@ -8,7 +8,31 @@ use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
     GrammarRow, Language, SchemeVersion, Term, TokenKindDef, capabilities,
 };
+use plugin_engine::{ArrSource, TermData};
 use serde_json::Value;
+
+/// Convert `TermData` back to `Term` for APIs that require `Term`.
+fn t(td: TermData) -> Term {
+    td.to_term().expect("TermData -> Term conversion")
+}
+
+/// Native op without a literal payload.
+fn op_native(name: &str, args: Vec<TermData>) -> TermData {
+    if name == "const" && args.is_empty() {
+        TermData::arr(Value::Null)
+    } else {
+        TermData::op(name, args, &ArrSource::Native, None)
+    }
+}
+
+/// Native op with a literal payload.
+fn op_lit(name: &str, args: Vec<TermData>, lit: Value) -> TermData {
+    if name == "const" && args.is_empty() {
+        TermData::arr(lit)
+    } else {
+        TermData::op(name, args, &ArrSource::Native, Some(lit))
+    }
+}
 
 fn add_lang() -> Language {
     let mut lang = Language::new();
@@ -36,13 +60,13 @@ fn add_lang() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Term::arr_native(
+            t(op_native(
                 "add",
                 vec![
-                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    op_lit("proj_child", vec![], Value::from(0u64)),
+                    op_lit("proj_child", vec![], Value::from(1u64)),
                 ],
-            ),
+            )),
         ))
         .unwrap();
     lang
@@ -98,13 +122,13 @@ fn five_fragments_with_overrides_and_excludes() {
             EvalSchemeDef::new(
                 "eval.binary.add.v2",
                 "binary.add",
-                Term::arr_native(
+                t(op_native(
                     "add_checked",
                     vec![
-                        Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                        Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                        op_lit("proj_child", vec![], Value::from(0u64)),
+                        op_lit("proj_child", vec![], Value::from(1u64)),
                     ],
-                ),
+                )),
             )
             .with_replaces(vec!["eval.binary.add".into()]),
         )
@@ -168,5 +192,5 @@ fn empty_fragment_set_default() {
 
 #[test]
 fn lit_value_in_scheme() {
-    let _ = Term::arr_native_lit("const", vec![], Value::from(42));
+    let _ = t(TermData::arr(Value::from(42)));
 }

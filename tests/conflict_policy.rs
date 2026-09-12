@@ -5,7 +5,13 @@ use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
     GrammarRow, LangError, OptionSchema, Term, TokenKindDef,
 };
+use plugin_engine::TermData;
 use serde_json::Value;
+
+/// Convert `TermData` back to `Term` for APIs that require `Term`.
+fn t(td: TermData) -> Term {
+    td.to_term().expect("TermData -> Term conversion")
+}
 
 // --- TokenKindDef: identity key = id, union (idempotent) ---
 
@@ -118,14 +124,14 @@ fn eval_collision_same_node_kind_errors() {
     set.merge(EvalSchemeDef::new(
         "e1",
         "binary.add",
-        Term::arr_native_lit("const", vec![], Value::Null),
+        t(TermData::arr(Value::Null)),
     ))
     .unwrap();
     let err = set
         .merge(EvalSchemeDef::new(
             "e2",
             "binary.add",
-            Term::arr_native_lit("const", vec![], Value::Null),
+            t(TermData::arr(Value::Null)),
         ))
         .unwrap_err();
     assert_eq!(
@@ -143,14 +149,14 @@ fn eval_override_succeeds() {
     set.merge(EvalSchemeDef::new(
         "e1",
         "binary.add",
-        Term::arr_native_lit("const", vec![], Value::Null),
+        t(TermData::arr(Value::Null)),
     ))
     .unwrap();
     set.merge(
         EvalSchemeDef::new(
             "e2",
             "binary.add",
-            Term::arr_native_lit("const", vec![], Value::from(1)),
+            t(TermData::arr(Value::from(1))),
         )
         .with_replaces(vec!["e1".into()]),
     )

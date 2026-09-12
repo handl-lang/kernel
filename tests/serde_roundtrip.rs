@@ -5,7 +5,33 @@ use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow, Language,
     SchemeVersion, Term, TokenKindDef,
 };
+use plugin_engine::{ArrSource, TermData};
 use serde_json::Value;
+
+/// Convert `TermData` back to `Term` for APIs that require `Term`.
+fn t(td: TermData) -> Term {
+    td.to_term().expect("TermData -> Term conversion")
+}
+
+/// Native op without a literal payload.
+fn op_native(name: &str, args: Vec<TermData>) -> TermData {
+    TermData::op(name, args, &ArrSource::Native, None)
+}
+
+/// Native op with a literal payload.
+fn op_lit(name: &str, args: Vec<TermData>, lit: Value) -> TermData {
+    TermData::op(name, args, &ArrSource::Native, Some(lit))
+}
+
+/// Foreign op.
+fn op_foreign(name: &str, args: Vec<TermData>) -> TermData {
+    TermData::op(name, args, &ArrSource::Foreign(name.into()), None)
+}
+
+/// Constant arrow with the given value.
+fn arr(value: Value) -> TermData {
+    TermData::arr(value)
+}
 
 fn nontrivial_language() -> Language {
     let mut lang = Language::new();
@@ -34,27 +60,23 @@ fn nontrivial_language() -> Language {
         .merge(EvalSchemeDef::new(
             "eval.binary.add",
             "binary.add",
-            Term::arr_native(
+            t(op_native(
                 "add",
                 vec![
-                    Term::arr_native_lit("proj_child", vec![], Value::from(0u64)),
-                    Term::arr_native_lit("proj_child", vec![], Value::from(1u64)),
+                    op_lit("proj_child", vec![], Value::from(0u64)),
+                    op_lit("proj_child", vec![], Value::from(1u64)),
                 ],
-            ),
+            )),
         ))
         .unwrap();
     lang.eval
         .merge(EvalSchemeDef::new(
             "eval.io",
             "io",
-            Term::arr_foreign(
+            t(op_foreign(
                 "fs.read",
-                vec![Term::arr_native_lit(
-                    "proj_child",
-                    vec![],
-                    Value::from(0u64),
-                )],
-            ),
+                vec![op_lit("proj_child", vec![], Value::from(0u64))],
+            )),
         ))
         .unwrap();
     lang.caps
@@ -97,26 +119,22 @@ fn scheme_with_nested_foreign_roundtrips_through_language() {
             "eval.complex",
             "complex",
             // cond >>> arr(tag) >>> Choice(then, else)
-            Term::seq(
-                Term::seq(
-                    Term::arr_foreign(
+            t(TermData::seq(
+                TermData::seq(
+                    op_foreign(
                         "fs.stat",
-                        vec![Term::arr_native_lit("const", vec![], Value::from("/x"))],
+                        vec![arr(Value::from("/x"))],
                     ),
-                    Term::arr_native("tag", vec![]),
+                    op_native("tag", vec![]),
                 ),
-                Term::choice(
-                    Term::app(
-                        Term::arr_native_lit("proj_env", vec![], Value::String("f".into())),
-                        vec![Term::arr_native_lit(
-                            "proj_child",
-                            vec![],
-                            Value::from(0u64),
-                        )],
+                TermData::choice(
+                    TermData::app(
+                        op_lit("proj_env", vec![], Value::String("f".into())),
+                        vec![op_lit("proj_child", vec![], Value::from(0u64))],
                     ),
-                    Term::arr_native_lit("const", vec![], Value::Bool(false)),
+                    arr(Value::Bool(false)),
                 ),
-            ),
+            )),
         ))
         .unwrap();
     let j = serde_json::to_string(&lang).unwrap();
