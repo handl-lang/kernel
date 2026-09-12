@@ -39,8 +39,8 @@
 //!   - [`LawExpr`] has **no** `Left` variant. The coproduct functor laws
 //!     (`coproduct_functor_identity`, `coproduct_functor_composition`) are NOT
 //!     ported.
-//!   - [`LawExpr::Id`] instantiates to `Term::arr_native("id", [])`.
-//!   - [`LawExpr::App`] mirrors `Term::App { callee, args: Vec<Term> }`
+//!   - [`LawExpr::Id`] instantiates to `TermData::op("id", [], &ArrSource::Native, None)`.
+//!   - [`LawExpr::App`] mirrors `TermData::app(callee, args: Vec<TermData>)`
 //!     (a callee plus a vector of argument schemes), not the PoC's unary `App`.
 //!
 //! The CutElim normalizer is NOT duplicated: this module reuses
@@ -68,8 +68,8 @@ pub struct LawVar(pub String);
 /// - [`Var`](LawExpr::Var)`(f)` is a quantified variable (instantiated to a
 ///   concrete `Term` via [`LawSubst`]).
 /// - [`Const`](LawExpr::Const)`(name)` is a concrete base arrow:
-///   `Term::arr_native(name, [])`.
-/// - [`Id`](LawExpr::Id) is the identity: `Term::arr_native("id", [])`.
+///   `TermData::op(name, [], &ArrSource::Native, None)`.
+/// - [`Id`](LawExpr::Id) is the identity: `TermData::op("id", [], &ArrSource::Native, None)`.
 /// - [`Seq`](LawExpr::Seq), [`First`](LawExpr::First),
 ///   [`Choice`](LawExpr::Choice), [`Loop`](LawExpr::Loop),
 ///   [`App`](LawExpr::App) mirror the corresponding `Term` variants.
@@ -82,7 +82,7 @@ pub enum LawExpr {
     /// A concrete base arrow (a constant, not a variable).
     /// e.g. `Const("sort")` is a specific arrow; `Var("f")` is any arrow.
     Const(String),
-    /// Polymorphic identity: instantiates to `Term::arr_native("id", [])`.
+    /// Polymorphic identity: instantiates to `TermData::op("id", [], &ArrSource::Native, None)`.
     Id,
     /// Sequential composition: `f >>> g` (written `f ; g` in display).
     Seq(Box<LawExpr>, Box<LawExpr>),
@@ -93,7 +93,7 @@ pub enum LawExpr {
     /// `ArrowLoop` (trace/fixpoint): `loop(f)`.
     Loop(Box<LawExpr>),
     /// `app` / `ArrowApply`: `app(callee, args...)`. Mirrors
-    /// `Term::App { callee, args }` (a callee plus a vector of arguments).
+    /// `TermData::app(callee, args)` (a callee plus a vector of arguments).
     App(Box<LawExpr>, Vec<LawExpr>),
 }
 
@@ -153,9 +153,9 @@ impl LawSubst {
 /// - [`Var`](LawExpr::Var)`(f)` -> the scheme bound to `f` in the substitution
 ///   (panics if unbound — all quantified variables must be bound before
 ///   instantiation).
-/// - [`Const`](LawExpr::Const)`(name)` -> `Term::arr_native(name, [])` (a
+/// - [`Const`](LawExpr::Const)`(name)` -> `TermData::op(name, [], &ArrSource::Native, None)` (a
 ///   concrete base arrow, not a variable).
-/// - [`Id`](LawExpr::Id) -> `Term::arr_native("id", [])`.
+/// - [`Id`](LawExpr::Id) -> `TermData::op("id", [], &ArrSource::Native, None)`.
 /// - Combinators -> recurse structurally, mirroring `Term`.
 pub fn instantiate(expr: &LawExpr, subst: &LawSubst) -> Term {
     instantiate_td(expr, subst)

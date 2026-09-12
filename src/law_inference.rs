@@ -660,7 +660,7 @@ mod tests {
         t.to_term().expect("TermData -> Term conversion")
     }
 
-    /// Native op without a literal payload (mirrors `Term::arr_native`).
+    /// Native op without a literal payload (mirrors `TermData::op`).
     fn op_native(name: &str, args: Vec<TermData>) -> TermData {
         if name == "const" && args.is_empty() {
             TermData::arr(Value::Null)
@@ -669,7 +669,7 @@ mod tests {
         }
     }
 
-    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    /// Native op with a literal payload (mirrors `TermData::op`).
     fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
         if name == "const" && args.is_empty() {
             TermData::arr(lit)
@@ -678,27 +678,27 @@ mod tests {
         }
     }
 
-    /// Foreign op (mirrors `Term::arr_foreign`).
+    /// Foreign op (mirrors `TermData::op`).
     fn op_foreign(name: &str, args: Vec<TermData>) -> TermData {
         TermData::op(name, args, &ArrSource::Foreign(name.to_string()), None)
     }
 
-    /// Sequential composition (mirrors `Term::seq`).
+    /// Sequential composition (mirrors `TermData::seq`).
     fn seq(fst: TermData, snd: TermData) -> TermData {
         TermData::seq(fst, snd)
     }
 
-    /// First (mirrors `Term::first`).
+    /// First (mirrors `TermData::first`).
     fn first(inner: TermData) -> TermData {
         TermData::first(inner)
     }
 
-    /// Choice routing (mirrors `Term::choice`).
+    /// Choice routing (mirrors `TermData::choice`).
     fn choice(l: TermData, r: TermData) -> TermData {
         TermData::choice(l, r)
     }
 
-    /// Loop feedback (mirrors `Term::loop_feedback`).
+    /// Loop feedback (mirrors `TermData::loop_feedback`).
     fn loop_feedback(body: TermData) -> TermData {
         TermData::loop_feedback(body)
     }

@@ -98,12 +98,12 @@ mod tests {
         td.to_term().expect("TermData -> Term conversion")
     }
 
-    /// Judgment op without a literal payload (mirrors `Term::arr_judgment`).
+    /// Judgment op without a literal payload (mirrors `TermData::op`).
     fn op_judgment(name: &str, args: Vec<TermData>) -> TermData {
         TermData::op(name, args, &ArrSource::Judgment, None)
     }
 
-    /// Judgment op with a literal payload (mirrors `Term::arr_judgment_lit`).
+    /// Judgment op with a literal payload (mirrors `TermData::op`).
     fn op_judgment_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
         TermData::op(name, args, &ArrSource::Judgment, Some(lit.into()))
     }

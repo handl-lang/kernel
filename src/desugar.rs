@@ -49,7 +49,7 @@ mod tests {
         td.to_term().expect("TermData -> Term conversion")
     }
 
-    /// Native op without a literal payload (mirrors `Term::arr_native`).
+    /// Native op without a literal payload (mirrors `TermData::op`).
     fn op_native(name: &str, args: Vec<TermData>) -> TermData {
         if name == "const" && args.is_empty() {
             TermData::arr(Value::Null)
@@ -58,7 +58,7 @@ mod tests {
         }
     }
 
-    /// Native op with a literal payload (mirrors `Term::arr_native_lit`).
+    /// Native op with a literal payload (mirrors `TermData::op`).
     fn op_lit(name: &str, args: Vec<TermData>, lit: impl Into<Value>) -> TermData {
         if name == "const" && args.is_empty() {
             TermData::arr(lit.into())
