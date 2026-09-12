@@ -187,6 +187,14 @@ pub struct TokenStep {
     /// identifier as the alias.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub requires_prev_match: bool,
+    /// When set, the matched token is the opening delimiter of a
+    /// delimited block that is parsed and converted into the field value.
+    /// The token text itself is not stored; instead the block's elements
+    /// are collected (e.g. `from "m" import { a, b }` becomes an array of
+    /// names). This generalizes trailing-token capture to list tails
+    /// (ADR-0053).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delimited: Option<DelimitedShape>,
 }
 
 /// An optional keyword-delimited clause that may appear between fixed child
