@@ -13,6 +13,28 @@ use serde_json::Value;
 
 use crate::error::LangError;
 
+/// Payload keys (besides `children`) whose integer value is an **arena
+/// reference** — a `usize` index into the same [`Ast`] arena the node lives
+/// in. [`Ast::subtree`] remaps these alongside `payload["children"]` so an
+/// extracted subtree is genuinely standalone (ADR-0106 item 2 step 2a).
+///
+/// Evidence for the list (audited against the tree):
+///
+/// - `body` — the closure/function form `{"params": [...], "body": <idx>}`
+///   (and its hand-built `data`/`rec` counterparts). Read as an arena index
+///   by every engine: `plugin-engine-exec-tree-walk/src/lib.rs` (closure
+///   arm), `plugin-engine-exec-bytecode/src/{compile.rs,vm.rs}`,
+///   `plugin-engine-exec-cranelift/src/lib.rs`, and
+///   `plugin-engine-transform-rewrite/src/native/desugar.rs`.
+///
+/// Everything else a payload carries is data, not a reference: child roles
+/// index positionally into `payload["children"]` (ADR-0081), and fields such
+/// as `name`, `params`, `elements`, `entries`, `constructors`, `index` and
+/// `arms` hold strings, structured records, or numbers that are not arena
+/// indices. Shorthands such as `match` arms are lowered into `children`
+/// before evaluation, so no engine reads a nested arm as an index.
+pub const ARENA_REF_PAYLOAD_KEYS: &[&str] = &["body"];
+
 /// A span of byte offsets in source text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Span {
@@ -149,22 +171,31 @@ impl Ast {
 
     /// Extract the subtree rooted at `root` into a fresh standalone [`Ast`].
     ///
-    /// Collects `root` plus every transitively-referenced descendant (via
-    /// `payload["children"]` arena indices) and reindexes them into a new
-    /// arena. Children indices in each node's payload are remapped to the
-    /// new arena. The new arena is laid out post-order (children before
-    /// parents), so `root` is the last node — matching the Pratt convention
-    /// used by the eval engines. Shared children are deduplicated (a node
-    /// is copied at most once).
+    /// Collects `root` plus every transitively-referenced descendant and
+    /// reindexes them into a new arena. Arena references are remapped to the
+    /// new arena in **both** places they occur (ADR-0106 item 2 step 2a):
+    ///
+    /// - `payload["children"]` — the positional child array (ADR-0081); and
+    /// - any [`ARENA_REF_PAYLOAD_KEYS`] entry — named references such as the
+    ///   closure form's `payload["body"]`.
+    ///
+    /// The new arena is laid out post-order (children before parents), so
+    /// `root` is the last node — matching the Pratt convention used by the
+    /// eval engines. Shared children are deduplicated (a node is copied at
+    /// most once).
     ///
     /// This is used to bind an unevaluated child to a self-contained
     /// [`Ast`] value that the meta `eval` host function can evaluate
-    /// (ADR-0041 §6).
+    /// (ADR-0041 §6) and, since ADR-0106 item 2, to mint the self-describing
+    /// `body_def` of an arrow value.
     ///
     /// # Errors
     ///
     /// Returns [`LangError::AstIndexOutOfBounds`] if any referenced child
-    /// index is out of bounds.
+    /// index is out of bounds. A named reference ([`ARENA_REF_PAYLOAD_KEYS`])
+    /// that is out of range is left untouched rather than rejected, so
+    /// extracting an ancestor of malformed data cannot fail where it
+    /// previously succeeded.
     pub fn subtree(&self, root: AstRef) -> Result<Ast, LangError> {
         use std::collections::HashMap;
         // old arena index -> new arena index.
@@ -202,6 +233,21 @@ impl Ast {
                 }
             }
         }
+        // Named arena references in the payload (ADR-0106 item 2 step 2a):
+        // e.g. the closure form `{"params": [...], "body": <idx>}`. Only an
+        // integer value in range is treated as a reference; anything else
+        // (a string, object, or out-of-range number) is left untouched, so
+        // non-arena payload data is never rewritten.
+        let mut key_new_indices: Vec<(String, u64)> = Vec::new();
+        for key in ARENA_REF_PAYLOAD_KEYS {
+            if let Some(v) = node.payload.get(*key).and_then(|v| v.as_u64()) {
+                let vidx = v as usize;
+                if vidx < self.len() {
+                    self.subtree_into(AstRef::new(vidx), map, new_nodes)?;
+                    key_new_indices.push(((*key).to_string(), *map.get(&vidx).unwrap() as u64));
+                }
+            }
+        }
         // Build the remapped node.
         let mut new_payload = node.payload.clone();
         if let Some(children) = new_payload
@@ -212,6 +258,11 @@ impl Ast {
                 if let Some(slot) = children.get_mut(i) {
                     *slot = Value::from(*new_idx);
                 }
+            }
+        }
+        for (key, new_idx) in key_new_indices.iter() {
+            if let Some(obj) = new_payload.as_object_mut() {
+                obj.insert(key.clone(), Value::from(*new_idx));
             }
         }
         let new_idx = new_nodes.len();
@@ -355,4 +406,84 @@ mod tests {
         assert_eq!(sub.len(), 1);
         assert_eq!(sub.nodes()[0].payload, Value::from(42));
     }
+
+    /// ADR-0106 item 2 step 2a: a named arena reference in the payload
+    /// (`body`, the closure form) is remapped too — the extracted arena is
+    /// genuinely standalone, not just `children`-complete.
+    #[test]
+    fn subtree_remaps_named_body_reference() {
+        // Arena: 0: lit(1), 1: var(x), 2: binary.add[0,1],
+        //        3: closure {params:["x"], body: 2}
+        let mut ast = Ast::new();
+        ast.push(AstNode::new("lit").with_payload(Value::from(1)));
+        ast.push(AstNode::new("var").with_payload(Value::from("x")));
+        ast.push(
+            AstNode::new("binary.add").with_payload(serde_json::json!({ "children": [0, 1] })),
+        );
+        ast.push(
+            AstNode::new("closure").with_payload(serde_json::json!({ "params": ["x"], "body": 2 })),
+        );
+
+        let sub = ast.subtree(AstRef::new(3)).unwrap();
+        // Post-order: children of the body first, then the body, then the
+        // closure root last.
+        assert_eq!(sub.len(), 4);
+        assert_eq!(sub.nodes()[3].kind, "closure");
+
+        // The closure's `body` now points at the *extracted* body node, and
+        // that node's own `children` point at the extracted operands: every
+        // reference resolves inside the new arena.
+        let body_new = sub.nodes()[3].payload["body"].as_u64().unwrap() as usize;
+        assert!(
+            body_new < sub.len(),
+            "remapped body index must be in range of the extracted arena",
+        );
+        assert_eq!(sub.nodes()[body_new].kind, "binary.add");
+        let kids = sub.nodes()[body_new].payload["children"].as_array().unwrap();
+        for k in kids {
+            assert!((k.as_u64().unwrap() as usize) < sub.len());
+        }
+        assert_eq!(sub.nodes()[kids[0].as_u64().unwrap() as usize].payload, Value::from(1));
+        assert_eq!(
+            sub.nodes()[kids[1].as_u64().unwrap() as usize].payload,
+            Value::from("x"),
+        );
+    }
+
+    /// Non-reference payload numbers, and out-of-range `body` values, are
+    /// left untouched — the remap must not rewrite unrelated payload data or
+    /// fail on malformed ancestors.
+    #[test]
+    fn subtree_leaves_non_reference_payload_numbers_alone() {
+        let mut ast = Ast::new();
+        ast.push(AstNode::new("lit").with_payload(Value::from(7)));
+        ast.push(AstNode::new("func").with_payload(serde_json::json!({
+            "arity": 99,
+            "index": 12345,
+            "body": 99, // out of range: not a reference in this arena
+            "name": "f"
+        })));
+        let sub = ast.subtree(AstRef::new(1)).unwrap();
+        assert_eq!(sub.len(), 1, "only the root is extracted (no children)");
+        // Unmatched numeric payload keys survive verbatim.
+        assert_eq!(sub.nodes()[0].payload["arity"], Value::from(99));
+        assert_eq!(sub.nodes()[0].payload["index"], Value::from(12345));
+        assert_eq!(sub.nodes()[0].payload["body"], Value::from(99));
+        assert_eq!(sub.nodes()[0].payload["name"], Value::from("f"));
+    }
+
+    /// A `body` that is not an integer (some nodes carry structured payload
+    /// under that key) is not treated as a reference.
+    #[test]
+    fn subtree_ignores_non_integer_body_payload() {
+        let mut ast = Ast::new();
+        ast.push(AstNode::new("func").with_payload(serde_json::json!({
+            "params": [],
+            "body": { "kind": "lit", "value": 1 }
+        })));
+        let sub = ast.subtree(AstRef::new(0)).unwrap();
+        assert_eq!(sub.len(), 1);
+        assert_eq!(sub.nodes()[0].payload["body"]["kind"], Value::from("lit"));
+    }
+
 }
