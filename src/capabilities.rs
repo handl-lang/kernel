@@ -252,10 +252,7 @@ mod tests {
     #[test]
     fn foreign_names_collects_recursively() {
         let s = t(TermData::choice(
-            op_foreign(
-                "fs.read",
-                vec![op_foreign("fs.open", vec![])],
-            ),
+            op_foreign("fs.read", vec![op_foreign("fs.open", vec![])]),
             TermData::app(
                 op_foreign("net.send", vec![]),
                 vec![op_native("id", vec![])],
@@ -270,10 +267,7 @@ mod tests {
 
     #[test]
     fn no_foreign_returns_empty() {
-        let s = t(op_native(
-            "add",
-            vec![op_native("id", vec![])],
-        ));
+        let s = t(op_native("add", vec![op_native("id", vec![])]));
         assert!(foreign_names(&s).is_empty());
     }
 
@@ -286,11 +280,7 @@ mod tests {
                 "io",
                 t(op_foreign(
                     "fs.read",
-                    vec![op_lit(
-                        "proj_child",
-                        vec![],
-                        Value::from(0u64),
-                    )],
+                    vec![op_lit("proj_child", vec![], Value::from(0u64))],
                 )),
             ))
             .unwrap();

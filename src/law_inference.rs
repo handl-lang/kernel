@@ -120,11 +120,7 @@ fn rewrite_root_td(td: &TermData) -> Option<TermData> {
         // ce_first_id : First(id) ==> id
         "First" => {
             let inner = td.get_term("inner")?;
-            if is_id_td(&inner) {
-                Some(inner)
-            } else {
-                None
-            }
+            if is_id_td(&inner) { Some(inner) } else { None }
         }
         _ => None,
     }
@@ -245,7 +241,10 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
         "Rewrite" => {
             let (s2, cs) = pass_req(td, "source");
             let (t2, ct) = pass_req(td, "target");
-            (with_children(td, &[("source", s2), ("target", t2)]), cs || ct)
+            (
+                with_children(td, &[("source", s2), ("target", t2)]),
+                cs || ct,
+            )
         }
         "Iter" => {
             let (f2, cf) = pass_req(td, "fuel");
@@ -255,7 +254,12 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
             (
                 with_children(
                     td,
-                    &[("fuel", f2), ("predicate", p2), ("step", s2), ("initial", i2)],
+                    &[
+                        ("fuel", f2),
+                        ("predicate", p2),
+                        ("step", s2),
+                        ("initial", i2),
+                    ],
                 ),
                 cf || cp || cs || ci,
             )
@@ -295,7 +299,10 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
         "RecordWith" => {
             let (r2, cr) = pass_req(td, "record");
             let (v2, cv) = pass_req(td, "value");
-            (with_children(td, &[("record", r2), ("value", v2)]), cr || cv)
+            (
+                with_children(td, &[("record", r2), ("value", v2)]),
+                cr || cv,
+            )
         }
         "Tag" => {
             let (v2, cv) = pass_req(td, "value");
@@ -308,7 +315,10 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
         "CellCompV" => {
             let (f2, cf) = pass_req(td, "first");
             let (s2, cs) = pass_req(td, "second");
-            (with_children(td, &[("first", f2), ("second", s2)]), cf || cs)
+            (
+                with_children(td, &[("first", f2), ("second", s2)]),
+                cf || cs,
+            )
         }
         "Whisker" => {
             let (a2, ca) = pass_req(td, "arrow");
@@ -341,7 +351,10 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
         "Refine" => {
             let (s2, cs) = pass_req(td, "sort");
             let (p2, cp) = pass_req(td, "predicate");
-            (with_children(td, &[("sort", s2), ("predicate", p2)]), cs || cp)
+            (
+                with_children(td, &[("sort", s2), ("predicate", p2)]),
+                cs || cp,
+            )
         }
         "Cobind" => {
             let (g2, cg) = pass_req(td, "grade");
@@ -449,9 +462,7 @@ fn uses_first_td(td: &TermData) -> bool {
                 || child_uses_first(td, "witness")
         }
         "Equiv" => {
-            child_uses_first(td, "a")
-                || child_uses_first(td, "b")
-                || child_uses_first(td, "path")
+            child_uses_first(td, "a") || child_uses_first(td, "b") || child_uses_first(td, "path")
         }
         "Src" | "Tgt" => child_uses_first(td, "cell"),
         "RecordProj" => child_uses_first(td, "record"),
@@ -719,10 +730,7 @@ mod tests {
         // A non-identity op is not the identity arrow.
         assert!(!is_id(&td(op_native("add", vec![]))));
         // An identity with args is not the bare identity arrow.
-        assert!(!is_id(&td(op_native(
-            "id",
-            vec![op_native("x", vec![])]
-        ))));
+        assert!(!is_id(&td(op_native("id", vec![op_native("x", vec![])]))));
         // A foreign "id" is not the native identity arrow.
         assert!(!is_id(&td(op_foreign("id", vec![]))));
         // An identity with a literal payload is not the bare identity arrow.
@@ -754,10 +762,7 @@ mod tests {
     fn normalize_ce_first_fusion() {
         // Seq(First(f), First(g)) ==> First(Seq(f, g))  (ceFirstFusion)
         let s = td(seq(first(f()), first(g())));
-        assert_eq!(
-            normalize(&s, NORMALIZE_FUEL),
-            td(first(seq(f(), g())))
-        );
+        assert_eq!(normalize(&s, NORMALIZE_FUEL), td(first(seq(f(), g()))));
     }
 
     #[test]

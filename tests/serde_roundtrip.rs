@@ -121,10 +121,7 @@ fn scheme_with_nested_foreign_roundtrips_through_language() {
             // cond >>> arr(tag) >>> Choice(then, else)
             t(TermData::seq(
                 TermData::seq(
-                    op_foreign(
-                        "fs.stat",
-                        vec![arr(Value::from("/x"))],
-                    ),
+                    op_foreign("fs.stat", vec![arr(Value::from("/x"))]),
                     op_native("tag", vec![]),
                 ),
                 TermData::choice(

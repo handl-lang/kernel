@@ -191,7 +191,9 @@ fn instantiate_td(expr: &LawExpr, subst: &LawSubst) -> TermData {
         LawExpr::Id => TermData::op("id".to_string(), vec![], &ArrSource::Native, None),
         LawExpr::Seq(a, b) => TermData::seq(instantiate_td(a, subst), instantiate_td(b, subst)),
         LawExpr::First(a) => TermData::first(instantiate_td(a, subst)),
-        LawExpr::Choice(a, b) => TermData::choice(instantiate_td(a, subst), instantiate_td(b, subst)),
+        LawExpr::Choice(a, b) => {
+            TermData::choice(instantiate_td(a, subst), instantiate_td(b, subst))
+        }
         LawExpr::Loop(a) => TermData::loop_feedback(instantiate_td(a, subst)),
         LawExpr::App(callee, args) => {
             let args_td: Vec<TermData> = args.iter().map(|a| instantiate_td(a, subst)).collect();
@@ -257,7 +259,10 @@ fn test_arrows() -> Vec<Term> {
     ];
     arrows_td
         .into_iter()
-        .map(|td| td.to_term().expect("test_arrows: TermData -> Term conversion failed"))
+        .map(|td| {
+            td.to_term()
+                .expect("test_arrows: TermData -> Term conversion failed")
+        })
         .collect()
 }
 
@@ -478,9 +483,15 @@ mod tests {
     #[test]
     fn instantiate_var_produces_bound_scheme() {
         let mut subst = LawSubst::new();
-        subst.bind("f", t(TermData::op("concrete_f", vec![], &ArrSource::Native, None)));
+        subst.bind(
+            "f",
+            t(TermData::op("concrete_f", vec![], &ArrSource::Native, None)),
+        );
         let result = instantiate(&LawExpr::Var(LawVar("f".into())), &subst);
-        assert_eq!(result, t(TermData::op("concrete_f", vec![], &ArrSource::Native, None)));
+        assert_eq!(
+            result,
+            t(TermData::op("concrete_f", vec![], &ArrSource::Native, None))
+        );
     }
 
     #[test]
@@ -494,7 +505,10 @@ mod tests {
     fn instantiate_const_produces_base_arrow() {
         let subst = LawSubst::new();
         let result = instantiate(&LawExpr::Const("sort".into()), &subst);
-        assert_eq!(result, t(TermData::op("sort", vec![], &ArrSource::Native, None)));
+        assert_eq!(
+            result,
+            t(TermData::op("sort", vec![], &ArrSource::Native, None))
+        );
     }
 
     #[test]
@@ -621,7 +635,10 @@ mod tests {
         assert_eq!(check_quantified_law(&bogus), LawCheckResult::Violated);
         // Specifically: it fails under the arr("test_f") substitution.
         let mut subst = LawSubst::new();
-        subst.bind("f", t(TermData::op("test_f", vec![], &ArrSource::Native, None)));
+        subst.bind(
+            "f",
+            t(TermData::op("test_f", vec![], &ArrSource::Native, None)),
+        );
         let lhs = instantiate(&bogus.lhs, &subst);
         let rhs = instantiate(&bogus.rhs, &subst);
         assert!(

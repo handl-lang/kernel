@@ -153,12 +153,8 @@ fn eval_override_succeeds() {
     ))
     .unwrap();
     set.merge(
-        EvalSchemeDef::new(
-            "e2",
-            "binary.add",
-            t(TermData::arr(Value::from(1))),
-        )
-        .with_replaces(vec!["e1".into()]),
+        EvalSchemeDef::new("e2", "binary.add", t(TermData::arr(Value::from(1))))
+            .with_replaces(vec!["e1".into()]),
     )
     .unwrap();
     assert!(set.get_by_id("e1").is_none());

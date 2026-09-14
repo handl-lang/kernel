@@ -513,58 +513,137 @@ mod tests {
         match td.tag() {
             "Op" => td.get_term_list("args").iter().any(contains_handle),
             "Seq" => {
-                td.get_term("fst").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("snd").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("fst")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("snd")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
-            "First" => td.get_term("inner").map(|t| contains_handle(&t)).unwrap_or(false),
+            "First" => td
+                .get_term("inner")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "Choice" => {
-                td.get_term("l").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("r").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("l")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("r")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
-            "Loop" => td.get_term("body").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Loop" => td
+                .get_term("body")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "App" => {
-                td.get_term("callee").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("callee")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
                     || td.get_term_list("args").iter().any(contains_handle)
             }
-            "CellId" => td.get_term("arrow").map(|t| contains_handle(&t)).unwrap_or(false),
+            "CellId" => td
+                .get_term("arrow")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "CellCompV" => {
-                td.get_term("first").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("second").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("first")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("second")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "Const" => false,
-            "Src" => td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false),
-            "Tgt" => td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false),
-            "RecordProj" => td.get_term("record").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Src" => td
+                .get_term("cell")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
+            "Tgt" => td
+                .get_term("cell")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
+            "RecordProj" => td
+                .get_term("record")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "RecordWith" => {
-                td.get_term("record").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("value").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("record")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("value")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
-            "Tag" => td.get_term("value").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Tag" => td
+                .get_term("value")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "Whisker" => {
-                td.get_term("arrow").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("cell").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("arrow")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("cell")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
-            "Univalence" => td.get_term("equiv").map(|t| contains_handle(&t)).unwrap_or(false),
+            "Univalence" => td
+                .get_term("equiv")
+                .map(|t| contains_handle(&t))
+                .unwrap_or(false),
             "Glue" => {
-                td.get_term("family").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("path").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("family")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("path")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "Fibrant" => {
-                td.get_term("base").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("family").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("base")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("family")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "JElim" => {
-                td.get_term("path").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("motive").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("base").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("path")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("motive")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
+                    || td
+                        .get_term("base")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "Refine" => {
-                td.get_term("sort").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("predicate").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("sort")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("predicate")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "Cobind" => {
-                td.get_term("grade").map(|t| contains_handle(&t)).unwrap_or(false)
-                    || td.get_term("body").map(|t| contains_handle(&t)).unwrap_or(false)
+                td.get_term("grade")
+                    .map(|t| contains_handle(&t))
+                    .unwrap_or(false)
+                    || td
+                        .get_term("body")
+                        .map(|t| contains_handle(&t))
+                        .unwrap_or(false)
             }
             "Handle" => true,
             // Conservative fallback: Arr, Iter, Child, Rewrite, Path, Equiv, unknown.
@@ -705,11 +784,7 @@ mod tests {
         // seq(handle(..., "map", ...), handle(..., "serialize", ...))
         // -> row {map, serialize}
         let s = td(seq(
-            handle(
-                op_native("map", vec![]),
-                "map",
-                op_native("add", vec![]),
-            ),
+            handle(op_native("map", vec![]), "map", op_native("add", vec![])),
             handle(
                 op_native("serialize", vec![]),
                 "serialize",
@@ -754,11 +829,7 @@ mod tests {
     #[test]
     fn infer_row_of_choice_unions_branches() {
         let s = td(choice(
-            handle(
-                op_native("map", vec![]),
-                "map",
-                op_native("add", vec![]),
-            ),
+            handle(op_native("map", vec![]), "map", op_native("add", vec![])),
             handle(
                 op_native("serialize", vec![]),
                 "serialize",
@@ -784,11 +855,7 @@ mod tests {
     #[test]
     fn infer_row_of_app_unions_callee_and_args() {
         let s = td(app(
-            handle(
-                op_native("map", vec![]),
-                "map",
-                op_native("add", vec![]),
-            ),
+            handle(op_native("map", vec![]), "map", op_native("add", vec![])),
             vec![handle(
                 op_native("serialize", vec![]),
                 "serialize",
@@ -805,11 +872,7 @@ mod tests {
         // handle(handle(arr("a"), "a", impl_a), "b", impl_b)
         // -> row {a, b}
         let s = td(handle(
-            handle(
-                op_native("a", vec![]),
-                "a",
-                op_native("impl_a", vec![]),
-            ),
+            handle(op_native("a", vec![]), "a", op_native("impl_a", vec![])),
             "b",
             op_native("impl_b", vec![]),
         ));
@@ -844,10 +907,7 @@ mod tests {
 
     #[test]
     fn typed_scheme_clean_when_no_handles() {
-        let s = td(seq(
-            op_native("add", vec![]),
-            op_native("id", vec![]),
-        ));
+        let s = td(seq(op_native("add", vec![]), op_native("id", vec![])));
         let ts = TypedScheme::from_scheme(&s);
         assert!(ts.is_clean());
     }
@@ -857,10 +917,7 @@ mod tests {
     #[test]
     fn eliminate_and_check_clean_scheme_ok() {
         // A scheme with no handles is already clean.
-        let s = td(seq(
-            op_native("add", vec![]),
-            op_native("id", vec![]),
-        ));
+        let s = td(seq(op_native("add", vec![]), op_native("id", vec![])));
         let eliminated = eliminate_and_check(&s).expect("clean scheme");
         assert!(!contains_handle(&TermData::from_term(&eliminated)));
         assert_eq!(eliminated, s);
@@ -882,11 +939,7 @@ mod tests {
     #[test]
     fn eliminate_and_check_nested_handles_becomes_clean() {
         let s = td(handle(
-            handle(
-                op_native("a", vec![]),
-                "a",
-                op_native("impl_a", vec![]),
-            ),
+            handle(op_native("a", vec![]), "a", op_native("impl_a", vec![])),
             "b",
             op_native("impl_b", vec![]),
         ));
@@ -898,11 +951,7 @@ mod tests {
     #[test]
     fn eliminate_and_check_seq_of_handles_becomes_clean() {
         let s = td(seq(
-            handle(
-                op_native("map", vec![]),
-                "map",
-                op_native("add", vec![]),
-            ),
+            handle(op_native("map", vec![]), "map", op_native("add", vec![])),
             handle(
                 op_native("serialize", vec![]),
                 "serialize",

@@ -12,9 +12,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::Value;
 use crate::fragment::Fragment;
 use crate::fragments::transform_def::TransformCondition;
-use crate::Value;
 
 /// A fragment that declares the LSP surface for a language.
 ///

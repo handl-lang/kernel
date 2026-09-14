@@ -439,11 +439,16 @@ mod tests {
             "remapped body index must be in range of the extracted arena",
         );
         assert_eq!(sub.nodes()[body_new].kind, "binary.add");
-        let kids = sub.nodes()[body_new].payload["children"].as_array().unwrap();
+        let kids = sub.nodes()[body_new].payload["children"]
+            .as_array()
+            .unwrap();
         for k in kids {
             assert!((k.as_u64().unwrap() as usize) < sub.len());
         }
-        assert_eq!(sub.nodes()[kids[0].as_u64().unwrap() as usize].payload, Value::from(1));
+        assert_eq!(
+            sub.nodes()[kids[0].as_u64().unwrap() as usize].payload,
+            Value::from(1)
+        );
         assert_eq!(
             sub.nodes()[kids[1].as_u64().unwrap() as usize].payload,
             Value::from("x"),
@@ -485,5 +490,4 @@ mod tests {
         assert_eq!(sub.len(), 1);
         assert_eq!(sub.nodes()[0].payload["body"]["kind"], Value::from("lit"));
     }
-
 }

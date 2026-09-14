@@ -661,7 +661,12 @@ mod tests {
             .merge(TypeRuleDef::new(
                 "t1",
                 "lit",
-                td(TermData::op("synth_child", vec![], &ArrSource::Judgment, None)),
+                td(TermData::op(
+                    "synth_child",
+                    vec![],
+                    &ArrSource::Judgment,
+                    None,
+                )),
             ))
             .unwrap();
         other

@@ -127,12 +127,8 @@ mod tests {
 
     #[test]
     fn with_check_sets_check_scheme() {
-        let def = TypeRuleDef::new(
-            "type.lambda",
-            "lambda",
-            t(op_judgment("construct", vec![])),
-        )
-        .with_check(t(op_judgment("check_child", vec![])));
+        let def = TypeRuleDef::new("type.lambda", "lambda", t(op_judgment("construct", vec![])))
+            .with_check(t(op_judgment("check_child", vec![])));
         assert!(def.check.is_some());
     }
 
@@ -150,12 +146,8 @@ mod tests {
 
     #[test]
     fn serde_roundtrip_with_check() {
-        let def = TypeRuleDef::new(
-            "type.lambda",
-            "lambda",
-            t(op_judgment("construct", vec![])),
-        )
-        .with_check(t(op_judgment("check_child", vec![])));
+        let def = TypeRuleDef::new("type.lambda", "lambda", t(op_judgment("construct", vec![])))
+            .with_check(t(op_judgment("check_child", vec![])));
         let j = serde_json::to_string(&def).unwrap();
         let back: TypeRuleDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);
