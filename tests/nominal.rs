@@ -179,13 +179,20 @@ fn value_level_helpers_delegate_to_sym() {
     // Non-nominal operands: false, no error.
     assert!(!has_ancestor(&TaggedValue::Int(1), &float));
     assert!(!has_ancestor(&float, &TaggedValue::Int(1)));
-    assert!(!is_descendant_of(&TaggedValue::Int(1), &TaggedValue::Int(2)));
+    assert!(!is_descendant_of(
+        &TaggedValue::Int(1),
+        &TaggedValue::Int(2)
+    ));
 }
 
 #[test]
 fn sym_from_parent_value_errors_on_non_nominal() {
     // sym(A) where A is not a nominal -> error.
-    for bad in [TaggedValue::Int(42), TaggedValue::Null, TaggedValue::Bool(true)] {
+    for bad in [
+        TaggedValue::Int(42),
+        TaggedValue::Null,
+        TaggedValue::Bool(true),
+    ] {
         let err = sym_from_parent_value("Child", &bad).unwrap_err();
         assert!(err.contains("parent is not a nominal object"), "{}", err);
     }

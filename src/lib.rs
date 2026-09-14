@@ -478,10 +478,7 @@ impl Hash for TaggedValue {
                 params.hash(state);
                 rest.hash(state);
                 body.hash(state);
-                hash_map_entries(
-                    env.iter().map(|(k, v)| (k.as_ref(), v)),
-                    state,
-                );
+                hash_map_entries(env.iter().map(|(k, v)| (k.as_ref(), v)), state);
                 home.hash(state);
                 array_pattern.hash(state);
             }
