@@ -25,7 +25,6 @@ pub mod desugar;
 /// Dynamic handler law verification over the `Term` IR (ADR-0076 OQ#2).
 pub mod dynamic_handlers;
 /// Row polymorphism for effect rows (ADR-0076 OQ#1).
-pub mod effects;
 /// Error types.
 pub mod error;
 /// The `Fragment` trait.
@@ -57,7 +56,6 @@ pub use dynamic_handlers::{
     DispatchError, RegistrationResult, RuntimeVerification, VerifiedImpl, VerifiedImplStore,
     dynamic_dispatch, verify_at_runtime, verify_at_runtime_with_builtin,
 };
-pub use effects::{EffectRow, EffectRowError, TypedScheme, eliminate_and_check, infer_effect_row};
 pub use error::LangError;
 pub use fragment::Fragment;
 pub use fragment_set::FragmentSet;
