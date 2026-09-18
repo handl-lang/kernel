@@ -75,6 +75,15 @@ pub struct Language {
     /// Declared rewrite rules `source ~> target` keyed by name (ADR-0100).
     #[serde(default)]
     pub rewrites: BTreeMap<String, crate::Value>,
+    /// Ambient global value bindings declared by the language data
+    /// (`globals.yaml`). `Runtime` seeds these into the eval/typecheck
+    /// engines' global scope at build time, so the bare names resolve in
+    /// every environment built from this language — the value-export
+    /// analogue of the ambient `self`/`hello` globals a host injects.
+    /// Absent in serialized languages written before this field existed,
+    /// hence `serde(default)`.
+    #[serde(default)]
+    pub globals: BTreeMap<String, crate::Value>,
     /// The scheme combinator version this language targets.
     pub scheme_version: SchemeVersion,
 }
@@ -105,6 +114,7 @@ impl Language {
             handlers_by_grade: BTreeMap::new(),
             laws: BTreeMap::new(),
             rewrites: BTreeMap::new(),
+            globals: BTreeMap::new(),
             scheme_version: SchemeVersion::v2(),
         }
     }
@@ -217,6 +227,10 @@ impl Language {
         }
         for frag in other.lsp.fragments().cloned() {
             clone.lsp.merge(frag)?;
+        }
+        // Ambient globals union — later merges may override a name.
+        for (name, value) in other.globals {
+            clone.globals.insert(name, value);
         }
         *self = clone;
         Ok(())

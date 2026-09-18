@@ -80,6 +80,15 @@ pub struct TokenKindDef {
     /// parser edit (ADR-0044).
     #[serde(default, skip_serializing_if = "is_false")]
     pub trivia: bool,
+    /// Whether this token kind is *layout* — a token the lexer emits but the
+    /// Pratt cursor skips transparently everywhere (e.g. a newline token).
+    /// Unlike `trivia`, layout tokens stay in the token stream the cursor
+    /// sees: a `DelimitedShape` may opt into treating one as an element
+    /// separator (`DelimitedShape::newline_separator`), which is how records
+    /// get newline-separated entries. Skipping is data-driven (this flag),
+    /// never a hardcoded kind check (ADR-0044).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub layout: bool,
     /// Free-form classification of this token kind for tooling that must not
     /// hardcode kind strings (ADR-0044 "language as data"). The canonical kit
     /// uses: `keyword`, `identifier`, `number`, `string`, `bool`, `null`,
@@ -116,6 +125,7 @@ impl TokenKindDef {
             label: None,
             literal: None,
             trivia: false,
+            layout: false,
             category: None,
             pair: None,
             doc: None,

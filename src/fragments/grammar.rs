@@ -304,6 +304,14 @@ pub struct DelimitedShape {
     /// `token.ellipsis` special case inside object/array loops.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rest_token: Option<String>,
+    /// When true, a *layout* token (a `TokenKindDef` with `layout: true` —
+    /// a newline in the canonical language) between elements acts as the
+    /// element separator, so entries may omit the explicit `separator` when
+    /// each is on its own line. The explicit separator is still required
+    /// between same-line elements and still tolerated before `close`.
+    /// Record literals set this; positional lists (arrays, call args) do not.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub newline_separator: bool,
 }
 
 /// Describes a pair element inside a delimited block (e.g. a match arm).
@@ -314,6 +322,12 @@ pub struct PairShape {
     pub separator: String,
     /// The node kind emitted for each pair (e.g. `arm`).
     pub node_kind: String,
+    /// When true, each pair is a *record entry* (`key : value`) — the pair
+    /// collection denotes an object/record literal rather than e.g. match
+    /// arms. Tooling (the formatter's object-literal layout) keys off this
+    /// flag instead of hardcoding a canonical pair kind like `entry`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub record: bool,
 }
 
 impl AstShapeRef {
@@ -551,10 +565,12 @@ mod tests {
             pair: Some(PairShape {
                 separator: "token.colon".into(),
                 node_kind: "arm".into(),
+                record: false,
             }),
             open_is_operator_token: false,
             flatten: false,
             rest_token: None,
+            newline_separator: false,
         });
         let row = GrammarRow::new(
             "grammar.match.prefix",
