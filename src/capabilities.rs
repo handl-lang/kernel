@@ -49,6 +49,11 @@ fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
             let snd = td.get_term("snd").expect("Seq: missing snd");
             collect_foreign_td(&fst, out);
             collect_foreign_td(&snd, out);
+            // The composition axis is an ordinary expression position and
+            // may itself reference foreign ops (ADR-0120 Phase 2).
+            if let Some(axis) = td.get_term("axis") {
+                collect_foreign_td(&axis, out);
+            }
         }
         "First" => {
             let inner = td.get_term("inner").expect("First: missing inner");

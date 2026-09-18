@@ -101,6 +101,14 @@ fn rewrite_root_td(td: &TermData) -> Option<TermData> {
         "Seq" => {
             let fst = td.get_term("fst")?;
             let snd = td.get_term("snd")?;
+            // The categorical-equation rewrites below are the axis-0 (`>>>`)
+            // laws of the arrow calculus. `Seq(id, G) ==> G` does not hold
+            // at axis k > 0 (the k-identity is a different cell), and the
+            // `first` fusion law is axis-0-specific — so the whole arm is
+            // gated on a literal axis 0 (ADR-0120 Phase 2).
+            if td.axis().nat_literal() != Some(0) {
+                return None;
+            }
             // ce_id_left : Seq(id, G) ==> G
             if is_id_td(&fst) {
                 return Some(snd);
@@ -201,9 +209,16 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
             (with_child_list(td, "args", args2), changed)
         }
         "Seq" => {
+            // The axis slot is an ordinary subterm (ADR-0120 Phase 2):
+            // rewrite it like the operands, preserving it when absent.
+            let (a2, ca) = pass_opt(td, "axis");
             let (f2, cf) = pass_req(td, "fst");
             let (s2, cs) = pass_req(td, "snd");
-            (with_children(td, &[("fst", f2), ("snd", s2)]), cf || cs)
+            let mut fields = vec![("fst", f2), ("snd", s2)];
+            if let Some(a) = a2 {
+                fields.push(("axis", a));
+            }
+            (with_children(td, &fields), ca || cf || cs)
         }
         "First" => {
             let (i2, c) = pass_req(td, "inner");
@@ -445,7 +460,11 @@ fn uses_first_td(td: &TermData) -> bool {
         "First" => true,
         "Op" => children_uses_first(td, "args"),
         "App" => child_uses_first(td, "callee") || children_uses_first(td, "args"),
-        "Seq" => child_uses_first(td, "fst") || child_uses_first(td, "snd"),
+        "Seq" => {
+            child_uses_first(td, "fst")
+                || child_uses_first(td, "snd")
+                || child_uses_first(td, "axis")
+        }
         "Choice" => child_uses_first(td, "l") || child_uses_first(td, "r"),
         "Loop" => child_uses_first(td, "body"),
         "Handle" => child_uses_first(td, "body") || child_uses_first(td, "impl_"),
