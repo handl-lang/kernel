@@ -1028,19 +1028,44 @@ pub fn either_right(v: TaggedValue) -> TaggedValue {
 }
 
 /// Whether an Either value is a `left`.
+///
+/// Recognizes both `TaggedValue::EitherLeft` and the
+/// `{"__either__": "left", "value": v}` object encoding — the wire form
+/// [`tagged_to_value`] emits and generated `object` nodes construct
+/// directly (ADR-0120 fold machines).
 pub fn is_either_left(v: &TaggedValue) -> bool {
-    matches!(v, TaggedValue::EitherLeft(_))
+    match v {
+        TaggedValue::EitherLeft(_) => true,
+        TaggedValue::Obj(map) => map.get("__either__").and_then(|s| s.as_str()) == Some("left"),
+        _ => false,
+    }
 }
 
 /// Whether an Either value is a `right`.
+///
+/// See [`is_either_left`] for the recognized encodings.
 pub fn is_either_right(v: &TaggedValue) -> bool {
-    matches!(v, TaggedValue::EitherRight(_))
+    match v {
+        TaggedValue::EitherRight(_) => true,
+        TaggedValue::Obj(map) => map.get("__either__").and_then(|s| s.as_str()) == Some("right"),
+        _ => false,
+    }
 }
 
 /// Extract the carried value from an Either (left or right).
+///
+/// See [`is_either_left`] for the recognized encodings.
 pub fn either_value(v: &TaggedValue) -> Option<&TaggedValue> {
     match v {
         TaggedValue::EitherLeft(inner) | TaggedValue::EitherRight(inner) => Some(inner),
+        TaggedValue::Obj(map)
+            if map
+                .get("__either__")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| s == "left" || s == "right") =>
+        {
+            map.get("value")
+        }
         _ => None,
     }
 }
