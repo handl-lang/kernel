@@ -378,6 +378,13 @@ impl Language {
     /// node kind has no shape or no such role (opaque/positional fallback), and
     /// `Err` when a shape exists but the resolved index is out of bounds for
     /// the node's children (a load-time data inconsistency).
+    ///
+    /// The returned index is the shape's **full-form** position — every
+    /// declared role occupies a slot, including `optional` ones. For shapes
+    /// with optional roles the correct position depends on the node's actual
+    /// arity; use [`child_role_index_for`](Self::child_role_index_for) to
+    /// resolve a concrete node (e.g. `match`'s `block` is at index 1 without
+    /// a motive and 2 with one).
     pub fn child_role_index(
         &self,
         node_kind: &str,
@@ -387,6 +394,36 @@ impl Language {
             return Ok(None);
         };
         Ok(def.role_index(role))
+    }
+
+    /// Resolve a named child role (ADR-0081) to its positional index for a
+    /// **concrete node**, accounting for `optional` child roles.
+    ///
+    /// The node's arity is its `payload["children"]` length (0 when absent).
+    /// Occupied optional slots are the first `arity - required` optional
+    /// roles in declaration order — see [`AstShapeDef::role_index_at`].
+    ///
+    /// Returns `Ok(Some(index))` when the role is declared and its slot is
+    /// occupied at this arity, `Ok(None)` when the kind has no shape, the
+    /// role is undeclared, or the role's optional slot is absent (e.g.
+    /// `body` on a 2-child `assign`, `motive` on a 2-child `match`).
+    /// Callers keep their positional fallback on `None`, exactly like
+    /// [`child_role_index`](Self::child_role_index).
+    pub fn child_role_index_for(
+        &self,
+        node: &AstNode,
+        role: &str,
+    ) -> Result<Option<usize>, LangError> {
+        let Some(def) = self.ast.get_by_identity(&node.kind) else {
+            return Ok(None);
+        };
+        let arity = node
+            .payload
+            .get("children")
+            .and_then(|c| c.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        Ok(def.role_index_at(role, arity))
     }
 
     /// Whether a child node of `child_kind` occupying `role` of `node_kind`

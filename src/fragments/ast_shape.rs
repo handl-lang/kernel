@@ -92,7 +92,19 @@ pub struct AstDesugarRule {
 /// `variadic: true` means the role covers all children from its start index to
 /// the end (e.g. `statements` in a `block`). A non-variadic role maps to
 /// exactly one child position.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// `optional: true` means the role may be **absent** from a node's children —
+/// e.g. `match`'s optional `motive` child (`[scrutinee, (motive,) block]`) or
+/// `assign`'s optional trailing `body` (`[target, value, (body)]`). Optional
+/// roles make child positions **arity-dependent**: the index of a role after
+/// an optional slot depends on the node's actual child count. Use
+/// [`AstShapeDef::role_index_at`] (or `Language::child_role_index_for`) to
+/// resolve a concrete node; [`AstShapeDef::role_index`] resolves the
+/// full-form index (all optional roles present).
+///
+/// YAML accepts either the map form (`{role: motive, optional: true}`) or a
+/// bare string shorthand (`- scrutinee` ≡ `{role: scrutinee}`).
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ChildRoleSpec {
     /// The role name — meaningful within this shape only (per-shape, not
     /// global; `target` in `assign` is unrelated to `target` elsewhere).
@@ -101,6 +113,46 @@ pub struct ChildRoleSpec {
     /// array. Absent/`false` = a single child position.
     #[serde(default, skip_serializing_if = "is_false")]
     pub variadic: bool,
+    /// Whether the role may be absent from a node's children. Absent/`false`
+    /// = the role always occupies a child position (backward compatible).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub optional: bool,
+}
+
+impl<'de> Deserialize<'de> for ChildRoleSpec {
+    /// Deserialize either the full map form or a bare-string shorthand
+    /// (`- scrutinee` ≡ `- {role: scrutinee}`), so plain-string `children`
+    /// lists stay valid YAML.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Short(String),
+            Full {
+                role: String,
+                #[serde(default)]
+                variadic: bool,
+                #[serde(default)]
+                optional: bool,
+            },
+        }
+        Ok(match Repr::deserialize(deserializer)? {
+            Repr::Short(role) => ChildRoleSpec {
+                role,
+                variadic: false,
+                optional: false,
+            },
+            Repr::Full {
+                role,
+                variadic,
+                optional,
+            } => ChildRoleSpec {
+                role,
+                variadic,
+                optional,
+            },
+        })
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -226,13 +278,22 @@ impl AstShapeDef {
         self
     }
 
-    /// Resolve a child role to its positional index.
+    /// Resolve a child role to its positional index in the shape's **full
+    /// form** — the form where every declared (optional or not) role occupies
+    /// a slot.
     ///
     /// Returns `Some(index)` when the shape declares a role with the given
     /// name, where `index` is the position of that role's first child.
     /// Non-variadic roles map to exactly one position (e.g. `target` → 0);
     /// variadic roles map to their start index. Returns `None` if the shape has
     /// no `children` declaration or the role is unknown.
+    ///
+    /// When the shape declares `optional` roles, this index is only correct
+    /// for a node whose arity includes every optional slot (and for roles
+    /// declared *before* the first optional slot, which never shift). For a
+    /// concrete node use [`role_index_at`](Self::role_index_at) /
+    /// `Language::child_role_index_for`, which resolve against the node's
+    /// actual child count.
     pub fn role_index(&self, role: &str) -> Option<usize> {
         let children = self.children.as_ref()?;
         let mut idx = 0usize;
@@ -246,6 +307,57 @@ impl AstShapeDef {
             idx += 1;
         }
         None
+    }
+
+    /// Resolve a child role to its positional index for a node with `arity`
+    /// children — the **arity-aware** counterpart of [`role_index`](Self::role_index).
+    ///
+    /// Optional roles make positions arity-dependent: given a node's actual
+    /// child count, the occupied optional slots are the first
+    /// `arity - (required role count)` optional roles in declaration order
+    /// (clamped to the number of optional roles declared). Concretely, for
+    /// `match`'s `[scrutinee, {motive, optional}, block]`:
+    ///
+    /// - arity 2 (`match s { .. }`): `motive` absent, `block` → 1.
+    /// - arity 3 (`match s return m with { .. }`): `motive` → 1, `block` → 2.
+    ///
+    /// A role whose slot is absent at this arity resolves to `None` (e.g.
+    /// `body` on a 2-child `assign`); a role after a variadic role keeps its
+    /// declared-order position (optional and variadic roles are not expected
+    /// to interleave — a variadic role consumes one slot position for
+    /// role-index purposes). Returns `None` if the shape has no `children`
+    /// declaration, the role is unknown, or `arity` cannot cover the required
+    /// roles.
+    pub fn role_index_at(&self, role: &str, arity: usize) -> Option<usize> {
+        let children = self.children.as_ref()?;
+        let required = children.iter().filter(|s| !s.optional).count();
+        if arity < required {
+            return None;
+        }
+        let optional_total = children.len() - required;
+        let occupied_optionals = (arity - required).min(optional_total);
+        let mut seen_optional = 0usize;
+        let mut idx = 0usize;
+        for spec in children {
+            if spec.optional {
+                let present = seen_optional < occupied_optionals;
+                seen_optional += 1;
+                if !present {
+                    continue;
+                }
+            }
+            if spec.role == role {
+                return Some(idx);
+            }
+            idx += 1;
+        }
+        None
+    }
+
+    /// Whether the shape declares `role` as an **optional** child (ADR-0081
+    /// optional-role extension).
+    pub fn role_is_optional(&self, role: &str) -> bool {
+        self.child_role(role).map(|s| s.optional).unwrap_or(false)
     }
 
     /// Return the [`ChildRoleSpec`] for a role, if declared.
@@ -357,10 +469,12 @@ mod tests {
             ChildRoleSpec {
                 role: "target".into(),
                 variadic: false,
+                optional: false,
             },
             ChildRoleSpec {
                 role: "value".into(),
                 variadic: false,
+                optional: false,
             },
         ]);
         assert_eq!(def.role_index("target"), Some(0));
@@ -375,6 +489,7 @@ mod tests {
         let def = AstShapeDef::new("ast.block", "block").with_children(vec![ChildRoleSpec {
             role: "statements".into(),
             variadic: true,
+            optional: false,
         }]);
         // Variadic role resolves to its start index (all children from here).
         assert_eq!(def.role_index("statements"), Some(0));
@@ -388,6 +503,7 @@ mod tests {
         let def = AstShapeDef::new("ast.block", "block").with_children(vec![ChildRoleSpec {
             role: "statements".into(),
             variadic: true,
+            optional: false,
         }]);
         let j = serde_json::to_string(&def).unwrap();
         let back: AstShapeDef = serde_json::from_str(&j).unwrap();
@@ -418,5 +534,150 @@ mod tests {
         let kept = set.get_by_identity("binary.add").unwrap();
         assert_eq!(kept.id(), "ast.binary.add");
         assert_eq!(kept.payload_schema, serde_json::json!({"first": true}));
+    }
+
+    /// `match`'s `[scrutinee, {motive, optional}, block]` shape.
+    fn match_shape() -> AstShapeDef {
+        AstShapeDef::new("ast.match", "match").with_children(vec![
+            ChildRoleSpec {
+                role: "scrutinee".into(),
+                variadic: false,
+                optional: false,
+            },
+            ChildRoleSpec {
+                role: "motive".into(),
+                variadic: false,
+                optional: true,
+            },
+            ChildRoleSpec {
+                role: "block".into(),
+                variadic: false,
+                optional: false,
+            },
+        ])
+    }
+
+    #[test]
+    fn role_index_optional_roles_full_form() {
+        let def = match_shape();
+        // `role_index` resolves the full form: every declared role occupies
+        // a slot, optional included.
+        assert_eq!(def.role_index("scrutinee"), Some(0));
+        assert_eq!(def.role_index("motive"), Some(1));
+        assert_eq!(def.role_index("block"), Some(2));
+        assert!(def.role_is_optional("motive"));
+        assert!(!def.role_is_optional("block"));
+        assert!(!def.role_is_optional("unknown"));
+    }
+
+    #[test]
+    fn role_index_at_resolves_optional_absent() {
+        let def = match_shape();
+        // arity 2 — `match s { .. }` (no motive): `block` shifts down.
+        assert_eq!(def.role_index_at("scrutinee", 2), Some(0));
+        assert_eq!(def.role_index_at("motive", 2), None);
+        assert_eq!(def.role_index_at("block", 2), Some(1));
+    }
+
+    #[test]
+    fn role_index_at_resolves_optional_present() {
+        let def = match_shape();
+        // arity 3 — `match s return m with { .. }`: full-form positions.
+        assert_eq!(def.role_index_at("scrutinee", 3), Some(0));
+        assert_eq!(def.role_index_at("motive", 3), Some(1));
+        assert_eq!(def.role_index_at("block", 3), Some(2));
+    }
+
+    #[test]
+    fn role_index_at_trailing_optional() {
+        // `assign`'s `[target, value, {body, optional}]` shape.
+        let def = AstShapeDef::new("ast.assign", "assign").with_children(vec![
+            ChildRoleSpec {
+                role: "target".into(),
+                variadic: false,
+                optional: false,
+            },
+            ChildRoleSpec {
+                role: "value".into(),
+                variadic: false,
+                optional: false,
+            },
+            ChildRoleSpec {
+                role: "body".into(),
+                variadic: false,
+                optional: true,
+            },
+        ]);
+        // `x = v` — no body.
+        assert_eq!(def.role_index_at("target", 2), Some(0));
+        assert_eq!(def.role_index_at("value", 2), Some(1));
+        assert_eq!(def.role_index_at("body", 2), None);
+        // `x = v in body` — trailing body present.
+        assert_eq!(def.role_index_at("body", 3), Some(2));
+    }
+
+    #[test]
+    fn role_index_at_rejects_underflow() {
+        let def = match_shape();
+        // arity below the required-role count resolves nothing.
+        assert_eq!(def.role_index_at("scrutinee", 1), None);
+        assert_eq!(def.role_index_at("block", 1), None);
+    }
+
+    #[test]
+    fn role_index_at_no_optional_is_arity_independent() {
+        let def = AstShapeDef::new("ast.arm", "arm").with_children(vec![
+            ChildRoleSpec {
+                role: "pattern".into(),
+                variadic: false,
+                optional: false,
+            },
+            ChildRoleSpec {
+                role: "body".into(),
+                variadic: false,
+                optional: false,
+            },
+        ]);
+        assert_eq!(def.role_index_at("pattern", 2), Some(0));
+        assert_eq!(def.role_index_at("body", 2), Some(1));
+    }
+
+    #[test]
+    fn child_role_spec_string_shorthand() {
+        // Plain-string children lists stay valid YAML/JSON (backward compat).
+        let def: AstShapeDef = serde_json::from_str(
+            r#"{"id":"ast.pair","node_kind":"pair","children":["left","right"]}"#,
+        )
+        .unwrap();
+        let children = def.children.as_ref().unwrap();
+        assert_eq!(children[0].role, "left");
+        assert!(!children[0].variadic);
+        assert!(!children[0].optional);
+        assert_eq!(children[1].role, "right");
+        assert_eq!(def.role_index("left"), Some(0));
+        assert_eq!(def.role_index("right"), Some(1));
+    }
+
+    #[test]
+    fn child_role_spec_optional_deserializes() {
+        // Mixed list: bare strings + the map form with `optional: true`.
+        let def: AstShapeDef = serde_json::from_str(
+            r#"{"id":"ast.match","node_kind":"match","children":["scrutinee",{"role":"motive","optional":true},"block"]}"#,
+        )
+        .unwrap();
+        assert_eq!(def.role_index("block"), Some(2));
+        assert_eq!(def.role_index_at("block", 2), Some(1));
+        assert_eq!(def.role_index_at("block", 3), Some(2));
+    }
+
+    #[test]
+    fn optional_flag_skipped_on_wire_when_false() {
+        let def = AstShapeDef::new("ast.assign", "assign").with_children(vec![ChildRoleSpec {
+            role: "target".into(),
+            variadic: false,
+            optional: false,
+        }]);
+        let j = serde_json::to_string(&def).unwrap();
+        assert!(!j.contains("optional"));
     }
 }

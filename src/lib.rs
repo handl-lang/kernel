@@ -110,6 +110,12 @@ impl plugin_engine::LanguageView for Language {
         self.child_role_index(kind, role).ok().flatten()
     }
 
+    fn child_role_index_at(&self, kind: &str, role: &str, arity: usize) -> Option<usize> {
+        self.ast
+            .get_by_identity(kind)
+            .and_then(|def| def.role_index_at(role, arity))
+    }
+
     fn eval_rule(&self, kind: &str) -> Option<&Term> {
         self.eval.get_by_identity(kind).map(|def| &def.scheme)
     }
