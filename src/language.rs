@@ -408,6 +408,30 @@ impl Language {
             .and_then(|def| def.literal_child(role, child_kind))
     }
 
+    /// The `AstShapeDef::pattern_role` declared for `node_kind`, if any
+    /// (ADR-0081).
+    ///
+    /// Engines dispatch pattern-position behavior on this vocabulary —
+    /// `sequence`/`entries`/`entry`/`rest`/`leaf` — never on `kind ==`
+    /// checks. Returns `None` when the kind has no shape or declares no
+    /// pattern role.
+    pub fn pattern_role(&self, node_kind: &str) -> Option<&str> {
+        self.ast
+            .get_by_identity(node_kind)
+            .and_then(|def| def.pattern_role.as_deref())
+    }
+
+    /// Whether `node_kind` plays `role` in pattern position, per its
+    /// `AstShapeDef::pattern_role` declaration (ADR-0081).
+    ///
+    /// Returns `Some(bool)` when the shape declares a `pattern_role` — the
+    /// declaration is authoritative — and `None` when it declares none (or
+    /// has no shape at all); callers keep their legacy kind-name fallback
+    /// for role-less shapes, exactly like [`literal_child`](Self::literal_child).
+    pub fn pattern_role_is(&self, node_kind: &str, role: &str) -> Option<bool> {
+        self.pattern_role(node_kind).map(|r| r == role)
+    }
+
     /// Whether `node_kind`'s shape declares any variadic child role (ADR-0081).
     ///
     /// Engines use this to replace `kind == "paren" || kind == "array"` shape
@@ -486,12 +510,7 @@ impl Language {
         ast: &Ast,
         params_node: &AstNode,
     ) -> Result<(Vec<String>, Option<String>), LangError> {
-        let is_rest = |node: &AstNode| {
-            self.ast
-                .get_by_identity(&node.kind)
-                .and_then(|s| s.pattern_role.as_deref())
-                == Some("rest")
-        };
+        let is_rest = |node: &AstNode| self.pattern_role_is(&node.kind, "rest") == Some(true);
         if !self.has_variadic_role(&params_node.kind) {
             let name = self.param_name(ast, params_node)?;
             return if is_rest(params_node) {
@@ -541,12 +560,8 @@ impl Language {
     /// data-driven over `AstShapeDef` metadata rather than a `kind == "array"`
     /// test.
     pub fn is_array_pattern(&self, params_node: &AstNode) -> bool {
-        self.ast
-            .get_by_identity(&params_node.kind)
-            .map_or(false, |def| {
-                def.pattern_role.as_deref() == Some("sequence")
-                    && self.has_variadic_role(&params_node.kind)
-            })
+        self.pattern_role_is(&params_node.kind, "sequence") == Some(true)
+            && self.has_variadic_role(&params_node.kind)
     }
 
     /// Extract the binding target name from a top-level binding node.
