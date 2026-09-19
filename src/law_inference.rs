@@ -196,7 +196,11 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
     // the child fields with their normalized forms.
     let (g_norm, child_changed) = match td.tag() {
         "Op" => {
-            let mut changed = false;
+            // The `dim` slot is an ordinary dimension subterm (ADR-0120
+            // Phase 3): rewrite it like the args, preserving it when
+            // absent (pre-ADR-0119 records).
+            let (d2, cd) = pass_opt(td, "dim");
+            let mut changed = cd;
             let args2: Vec<TermData> = td
                 .get_term_list("args")
                 .into_iter()
@@ -206,7 +210,13 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
                     a2
                 })
                 .collect();
-            (with_child_list(td, "args", args2), changed)
+            let rebuilt = with_child_list(td, "args", args2);
+            let rebuilt = if let Some(d) = d2 {
+                with_children(&rebuilt, &[("dim", d)])
+            } else {
+                rebuilt
+            };
+            (rebuilt, changed)
         }
         "Seq" => {
             // The axis slot is an ordinary subterm (ADR-0120 Phase 2):
@@ -376,6 +386,17 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
             let (b2, cb) = pass_req(td, "body");
             (with_children(td, &[("grade", g2), ("body", b2)]), cg || cb)
         }
+        "Arr" => {
+            // `Arr` carries a `dim` subterm (ADR-0119 §3): normalize it,
+            // preserving the field when absent (pre-ADR-0119 records).
+            let (d2, cd) = pass_opt(td, "dim");
+            let rebuilt = if let Some(d) = d2 {
+                with_children(td, &[("dim", d)])
+            } else {
+                td.clone()
+            };
+            (rebuilt, cd)
+        }
         // Leaf variants (no child schemes) and unknown tags: unchanged.
         _ => (td.clone(), false),
     };
@@ -458,7 +479,8 @@ fn children_uses_first(td: &TermData, field: &str) -> bool {
 fn uses_first_td(td: &TermData) -> bool {
     match td.tag() {
         "First" => true,
-        "Op" => children_uses_first(td, "args"),
+        "Op" => child_uses_first(td, "dim") || children_uses_first(td, "args"),
+        "Arr" => child_uses_first(td, "dim"),
         "App" => child_uses_first(td, "callee") || children_uses_first(td, "args"),
         "Seq" => {
             child_uses_first(td, "fst")

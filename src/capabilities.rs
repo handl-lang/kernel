@@ -40,6 +40,12 @@ fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
             if let Some(ArrSource::Foreign(name)) = td.arr_source() {
                 out.insert(name);
             }
+            // The `dim` slot is an ordinary dimension term — a compound
+            // dimension expression may itself reference foreign ops
+            // (ADR-0120 Phase 3).
+            if let Some(dim) = td.get_term("dim") {
+                collect_foreign_td(&dim, out);
+            }
             for a in td.get_term_list("args") {
                 collect_foreign_td(&a, out);
             }
@@ -88,7 +94,14 @@ fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
             collect_foreign_td(&source, out);
             collect_foreign_td(&target, out);
         }
-        "Arr" | "Child" | "Const" => {}
+        "Arr" => {
+            // `Arr` carries a `dim` term too (ADR-0119 §3) — a compound
+            // dimension expression may reference foreign ops.
+            if let Some(dim) = td.get_term("dim") {
+                collect_foreign_td(&dim, out);
+            }
+        }
+        "Child" | "Const" => {}
         "Iter" => {
             let fuel = td.get_term("fuel").expect("Iter: missing fuel");
             let predicate = td.get_term("predicate").expect("Iter: missing predicate");
