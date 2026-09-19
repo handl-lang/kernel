@@ -1257,7 +1257,8 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// 2-cell runtime helpers (ADR-0104b frontier value model)
+// n-cell runtime helpers (ADR-0120 globular cell model; the ADR-0104b
+// `Cell2` frontier shapes are the dimension-2 special case)
 // ---------------------------------------------------------------------------
 
 /// Build a `Cell2` tagged record from its source, target, and witness value.
@@ -1270,6 +1271,25 @@ pub fn cell2(src: TaggedValue, tgt: TaggedValue, value: TaggedValue) -> TaggedVa
     TaggedValue::Obj(Rc::new(map))
 }
 
+/// Build a `Cell` tagged record of dimension `n` — the generalized
+/// globular shape `{__tag__: "Cell", __dim__: n, __src__, __tgt__,
+/// value}` whose `__src__`/`__tgt__` are `(n-1)`-cells. `n == 2` keeps
+/// the legacy `Cell2` record shape so existing consumers see unchanged
+/// values; `n == 1` is not a record at all (1-cells are ordinary
+/// values), so callers only invoke this for `n >= 2`.
+fn mk_cell(n: u64, src: TaggedValue, tgt: TaggedValue, witness: TaggedValue) -> TaggedValue {
+    if n == 2 {
+        return cell2(src, tgt, witness);
+    }
+    let mut map = FxHashMap::with_capacity_and_hasher(5, Default::default());
+    map.insert(Rc::from("__tag__"), TaggedValue::Str(Rc::from("Cell")));
+    map.insert(Rc::from("__dim__"), TaggedValue::Int(n as i64));
+    map.insert(Rc::from("__src__"), src);
+    map.insert(Rc::from("__tgt__"), tgt);
+    map.insert(Rc::from("value"), witness);
+    TaggedValue::Obj(Rc::new(map))
+}
+
 /// Compose two 1-cell arrow values into a serializable `Arrow` record.
 pub fn compose1(first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
     let mut map = FxHashMap::with_capacity_and_hasher(3, Default::default());
@@ -1279,38 +1299,138 @@ pub fn compose1(first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
     TaggedValue::Obj(Rc::new(map))
 }
 
-/// `CellId(arrow)` — wrap the arrow's result in a `Cell2`.
+/// The globular dimension of a runtime cell value (ADR-0120).
+///
+/// A record carrying `__dim__` is an n-cell directly (`Cell` records and
+/// surface-built `{__dim__: n, __src__, __tgt__, value}` literals); a
+/// `Cell2` record is a 2-cell. A `dim_arrow` value
+/// (`{__tag__: "Arrow", inputs, grade, output}` — the `f ~[n]~> g`
+/// morphism) is an n-cell whose boundaries are `inputs`/`output` —
+/// `grade` is its declared dimension — mirroring the type-level rule.
+/// Every other value is a 1-cell: its own degenerate boundary.
+pub fn cell_dim(v: &TaggedValue) -> u64 {
+    if let Some(d) = nat(v.get("__dim__")) {
+        return d.max(1);
+    }
+    match v.get("__tag__").and_then(|t| t.as_str()) {
+        Some("Cell2") => 2,
+        Some("Arrow") if v.get("inputs").is_some() && v.get("output").is_some() => {
+            nat(v.get("grade")).unwrap_or(1).max(1)
+        }
+        _ => 1,
+    }
+}
+
+/// A natural number read from a value slot (`__dim__`, `grade`, `axis`).
+fn nat(v: Option<&TaggedValue>) -> Option<u64> {
+    v.and_then(|v| v.as_f64())
+        .filter(|n| *n >= 0.0 && n.fract() == 0.0)
+        .map(|n| n as u64)
+}
+
+/// Whether `v` is a cell record — a value whose globular boundaries are
+/// stored fields rather than the degenerate self-boundary.
+fn is_cell(v: &TaggedValue) -> bool {
+    if v.get("__dim__").is_some() || v.get("__src__").is_some() {
+        return true;
+    }
+    match v.get("__tag__").and_then(|t| t.as_str()) {
+        Some("Cell2") | Some("Cell") => true,
+        Some("Arrow") => v.get("inputs").is_some() && v.get("output").is_some(),
+        _ => false,
+    }
+}
+
+/// `Src(cell)` — project the source boundary.
+///
+/// Cell records read `__src__`; a `dim_arrow` record
+/// (`{__tag__: "Arrow", inputs, grade, output}`) reads `inputs`; an
+/// `Arrow{first, second}` composite's source is `first`'s source. Any
+/// other value is a degenerate cell — its own boundary.
+pub fn cell_src(v: &TaggedValue) -> TaggedValue {
+    if let Some(s) = v.get("__src__") {
+        return s.clone();
+    }
+    if v.get("__tag__").and_then(|t| t.as_str()) == Some("Arrow") {
+        if v.get("inputs").is_some() && v.get("output").is_some() {
+            if let Some(i) = v.get("inputs") {
+                return i.clone();
+            }
+        }
+        if let Some(f) = v.get("first") {
+            return cell_src(f);
+        }
+    }
+    v.clone()
+}
+
+/// `Tgt(cell)` — project the target boundary; see [`cell_src`].
+pub fn cell_tgt(v: &TaggedValue) -> TaggedValue {
+    if let Some(t) = v.get("__tgt__") {
+        return t.clone();
+    }
+    if v.get("__tag__").and_then(|t| t.as_str()) == Some("Arrow") {
+        if v.get("inputs").is_some() && v.get("output").is_some() {
+            if let Some(o) = v.get("output") {
+                return o.clone();
+            }
+        }
+        if let Some(s) = v.get("second") {
+            return cell_tgt(s);
+        }
+    }
+    v.clone()
+}
+
+/// The witness a cell record carries (`value` field); a degenerate cell
+/// witnesses itself.
+pub fn cell_witness(v: &TaggedValue) -> TaggedValue {
+    v.get("value").cloned().unwrap_or_else(|| v.clone())
+}
+
+/// Whether `v` is an identity cell: a cell whose boundaries coincide and
+/// whose witness is that shared boundary — `id_c` pastes as a unit.
+/// Mirrors the legacy `cell2_is_id` rule for `Cell2` records.
+pub fn cell_is_id(v: &TaggedValue) -> bool {
+    if is_cell(v) {
+        let src = cell_src(v);
+        return src == cell_tgt(v) && cell_witness(v) == src;
+    }
+    v.get("__tag__").is_none() && v.get("value") == Some(v)
+}
+
+/// `CellId(arrow)` — wrap the arrow's result in an identity `Cell2`.
 pub fn cell2_id(arrow: &TaggedValue) -> TaggedValue {
     cell2(arrow.clone(), arrow.clone(), arrow.clone())
 }
 
 /// `CellCompV(first, second)` — vertical cell composition `∘₁`.
-/// Delegates to [`cell2_comp_axis`], which enforces the globular
-/// boundary law `tgt(first) = src(second)`.
+/// Delegates to [`cell_comp_axis`] at declared dimension 2, which
+/// enforces the globular boundary law `tgt(first) = src(second)`.
 pub fn cell2_comp_v(first: &TaggedValue, second: &TaggedValue) -> Result<TaggedValue, String> {
-    cell2_comp_axis(1, first, second)
+    cell_comp_axis(1, 2, first, second)
 }
 
 /// `Src(cell)` — project the source 1-cell, falling back to the value itself.
 pub fn cell2_src(cell: &TaggedValue) -> TaggedValue {
-    cell.get("__src__").cloned().unwrap_or(cell.clone())
+    cell_src(cell)
 }
 
 /// `Tgt(cell)` — project the target 1-cell, falling back to the value itself.
 pub fn cell2_tgt(cell: &TaggedValue) -> TaggedValue {
-    cell.get("__tgt__").cloned().unwrap_or(cell.clone())
+    cell_tgt(cell)
 }
 
 /// `Whisker` — attach a 1-cell `arrow` to the left or right side of a 2-cell.
 /// `side` is `"Left"` or `"Right"`.
 pub fn cell2_whisker(side: &str, arrow: &TaggedValue, cell: &TaggedValue) -> TaggedValue {
-    let src = cell.get("__src__").unwrap_or(cell);
-    let tgt = cell.get("__tgt__").unwrap_or(cell);
-    let value = cell.get("value").unwrap_or(cell).clone();
+    let src = cell_src(cell);
+    let tgt = cell_tgt(cell);
+    let value = cell_witness(cell);
     let (new_src, new_tgt) = if side == "Right" {
-        (compose1(src, arrow), compose1(tgt, arrow))
+        (compose1(&src, arrow), compose1(&tgt, arrow))
     } else {
-        (compose1(arrow, src), compose1(arrow, tgt))
+        (compose1(arrow, &src), compose1(arrow, &tgt))
     };
     cell2(new_src, new_tgt, value)
 }
@@ -1325,58 +1445,194 @@ pub fn record_proj(record: &TaggedValue, field: &str) -> TaggedValue {
 
 /// Whether `cell` is an identity 2-cell: `Cell2{src, src, src}`.
 pub fn cell2_is_id(cell: &TaggedValue) -> bool {
-    let is_cell2 = cell.get("__tag__").and_then(|v| v.as_str()) == Some("Cell2");
-    if !is_cell2 {
-        return false;
-    }
-    let src = cell2_src(cell);
-    src == cell2_tgt(cell) && cell.get("value") == Some(&src)
+    cell_is_id(cell)
 }
 
-/// Axis-`k` composition of n-cells (n > k) at the value level
-/// (ADR-0120 Phase 5).
+/// Lift a cell of dimension `d` to an `n`-cell (`d <= n`) as the
+/// iterated identity `id^(n-d)(v)`: each level wraps source, target, and
+/// witness in the cell one dimension up. A 1-cell `v` lifted to a 3-cell
+/// is `Cell3{Cell2{v,v,v}, Cell2{v,v,v}, Cell2{v,v,v}}`.
+fn promote(v: &TaggedValue, n: u64) -> TaggedValue {
+    let mut cur = v.clone();
+    let mut d = cell_dim(v).max(1);
+    while d < n {
+        cur = mk_cell(d + 1, cur.clone(), cur.clone(), cur.clone());
+        d += 1;
+    }
+    cur
+}
+
+/// The axis-`k` boundary of an n-cell `c` (`k < n`), on the `tgt`
+/// (`true`) or `src` (`false`) side. `k == n - 1` reads `c`'s own
+/// `__src__`/`__tgt__`; deeper axes live inside the `(n-1)`-cell
+/// boundaries — globularity makes the source and target boundaries
+/// agree on all lower axes, so recursing through `src` suffices.
+fn boundary_at(k: u64, n: u64, c: &TaggedValue, tgt_side: bool) -> TaggedValue {
+    debug_assert!(k < n);
+    if k + 1 == n {
+        if tgt_side {
+            cell_tgt(c)
+        } else {
+            cell_src(c)
+        }
+    } else {
+        boundary_at(k, n - 1, &cell_src(c), tgt_side)
+    }
+}
+
+/// `∘ₖ` of two normalized n-cells (`k < n`): the globular pasting law.
 ///
-/// `∘₀` on 2-cells is *horizontal* composition: source and target
-/// boundaries compose pairwise as 1-cell `Arrow` records. `∘ₖ` for
-/// `k ≥ 1` is *vertical* composition: the target of `first` meets the
-/// source of `second` (`cell2_comp_v`). The non-identity operand supplies
-/// the witness `value`, matching `cell2_whisker` behavior; when `second`
-/// is an identity cell, `first`'s witness is kept.
+/// The boundary law `tgtₖ(a) = srcₖ(b)` is checked first; then the
+/// composite's k-boundaries are `srcₖ(a)`/`tgtₖ(b)` and every other axis
+/// `j` pastes the operands' j-boundaries pairwise (`∘ₖ` applied one
+/// dimension down), which recursively enforces the lower boundary laws.
 ///
-/// The globular boundary law `tgtₖ(first) = srcₖ(second)` is enforced
-/// for `k ≥ 1`: the `Cell2` record carries only its 1-cell boundaries
-/// (`__src__`/`__tgt__`), so that is exactly the boundary the law is
-/// representable along — the 0-boundaries (objects) are not part of the
-/// value model, which is why `∘₀` is unchecked. Non-`Cell2` values are
-/// degenerate cells whose whole value stands for both boundaries, so
-/// e.g. `3 ∘₁ 3` composes while `1 ∘₁ 2` is rejected.
+/// The witness follows the legacy `Cell2` convention at every level:
+/// the non-identity operand supplies its `value` (`second` wins unless
+/// it is an identity cell — `α ∘ₖ id` keeps `α`'s witness, `id ∘ₖ α`
+/// keeps `α`'s). `∘₀` on 1-cells (`n == 1`) is sequential 1-cell
+/// composition — the `Arrow{first, second}` record.
+fn comp_at(k: u64, n: u64, a: &TaggedValue, b: &TaggedValue, b_id: bool) -> Result<TaggedValue, String> {
+    if n <= 1 {
+        // `∘₀` on 1-cells: sequential/whiskering composition.
+        return Ok(compose1(a, b));
+    }
+    // The globular boundary law `tgtₖ(a) = srcₖ(b)`. Axis 0 is exempt:
+    // 0-boundaries (objects) are not part of the value model — the
+    // legacy `Cell2` convention treats `∘₀` as unchecked horizontal
+    // composition, and deeper axes check `k >= 1` only.
+    if k > 0 {
+        let tgt_a = boundary_at(k, n, a, true);
+        let src_b = boundary_at(k, n, b, false);
+        if tgt_a != src_b {
+            return Err(format!(
+                "cell composition along axis {k}: boundary mismatch — \
+                 tgt_{k} of the first cell does not equal src_{k} of the second"
+            ));
+        }
+    }
+    let sa = cell_src(a);
+    let sb = cell_src(b);
+    let ta = cell_tgt(a);
+    let tb = cell_tgt(b);
+    let src = if k + 1 == n {
+        sa
+    } else {
+        let b_id = cell_is_id(&sb);
+        comp_at(k, n - 1, &sa, &sb, b_id)?
+    };
+    let tgt = if k + 1 == n {
+        tb
+    } else {
+        let b_id = cell_is_id(&tb);
+        comp_at(k, n - 1, &ta, &tb, b_id)?
+    };
+    let witness = if b_id {
+        cell_witness(a)
+    } else {
+        cell_witness(b)
+    };
+    Ok(mk_cell(n, src, tgt, witness))
+}
+
+/// Axis-`k` composition of cells at the value level (ADR-0120): the
+/// runtime realization of `Seq{axis}` (`>>>`/`>>>[k]`) and the steps of
+/// [`cell_compose`].
+///
+/// `declared_dim` is the operands' *declared* dimension — the eval
+/// scheme's static lift (the canonical `>>>[k]` scheme declares `2`, so
+/// plain values paste as degenerate 2-cells). The *effective* dimension
+/// is `max(declared_dim, cell_dim(a), cell_dim(b))`: a value carrying a
+/// higher dimension (`Cell`/`__dim__`/`dim_arrow` records) pastes at its
+/// own height, so `>>>[2]` runs on 3-cell values. `k >= n` is a
+/// dimension error; `k < n` enforces the globular boundary law
+/// `tgtₖ(first) = srcₖ(second)` and produces the n-cell composite.
+pub fn cell_comp_axis(
+    axis: u64,
+    declared_dim: u64,
+    first: &TaggedValue,
+    second: &TaggedValue,
+) -> Result<TaggedValue, String> {
+    let n = declared_dim
+        .max(cell_dim(first))
+        .max(cell_dim(second))
+        .max(1);
+    if axis >= n {
+        return Err(format!(
+            "axis-{axis} composition requires cells of dimension > {axis} \
+             (declared dimension {declared_dim})"
+        ));
+    }
+    // The witness preference consults identity on the *declared*
+    // operand: a degenerate value lifted by promotion is an identity
+    // cell in shape but not in content — `1 ∘₀ 2` keeps `2` as witness,
+    // matching the legacy `cell2_comp_axis` rule.
+    let b_id = cell_is_id(second);
+    let a = promote(first, n);
+    let b = promote(second, n);
+    comp_at(axis, n, &a, &b, b_id)
+}
+
+/// Axis-`k` composition of 2-cells (ADR-0120 Phase 5) — the legacy
+/// spelling; equivalent to `cell_comp_axis(axis, 2, a, b)`.
+///
+/// `∘₀` on 2-cells is *horizontal* composition (boundaries compose
+/// pairwise as 1-cell `Arrow` records); `∘ₖ` for `k ≥ 1` is *vertical*
+/// composition. Non-`Cell2` values are degenerate cells whose whole
+/// value stands for both boundaries, so e.g. `3 ∘₁ 3` composes while
+/// `1 ∘₁ 2` is rejected.
 pub fn cell2_comp_axis(
     axis: u64,
     first: &TaggedValue,
     second: &TaggedValue,
 ) -> Result<TaggedValue, String> {
-    if axis >= 1 && cell2_tgt(first) != cell2_src(second) {
-        return Err(format!(
-            "cell composition along axis {axis}: boundary mismatch — \
-             tgt of the first cell does not equal src of the second"
-        ));
+    cell_comp_axis(axis, 2, first, second)
+}
+
+/// `compose(diagram)` — generalized pasting/Kan filling (ADR-0120): the
+/// n-ary generalization of `Seq{axis}`.
+///
+/// `diagram` is an array of pasting steps. The first element seeds the
+/// composite with a cell; each later step is `{axis: k, cell: c}` (a
+/// bare cell means `axis: 0`; a `{cell: c}` record without `axis` pastes
+/// along axis 0) and computes `acc ∘ₖ c`, enforcing the globular
+/// boundary law `tgtₖ(acc) = srcₖ(c)` per step. Step cells carry their
+/// own dimensions — a `Cell`/`__dim__` record pastes at its own height —
+/// with the declared dimension floored at `2`, the same atom→2-cell lift
+/// `>>>[k]` applies.
+pub fn cell_compose(diagram: &TaggedValue) -> Result<TaggedValue, String> {
+    let steps = diagram.as_array().ok_or_else(|| {
+        "compose: pasting diagram must be an array of {axis, cell} steps".to_string()
+    })?;
+    let mut iter = steps.iter();
+    let seed = iter
+        .next()
+        .ok_or_else(|| "compose: empty pasting diagram".to_string())?;
+    let (_, mut acc) =
+        compose_step(seed).map_err(|e| format!("compose step 0: {e}"))?;
+    for (i, step) in iter.enumerate() {
+        let (axis, cell) = compose_step(step)
+            .map_err(|e| format!("compose step {}: {e}", i + 1))?;
+        acc = cell_comp_axis(axis, 2, &acc, &cell)
+            .map_err(|e| format!("compose step {}: {e}", i + 1))?;
     }
-    let witness = if cell2_is_id(second) {
-        first.get("value").cloned().unwrap_or_else(|| first.clone())
+    Ok(acc)
+}
+
+/// Split a `compose` step into `(axis, cell)`: a record carrying a
+/// `cell` field is `{axis?: k, cell: c}` (`axis` defaults to 0);
+/// anything else is a bare cell pasting along axis 0.
+fn compose_step(step: &TaggedValue) -> Result<(u64, TaggedValue), String> {
+    if let Some(cell) = step.get("cell") {
+        let axis = match step.get("axis") {
+            None => 0,
+            Some(a) => nat(Some(a))
+                .ok_or_else(|| format!("compose: step axis must be a natural number, got {a:?}"))?,
+        };
+        Ok((axis, cell.clone()))
     } else {
-        second
-            .get("value")
-            .cloned()
-            .unwrap_or_else(|| second.clone())
-    };
-    Ok(match axis {
-        0 => cell2(
-            compose1(&cell2_src(first), &cell2_src(second)),
-            compose1(&cell2_tgt(first), &cell2_tgt(second)),
-            witness,
-        ),
-        _ => cell2(cell2_src(first), cell2_tgt(second), witness),
-    })
+        Ok((0, step.clone()))
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1503,4 +1759,186 @@ macro_rules! tval {
     };
     // any other expression: delegate to IntoTval for type inference
     ($e:expr) => { $crate::IntoTval::into_tval($e) };
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod cell_tests {
+    use super::*;
+
+    /// `Cell` record `{__tag__: "Cell", __dim__: 3, __src__, __tgt__, value}`.
+    fn cell3(src: TaggedValue, tgt: TaggedValue, witness: TaggedValue) -> TaggedValue {
+        mk_cell(3, src, tgt, witness)
+    }
+
+    fn int(n: i64) -> TaggedValue {
+        TaggedValue::Int(n)
+    }
+
+    #[test]
+    fn cell_dim_recognizes_cell_shapes() {
+        assert_eq!(cell_dim(&int(7)), 1);
+        assert_eq!(cell_dim(&cell2(int(1), int(2), int(9))), 2);
+        assert_eq!(cell_dim(&cell3(int(1), int(2), int(9))), 3);
+        // `dim_arrow` records (`f ~[n]~> g`) carry their dimension in `grade`.
+        let arr = TaggedValue::from(serde_json::json!({
+            "__tag__": "Arrow", "inputs": 1, "grade": 3, "output": 2
+        }));
+        assert_eq!(cell_dim(&arr), 3);
+        // A `∘₀` composite (`Arrow{first, second}`) stays a 1-cell.
+        assert_eq!(cell_dim(&compose1(&int(1), &int(2))), 1);
+    }
+
+    #[test]
+    fn arrow_record_boundaries() {
+        let arr = TaggedValue::from(serde_json::json!({
+            "__tag__": "Arrow", "inputs": 1, "grade": 2, "output": 2
+        }));
+        assert_eq!(cell_src(&arr), int(1));
+        assert_eq!(cell_tgt(&arr), int(2));
+        // `Arrow{first, second}`: boundaries recurse to the ends of the chain.
+        let comp = compose1(&int(3), &compose1(&int(4), &int(5)));
+        assert_eq!(cell_src(&comp), int(3));
+        assert_eq!(cell_tgt(&comp), int(5));
+    }
+
+    #[test]
+    fn comp_axis1_atoms_is_legacy_cell2() {
+        // `3 ∘₁ 3` — degenerate cells compose, producing the legacy Cell2.
+        let c = cell2_comp_axis(1, &int(3), &int(3)).unwrap();
+        assert_eq!(
+            tagged_to_value(&c),
+            serde_json::json!({"__tag__": "Cell2", "__src__": 3, "__tgt__": 3, "value": 3})
+        );
+        // `1 ∘₁ 2` — boundary mismatch.
+        assert!(cell2_comp_axis(1, &int(1), &int(2)).unwrap_err().contains("boundary"));
+    }
+
+    #[test]
+    fn comp_axis0_keeps_horizontal_shape() {
+        // `a ∘₀ b` on 2-cells: boundaries compose pairwise as Arrow records.
+        let a = cell2(int(1), int(2), int(10));
+        let b = cell2(int(2), int(3), int(20));
+        let c = cell_comp_axis(0, 2, &a, &b).unwrap();
+        assert_eq!(cell_dim(&c), 2);
+        assert_eq!(
+            cell_src(&c),
+            TaggedValue::from(serde_json::json!({"__tag__": "Arrow", "first": 1, "second": 2}))
+        );
+    }
+
+    #[test]
+    fn comp_axis2_pastes_3cells() {
+        // `α ∘₂ β` on 3-cells: tgt₂(α) = src₂(β) required; the composite
+        // is a `Cell{__dim__: 3}` whose boundaries are src₂(α)/tgt₂(β).
+        let shared = cell2(int(1), int(2), int(5));
+        let a = cell3(cell2(int(0), int(1), int(8)), shared.clone(), int(100));
+        let b = cell3(shared.clone(), cell2(int(2), int(3), int(9)), int(200));
+        let c = cell_comp_axis(2, 2, &a, &b).unwrap();
+        assert_eq!(cell_dim(&c), 3);
+        assert_eq!(cell_src(&c), cell2(int(0), int(1), int(8)));
+        assert_eq!(cell_tgt(&c), cell2(int(2), int(3), int(9)));
+        assert_eq!(cell_witness(&c), int(200));
+        assert_eq!(
+            c.get("__tag__").and_then(|t| t.as_str()),
+            Some("Cell")
+        );
+    }
+
+    #[test]
+    fn comp_axis2_boundary_mismatch() {
+        let a = cell3(cell2(int(0), int(1), int(8)), cell2(int(1), int(2), int(5)), int(1));
+        let b = cell3(cell2(int(7), int(2), int(5)), cell2(int(2), int(3), int(9)), int(2));
+        let err = cell_comp_axis(2, 2, &a, &b).unwrap_err();
+        assert!(err.contains("boundary"), "got {err}");
+    }
+
+    #[test]
+    fn comp_axis1_on_3cells_pastes_lower_boundaries() {
+        // `∘₁` on 3-cells: the 1-boundary check `tgt₁(a) = src₁(b)`
+        // compares whole 2-cells; the composite's other boundaries are
+        // the `∘₁` of the operands' boundaries.
+        let shared = cell2(int(1), int(2), int(5));
+        let a = cell3(cell2(int(0), int(1), int(8)), shared.clone(), int(100));
+        let b = cell3(shared.clone(), cell2(int(2), int(9), int(4)), int(200));
+        let c = cell_comp_axis(1, 2, &a, &b).unwrap();
+        assert_eq!(cell_dim(&c), 3);
+        // src boundary: `Cell2{0,1,8} ∘₁ Cell2{1,2,5}` = Cell2{0,2,5}.
+        assert_eq!(cell_src(&c), cell2(int(0), int(2), int(5)));
+        // tgt boundary: `Cell2{1,2,5} ∘₁ Cell2{2,9,4}` = Cell2{1,9,4}.
+        assert_eq!(cell_tgt(&c), cell2(int(1), int(9), int(4)));
+    }
+
+    #[test]
+    fn comp_promotes_lower_dimensional_operands() {
+        // A 2-cell pasted at axis 2 against a 3-cell lifts to `id` of
+        // itself; the boundary law then applies at dimension 3.
+        let c2 = cell2(int(1), int(2), int(5));
+        let a = cell3(c2.clone(), c2.clone(), c2.clone());
+        let b = cell3(c2.clone(), cell2(int(2), int(3), int(9)), int(7));
+        let c = cell_comp_axis(2, 2, &a, &b).unwrap();
+        assert_eq!(cell_dim(&c), 3);
+        assert_eq!(cell_src(&c), c2);
+    }
+
+    #[test]
+    fn comp_axis_at_dimension_errors() {
+        // `k >= n` is a dimension error — 1-cells cannot paste at axis 1+.
+        let err = cell_comp_axis(1, 1, &int(1), &int(1)).unwrap_err();
+        assert!(err.contains("dimension"), "got {err}");
+        let err = cell_comp_axis(2, 2, &int(1), &int(1)).unwrap_err();
+        assert!(err.contains("dimension"), "got {err}");
+    }
+
+    #[test]
+    fn compose_runs_pasting_diagram() {
+        // `[c, {axis: 1, cell: d}]` = `c ∘₁ d`.
+        let c = cell2(int(1), int(2), int(10));
+        let d = cell2(int(2), int(3), int(20));
+        let diagram = TaggedValue::from(serde_json::json!([
+            {"__tag__": "Cell2", "__src__": 1, "__tgt__": 2, "value": 10},
+            {"axis": 1, "cell": {"__tag__": "Cell2", "__src__": 2, "__tgt__": 3, "value": 20}},
+        ]));
+        let out = cell_compose(&diagram).unwrap();
+        assert_eq!(out, cell2(int(1), int(3), int(20)));
+        let _ = (c, d);
+
+        // Multi-step: `c ∘₁ d ∘₁ e`.
+        let diagram = TaggedValue::from(serde_json::json!([
+            {"__tag__": "Cell2", "__src__": 1, "__tgt__": 2, "value": 10},
+            {"axis": 1, "cell": {"__tag__": "Cell2", "__src__": 2, "__tgt__": 3, "value": 20}},
+            {"axis": 1, "cell": {"__tag__": "Cell2", "__src__": 3, "__tgt__": 4, "value": 30}},
+        ]));
+        let out = cell_compose(&diagram).unwrap();
+        assert_eq!(out, cell2(int(1), int(4), int(30)));
+    }
+
+    #[test]
+    fn compose_at_axis2_and_step_errors() {
+        let shared = cell2(int(1), int(2), int(5));
+        let a = cell3(cell2(int(0), int(1), int(8)), shared.clone(), int(100));
+        let b = cell3(shared, cell2(int(2), int(3), int(9)), int(200));
+        let diagram = TaggedValue::Arr(Rc::from(vec![
+            a.clone(),
+            TaggedValue::from(serde_json::json!({"axis": 2, "cell":
+                tagged_to_value(&b)})),
+        ]));
+        let out = cell_compose(&diagram).unwrap();
+        assert_eq!(cell_dim(&out), 3);
+
+        // A bad step reports its position.
+        let bad = TaggedValue::from(serde_json::json!([
+            {"__tag__": "Cell2", "__src__": 1, "__tgt__": 2, "value": 10},
+            {"axis": 1, "cell": {"__tag__": "Cell2", "__src__": 9, "__tgt__": 3, "value": 20}},
+        ]));
+        let err = cell_compose(&bad).unwrap_err();
+        assert!(err.contains("step 1") && err.contains("boundary"), "got {err}");
+
+        // Non-array and empty diagrams reject cleanly.
+        assert!(cell_compose(&int(1)).is_err());
+        assert!(cell_compose(&TaggedValue::Arr(Rc::from(vec![]))).is_err());
+    }
 }
