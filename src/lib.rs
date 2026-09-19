@@ -1284,12 +1284,11 @@ pub fn cell2_id(arrow: &TaggedValue) -> TaggedValue {
     cell2(arrow.clone(), arrow.clone(), arrow.clone())
 }
 
-/// `CellCompV(first, second)` — vertical cell composition metadata.
-pub fn cell2_comp_v(first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
-    let src = first.get("__src__").unwrap_or(first).clone();
-    let tgt = second.get("__tgt__").unwrap_or(second).clone();
-    let value = second.get("value").unwrap_or(second).clone();
-    cell2(src, tgt, value)
+/// `CellCompV(first, second)` — vertical cell composition `∘₁`.
+/// Delegates to [`cell2_comp_axis`], which enforces the globular
+/// boundary law `tgt(first) = src(second)`.
+pub fn cell2_comp_v(first: &TaggedValue, second: &TaggedValue) -> Result<TaggedValue, String> {
+    cell2_comp_axis(1, first, second)
 }
 
 /// `Src(cell)` — project the source 1-cell, falling back to the value itself.
@@ -1338,12 +1337,30 @@ pub fn cell2_is_id(cell: &TaggedValue) -> bool {
 /// (ADR-0120 Phase 5).
 ///
 /// `∘₀` on 2-cells is *horizontal* composition: source and target
-/// boundaries compose pairwise as 1-cell `Arrow` records. `∘₁` is
-/// *vertical* composition: the target of `first` meets the source of
-/// `second` (`cell2_comp_v`). The non-identity operand supplies the
-/// witness `value`, matching `cell2_whisker`/`cell2_comp_v` behavior;
-/// when `second` is an identity cell, `first`'s witness is kept.
-pub fn cell2_comp_axis(axis: u64, first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
+/// boundaries compose pairwise as 1-cell `Arrow` records. `∘ₖ` for
+/// `k ≥ 1` is *vertical* composition: the target of `first` meets the
+/// source of `second` (`cell2_comp_v`). The non-identity operand supplies
+/// the witness `value`, matching `cell2_whisker` behavior; when `second`
+/// is an identity cell, `first`'s witness is kept.
+///
+/// The globular boundary law `tgtₖ(first) = srcₖ(second)` is enforced
+/// for `k ≥ 1`: the `Cell2` record carries only its 1-cell boundaries
+/// (`__src__`/`__tgt__`), so that is exactly the boundary the law is
+/// representable along — the 0-boundaries (objects) are not part of the
+/// value model, which is why `∘₀` is unchecked. Non-`Cell2` values are
+/// degenerate cells whose whole value stands for both boundaries, so
+/// e.g. `3 ∘₁ 3` composes while `1 ∘₁ 2` is rejected.
+pub fn cell2_comp_axis(
+    axis: u64,
+    first: &TaggedValue,
+    second: &TaggedValue,
+) -> Result<TaggedValue, String> {
+    if axis >= 1 && cell2_tgt(first) != cell2_src(second) {
+        return Err(format!(
+            "cell composition along axis {axis}: boundary mismatch — \
+             tgt of the first cell does not equal src of the second"
+        ));
+    }
     let witness = if cell2_is_id(second) {
         first.get("value").cloned().unwrap_or_else(|| first.clone())
     } else {
@@ -1352,14 +1369,14 @@ pub fn cell2_comp_axis(axis: u64, first: &TaggedValue, second: &TaggedValue) -> 
             .cloned()
             .unwrap_or_else(|| second.clone())
     };
-    match axis {
+    Ok(match axis {
         0 => cell2(
             compose1(&cell2_src(first), &cell2_src(second)),
             compose1(&cell2_tgt(first), &cell2_tgt(second)),
             witness,
         ),
         _ => cell2(cell2_src(first), cell2_tgt(second), witness),
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
