@@ -1324,6 +1324,44 @@ pub fn record_proj(record: &TaggedValue, field: &str) -> TaggedValue {
     }
 }
 
+/// Whether `cell` is an identity 2-cell: `Cell2{src, src, src}`.
+pub fn cell2_is_id(cell: &TaggedValue) -> bool {
+    let is_cell2 = cell.get("__tag__").and_then(|v| v.as_str()) == Some("Cell2");
+    if !is_cell2 {
+        return false;
+    }
+    let src = cell2_src(cell);
+    src == cell2_tgt(cell) && cell.get("value") == Some(&src)
+}
+
+/// Axis-`k` composition of n-cells (n > k) at the value level
+/// (ADR-0120 Phase 5).
+///
+/// `∘₀` on 2-cells is *horizontal* composition: source and target
+/// boundaries compose pairwise as 1-cell `Arrow` records. `∘₁` is
+/// *vertical* composition: the target of `first` meets the source of
+/// `second` (`cell2_comp_v`). The non-identity operand supplies the
+/// witness `value`, matching `cell2_whisker`/`cell2_comp_v` behavior;
+/// when `second` is an identity cell, `first`'s witness is kept.
+pub fn cell2_comp_axis(axis: u64, first: &TaggedValue, second: &TaggedValue) -> TaggedValue {
+    let witness = if cell2_is_id(second) {
+        first.get("value").cloned().unwrap_or_else(|| first.clone())
+    } else {
+        second
+            .get("value")
+            .cloned()
+            .unwrap_or_else(|| second.clone())
+    };
+    match axis {
+        0 => cell2(
+            compose1(&cell2_src(first), &cell2_src(second)),
+            compose1(&cell2_tgt(first), &cell2_tgt(second)),
+            witness,
+        ),
+        _ => cell2(cell2_src(first), cell2_tgt(second), witness),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // tval! macro (like serde_json::json! but produces TaggedValue)
 // ---------------------------------------------------------------------------
