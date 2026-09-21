@@ -35,6 +35,81 @@ use crate::error::LangError;
 /// before evaluation, so no engine reads a nested arm as an index.
 pub const ARENA_REF_PAYLOAD_KEYS: &[&str] = &["body"];
 
+/// Collect every string occurring anywhere in the payload subtree rooted
+/// at `root` — a conservative superset of the subtree's free names.
+///
+/// Closure-capture filtering uses this to retain only the env bindings a
+/// body can actually reference: every env lookup (`proj_env` /
+/// `extend_env` `lit: $payload` schemes, assign targets, pattern binders,
+/// import names) is spelled as a string somewhere in the subtree, so a
+/// name absent from the returned set can never be looked up by the body.
+/// Over-collection is harmless — applying an arrow consults its local
+/// bindings before the captured env, and callers `retain` only names the
+/// env actually contains.
+///
+/// Child-node references resolve through `payload["children"]` and the
+/// audited [`ARENA_REF_PAYLOAD_KEYS`] fields; all other payload data is
+/// walked for strings but never dereferenced as an arena index.
+///
+/// `payload_at` supplies each node's payload (`Ast::get(r).map(|n|
+/// n.payload.clone())` for a local arena, or `NativeOpCtx::
+/// node_payload_at` inside the shared ops). Returns `None` when any
+/// reachable node is unresolvable — the caller then keeps the full
+/// captured env rather than risk under-capturing.
+pub fn subtree_name_candidates(
+    mut payload_at: impl FnMut(AstRef) -> Option<Value>,
+    root: AstRef,
+) -> Option<std::collections::HashSet<std::rc::Rc<str>>> {
+    let mut out = std::collections::HashSet::new();
+    let mut visited = std::collections::HashSet::new();
+    let mut stack = vec![root];
+    while let Some(r) = stack.pop() {
+        if !visited.insert(r) {
+            continue;
+        }
+        let payload = payload_at(r)?;
+        collect_name_strings(&payload, &mut out, &mut stack);
+    }
+    Some(out)
+}
+
+fn collect_name_strings(
+    v: &Value,
+    out: &mut std::collections::HashSet<std::rc::Rc<str>>,
+    stack: &mut Vec<AstRef>,
+) {
+    match v {
+        Value::String(s) => {
+            out.insert(std::rc::Rc::from(s.as_str()));
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_name_strings(item, out, stack);
+            }
+        }
+        Value::Object(map) => {
+            for (k, val) in map {
+                if k == "children" {
+                    if let Some(arr) = val.as_array() {
+                        for el in arr {
+                            if let Some(i) = el.as_u64() {
+                                stack.push(AstRef::new(i as usize));
+                            }
+                        }
+                    }
+                } else if ARENA_REF_PAYLOAD_KEYS.contains(&k.as_str()) {
+                    if let Some(i) = val.as_u64() {
+                        stack.push(AstRef::new(i as usize));
+                    }
+                } else {
+                    collect_name_strings(val, out, stack);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 /// A span of byte offsets in source text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Span {

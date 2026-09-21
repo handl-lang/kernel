@@ -49,7 +49,7 @@ pub mod verdict;
 /// Term combinator versioning.
 pub mod version;
 
-pub use ast::{Ast, AstNode, AstRef, Span};
+pub use ast::{Ast, AstNode, AstRef, Span, subtree_name_candidates};
 pub use capabilities::{capabilities, foreign_names, subset_of};
 pub use desugar::{DesugarRule, desugar};
 pub use dynamic_handlers::{
