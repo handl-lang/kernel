@@ -278,6 +278,15 @@ impl AstShapeDef {
         self
     }
 
+    /// Attach literal-children declarations (ADR-0081 extension).
+    pub fn with_literal_children(
+        mut self,
+        entries: impl IntoIterator<Item = (String, Vec<String>)>,
+    ) -> Self {
+        self.literal_children = entries.into_iter().collect();
+        self
+    }
+
     /// Resolve a child role to its positional index in the shape's **full
     /// form** — the form where every declared (optional or not) role occupies
     /// a slot.
@@ -350,6 +359,29 @@ impl AstShapeDef {
                 return Some(idx);
             }
             idx += 1;
+        }
+        None
+    }
+
+    /// The role occupying child position `pos` on a node with `arity`
+    /// children — the inverse of [`role_index_at`](Self::role_index_at).
+    ///
+    /// A variadic role claims every position from its start index onward.
+    /// Returns `None` when the shape declares no roles or `pos` is
+    /// unclaimed at this arity.
+    pub fn role_name_at(&self, pos: usize, arity: usize) -> Option<&str> {
+        let children = self.children.as_ref()?;
+        for spec in children {
+            let Some(idx) = self.role_index_at(&spec.role, arity) else {
+                continue;
+            };
+            if spec.variadic {
+                if pos >= idx {
+                    return Some(&spec.role);
+                }
+            } else if pos == idx {
+                return Some(&spec.role);
+            }
         }
         None
     }

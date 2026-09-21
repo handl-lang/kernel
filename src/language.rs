@@ -426,6 +426,24 @@ impl Language {
         Ok(def.role_index_at(role, arity))
     }
 
+    /// The role name occupying child position `pos` on `node` — the
+    /// inverse of [`child_role_index_for`](Self::child_role_index_for)
+    /// (ADR-0081).
+    ///
+    /// A variadic role claims every position from its start index onward.
+    /// Returns `None` when the shape declares no roles or `pos` is
+    /// unclaimed at this arity; callers keep their positional fallback.
+    pub fn role_name_at(&self, node: &AstNode, pos: usize) -> Option<&str> {
+        let def = self.ast.get_by_identity(&node.kind)?;
+        let arity = node
+            .payload
+            .get("children")
+            .and_then(|c| c.as_array())
+            .map(|a| a.len())
+            .unwrap_or(0);
+        def.role_name_at(pos, arity)
+    }
+
     /// Whether a child node of `child_kind` occupying `role` of `node_kind`
     /// is declared **literal** — its payload is the datum itself rather than
     /// an expression to evaluate (ADR-0081 extension).

@@ -33,6 +33,8 @@ pub mod fragment;
 pub mod fragment_set;
 /// Fragment type definitions.
 pub mod fragments;
+/// Free-variable substitution for arrow bodies (ADR-0106).
+pub mod instantiate;
 /// The `Language` struct.
 pub mod language;
 /// Structural law inference over the `Term` IR (ADR-0076 OQ#5).
@@ -67,6 +69,7 @@ pub use fragments::{
     RewriteStep, TokenKindDef, TokenStep, TransformCondition, TransformDef, TransformRule,
     TypeRuleDef,
 };
+pub use instantiate::LIT_KIND;
 pub use language::Language;
 pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
@@ -304,15 +307,13 @@ pub fn is_tag_value(value: &Value) -> bool {
 ///
 /// The reserved keys are the double-underscore-prefixed host sentinels:
 /// `__tag__` (ADR-0055), `__registry__` (ADR-0054 — host type registry
-/// identity), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6),
-/// `__arrow__` (ADR-0052 closure values), and `__home__` (the provenance
-/// frame id stamped on arrow values that cross a runtime boundary — see
-/// `plugin-engine-exec-tree-walk`'s home-frame registry). These are minted
-/// by host primitives (`tag_value`, the host type registry `construct` op,
-/// `language_value`, `ast_value`, the `closure` op, the `.hnl` module
-/// loader), never by user object literals. The eval engines call this to
-/// reject such keys at object-construction time, making the sentinels
-/// unforgeable.
+/// identity), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6), and
+/// `__arrow__` (ADR-0052/ADR-0106 self-contained arrow values). These are
+/// minted by host primitives (`tag_value`, the host type registry
+/// `construct` op, `language_value`, `ast_value`, the `closure` op, the
+/// `.hnl` module loader), never by user object literals. The eval engines
+/// call this to reject such keys at object-construction time, making the
+/// sentinels unforgeable.
 pub fn is_reserved_value_key(key: &str) -> bool {
     matches!(
         key,
@@ -321,7 +322,6 @@ pub fn is_reserved_value_key(key: &str) -> bool {
             | LANGUAGE_VALUE_KEY
             | AST_VALUE_KEY
             | "__arrow__"
-            | "__home__"
     )
 }
 
