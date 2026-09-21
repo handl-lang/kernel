@@ -20,6 +20,8 @@
 //!   `{"__arrow__": true, "params": [...], "body": <idx>, "env": {...}}`
 //!   shape used by the arrow-calculus `App` combinator.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::ffi::c_void;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -617,7 +619,7 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             .map(|u| u as usize)
             .unwrap_or(0);
         let env = match o.get("env") {
-            Some(Value::Object(env_map)) => Rc::from(obj_map_to_hashmap(env_map.clone())),
+            Some(e) => env_from_json(e).unwrap_or_default(),
             _ => Rc::new(FxHashMap::default()),
         };
         let rest = o.get("rest").and_then(|v| v.as_str()).map(Rc::from);
@@ -707,6 +709,161 @@ fn bytes_to_value(b: &[u8]) -> Value {
     serde_json::json!({ "__bytes__": arr })
 }
 
+// ---------------------------------------------------------------------------
+// Closure-env registry — arrows serialize `"env"` by reference
+// ---------------------------------------------------------------------------
+
+/// A process-global registry of captured closure environments.
+///
+/// `tagged_to_value` serializes [`TaggedValue::Arrow::env`] as
+/// `{"__envref__": <id>}` instead of inlining the map: envs are shared
+/// `Rc`s whose entries may contain further arrows carrying their own
+/// envs, so inline JSON serialization expands a shared DAG into an
+/// exponentially duplicated tree (module records of closures with
+/// helper-capturing helpers were observed to OOM past ~10 GB).
+///
+/// Ids are fresh counter values — never raw pointers — and `by_ptr` pins
+/// each interned `Rc` so a pointer address can never be recycled while
+/// its entry lives. `by_id` may be *replaced* by [`stamp_env_home`] (the
+/// stamped copy of a map resolves under the same id).
+///
+/// Entries are pinned forever — the same lifetime model as `__home__`
+/// eval frames; both are process-local references and cannot cross a real
+/// serialization boundary (wire/disk), just like `body`'s AST index.
+struct EnvRefs {
+    /// `Rc` pointer address → (id, pinned `Rc`). The stored `Rc` keeps the
+    /// allocation alive, so the address key stays unique.
+    by_ptr: FxHashMap<usize, (u64, Rc<FxHashMap<Rc<str>, TaggedValue>>)>,
+    /// Registry id → current env map (replaced in place by stamping).
+    by_id: FxHashMap<u64, Rc<FxHashMap<Rc<str>, TaggedValue>>>,
+    next: u64,
+}
+
+thread_local! {
+    // Thread-local like `HOME_FRAMES` in the tree-walk engine: envs hold
+    // `Rc`s, so a registry entry can only ever be resolved on the thread
+    // that interned it.
+    static ENV_REFS: RefCell<EnvRefs> = RefCell::new(EnvRefs {
+        by_ptr: FxHashMap::default(),
+        by_id: FxHashMap::default(),
+        next: 1,
+    });
+}
+
+/// Intern a captured env and return its stable registry id: the same `Rc`
+/// always maps to the same id, and the registry pins the `Rc` so its
+/// pointer key can never be recycled while references exist.
+pub fn intern_env(env: &Rc<FxHashMap<Rc<str>, TaggedValue>>) -> u64 {
+    let key = Rc::as_ptr(env) as usize;
+    ENV_REFS.with(|cell| {
+        let mut refs = cell.borrow_mut();
+        if let Some((id, _)) = refs.by_ptr.get(&key) {
+            return *id;
+        }
+        let id = refs.next;
+        refs.next += 1;
+        refs.by_ptr.insert(key, (id, Rc::clone(env)));
+        refs.by_id.insert(id, Rc::clone(env));
+        id
+    })
+}
+
+/// Resolve a `{"__envref__": <id>}` reference back to the shared env map.
+pub fn env_ref_lookup(id: u64) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
+    ENV_REFS.with(|cell| cell.borrow().by_id.get(&id).cloned())
+}
+
+/// Decode an arrow's `"env"` JSON field into the shared env map: either a
+/// `{"__envref__": <id>}` registry reference or a legacy inline object.
+/// Returns `None` when `v` is not an object; an unresolvable ref yields
+/// an empty env (the same default as a missing `env` field).
+pub fn env_from_json(v: &Value) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
+    let m = v.as_object()?;
+    if let Some(id) = m.get("__envref__").and_then(|v| v.as_u64()) {
+        return Some(env_ref_lookup(id).unwrap_or_default());
+    }
+    Some(Rc::new(obj_map_to_hashmap(m.clone())))
+}
+
+/// Stamp `home` on every unhomed arrow reachable through registered env
+/// `id`, including envs nested inside those arrows' own envs.
+///
+/// Module-boundary sealing calls this because JSON-side `stamp_home`
+/// cannot see env contents once envs serialize by reference — nested
+/// arrows are stamped here in `TaggedValue` space instead. The walk is a
+/// DAG traversal memoized on registry id, so shared envs are visited
+/// once.
+pub fn stamp_env_home(id: u64, home: u64) {
+    if let Some(env) = env_ref_lookup(id) {
+        let mut seen = HashSet::new();
+        stamp_env_home_rec(env, home, &mut seen);
+    }
+}
+
+fn stamp_env_home_rec(
+    env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
+    home: u64,
+    seen: &mut HashSet<u64>,
+) {
+    // Interning assigns an id even to envs that were never serialized, so
+    // every visited map has a registry slot the stamped copy can replace.
+    let id = intern_env(&env);
+    if !seen.insert(id) {
+        return;
+    }
+    let mut stamped = (*env).clone();
+    let mut changed = false;
+    for val in stamped.values_mut() {
+        changed |= stamp_value_home(val, home, seen);
+    }
+    if changed {
+        // Replace the env under its existing id: `id` is embedded in
+        // already-serialized envrefs, so lookups keep resolving it — now
+        // to the stamped copy.
+        ENV_REFS.with(|cell| {
+            cell.borrow_mut().by_id.insert(id, Rc::new(stamped));
+        });
+    }
+}
+
+/// Returns `true` when `v` (or something inside it) was stamped.
+fn stamp_value_home(v: &mut TaggedValue, home: u64, seen: &mut HashSet<u64>) -> bool {
+    match v {
+        TaggedValue::Arrow { env, home: h, .. } => {
+            stamp_env_home_rec(Rc::clone(env), home, seen);
+            if h.is_none() {
+                *h = Some(home);
+                true
+            } else {
+                false
+            }
+        }
+        TaggedValue::Obj(o) => {
+            let mut m = (**o).clone();
+            let mut changed = false;
+            for val in m.values_mut() {
+                changed |= stamp_value_home(val, home, seen);
+            }
+            if changed {
+                *v = TaggedValue::Obj(Rc::new(m));
+            }
+            changed
+        }
+        TaggedValue::Arr(a) => {
+            let mut items = a.to_vec();
+            let mut changed = false;
+            for val in items.iter_mut() {
+                changed |= stamp_value_home(val, home, seen);
+            }
+            if changed {
+                *v = TaggedValue::Arr(Rc::from(items));
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
 impl From<TaggedValue> for Value {
     fn from(v: TaggedValue) -> Value {
         tagged_to_value(&v)
@@ -770,15 +927,11 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             array_pattern,
             body_def,
         } => {
-            let mut env_map = Map::new();
-            for (k, val) in env.iter() {
-                env_map.insert(k.to_string(), tagged_to_value(val));
-            }
             let mut v = serde_json::json!({
                 "__arrow__": true,
                 "params": params.iter().collect::<Vec<_>>(),
                 "body": body,
-                "env": Value::Object(env_map),
+                "env": {"__envref__": intern_env(env)},
             });
             if let Some(r) = rest {
                 v["rest"] = Value::String(r.to_string());
