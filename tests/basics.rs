@@ -122,40 +122,32 @@ fn round_trip_either_right() {
 
 #[test]
 fn round_trip_arrow() {
+    // ADR-0106 Phase 5 shape: `body_def` carries the serialized body arena;
+    // `binds` holds residual named values; no `body`/`env`/`__home__`.
     let a = json!({
         "__arrow__": true,
         "params": ["x", "y"],
-        "body": 5,
-        "env": {"z": 3}
+        "body_def": {"__ast__": {"nodes": []}},
+        "binds": {"z": 3}
     });
     let t: TaggedValue = a.clone().into();
     match &t {
         TaggedValue::Arrow {
-            params, body, env, ..
+            params,
+            body_def,
+            binds,
+            ..
         } => {
             assert_eq!(params.len(), 2);
             assert_eq!(params[0], "x");
             assert_eq!(params[1], "y");
-            assert_eq!(*body, 5);
-            assert_eq!(env.get("z").and_then(|v| v.as_i64()), Some(3));
+            assert!(matches!(**body_def, TaggedValue::Obj(_)));
+            assert_eq!(binds.get("z").and_then(|v| v.as_i64()), Some(3));
         }
         _ => panic!("expected Arrow variant, got {:?}", t),
     }
-    // `env` re-serializes by reference (`{"__envref__": id}`); everything
-    // else round-trips verbatim.
-    let mut expected = a.clone();
-    let out = tagged_to_value(&t);
-    let id = out
-        .get("env")
-        .and_then(|e| e.get("__envref__"))
-        .and_then(|r| r.as_u64())
-        .expect("arrow env should serialize as an envref");
-    let resolved = handl_value::env_ref_lookup(id).expect("envref resolves");
-    assert_eq!(resolved.get("z").and_then(|v| v.as_i64()), Some(3));
-    expected.as_object_mut().unwrap().remove("env");
-    let mut out_obj = out.as_object().unwrap().clone();
-    out_obj.remove("env");
-    assert_eq!(Value::Object(out_obj), expected);
+    // Everything is inline data — the whole arrow round-trips verbatim.
+    assert_eq!(tagged_to_value(&t), a);
 }
 
 // ---------------------------------------------------------------------------

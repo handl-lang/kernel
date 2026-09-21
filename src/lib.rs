@@ -16,12 +16,12 @@
 //!   "value": v}`).
 //! - Strings are [`Rc<str>`] and arrays/objects are [`Rc`]-backed for cheap
 //!   cloning.
-//! - [`TaggedValue::Arrow`] is a dedicated closure variant matching the
-//!   `{"__arrow__": true, "params": [...], "body": <idx>, "env": {...}}`
-//!   shape used by the arrow-calculus `App` combinator.
+//! - [`TaggedValue::Arrow`] is the arrow-value variant matching the
+//!   `{"__arrow__": true, "params": [...], "body_def": {...}}` shape used
+//!   by the arrow-calculus `App` combinator — self-contained serializable
+//!   data with no captured environment (ADR-0106).
 
-use std::cell::RefCell;
-use std::collections::HashSet;
+
 use std::ffi::c_void;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -325,24 +325,29 @@ pub enum TaggedValue {
     EitherLeft(Rc<TaggedValue>),
     /// Arrow-calculus `Either`: `right v` — used by `Choice`/`Loop`.
     EitherRight(Rc<TaggedValue>),
-    /// Arrow-value (closure): `{"__arrow__": true, "params": [...], "body":
-    /// <idx>, "env": {...}}`, optionally `"body_def": <tv>`.
+    /// Arrow value — the only computational form (ADR-0106 §3).
     ///
-    /// `body_def` (ADR-0106 item 2) carries the body as explicit, serializable
-    /// structure — see the field docs below. It is optional and additive; the
-    /// `body`/`env`/`home` fields remain the fallback.
+    /// An arrow is **self-contained serializable data**: no closures, no
+    /// captured lexical environment, no process-local frame references.
+    /// The JSON encoding is
+    /// `{"__arrow__": true, "params": [...], "body_def": <tv>}` with
+    /// `rest`/`array_pattern`/`binds`/`handlers` emitted only when set.
     ///
-    /// `home` is the provenance of the closure: the id of the eval frame
-    /// (AST + Language + module chain) that minted it, registered in the
-    /// producing engine's home-frame table. `body` is only meaningful
-    /// against that frame's AST. `None` means the arrow belongs to the
-    /// ambient evaluation — `body` is interpreted against the AST currently
-    /// being evaluated (the overwhelmingly common case: arrows are created
-    /// and applied within one `eval`). A `Some(id)` home is stamped when an
-    /// arrow crosses a runtime boundary (e.g. a `.hnl` module function
-    /// receiving or returning a closure), so the receiving engine can route
-    /// application back to the frame that owns the body. On the JSON side
-    /// the key is `"__home__"` inside the `__arrow__` object.
+    /// - `body_def` carries the body as explicit structure — a tagged
+    ///   `{"__ast__": <serialized Ast>}` value (see
+    ///   `handl_language::ast_value`). At mint time every **free**
+    ///   variable in the body is substituted with its definition-site
+    ///   value (`Ast::instantiate`), so the body is a closed term
+    ///   applicable without any environment.
+    /// - `binds` is the residual explicit binding map: names the body
+    ///   still references that cannot be substituted — `eval_rec`-region
+    ///   binders (fixpoint semantics need the name free so each pass can
+    ///   re-resolve it) and values that do not serialize (e.g.
+    ///   `Resource`). Plain serializable data, bound into the call scope
+    ///   before the params at application.
+    /// - `handlers` carries handlers attached by `handle <arrow> with <h>`
+    ///   (deep-handler carry, ADR-0076) as explicit data — reinstalled on
+    ///   each application; replaces the old `env["__handlers__"]` channel.
     ///
     /// `array_pattern` is `true` when the params node is an array-destructuring
     /// pattern (e.g. `[x, y] ~> body`). In that case the arrow expects a single
@@ -355,30 +360,19 @@ pub enum TaggedValue {
         /// array (`TaggedValue::Arr`) instead of being curried. On the
         /// JSON side the key is `"rest"` inside the `__arrow__` object.
         rest: Option<Rc<str>>,
-        body: usize, // AstRef index
-        env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
-        home: Option<u64>,
         /// Whether the arrow's params are an array-destructuring pattern.
         array_pattern: bool,
-        /// The arrow's body as **explicit, serializable structure that lives
-        /// in the value** (ADR-0106 §3/§6 item 2) — the fix for `body` being
-        /// a process-local AST index. When present it holds an opaque tagged
-        /// value carrying the language-level AST encoding
-        /// `{"__ast__": <serialized Ast>}` (see `handl_language::ast_value`).
-        ///
-        /// `None` (the default) means the arrow relies on the `body`/`home`
-        /// fallback exactly as before, so this field is purely additive. On
-        /// the JSON side the key is `"body_def"`, emitted only when set.
-        ///
-        /// Because it is *derived* from `body` (the same body, pre-extracted
-        /// into a standalone arena), it is deliberately **not part of the
-        /// value's identity**: `eq` and `Hash` both ignore it, so two arrows
-        /// with the same `params`/`rest`/`body`/`env`/`home`/`array_pattern`
-        /// remain equal whether or not either carries a definition.
-        ///
-        /// The apply path does not yet consume this field (see the ADR's
-        /// "serializable arrow representation (item 2)" migration order).
-        body_def: Option<Rc<TaggedValue>>,
+        /// The arrow's body as explicit, serializable structure — a tagged
+        /// `{"__ast__": <serialized Ast>}` value. Required: there is no
+        /// process-local body fallback.
+        body_def: Rc<TaggedValue>,
+        /// Residual explicit bindings the substituted body still
+        /// references (rec-region binders, non-serializable captures).
+        /// Serialized inline as `"binds"` when non-empty.
+        binds: Rc<FxHashMap<Rc<str>, TaggedValue>>,
+        /// Handlers carried by deep-handler attach (ADR-0076), as data.
+        /// Serialized inline as `"handlers"` when non-empty.
+        handlers: Rc<[TaggedValue]>,
     },
     /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
     /// optional finalizer that runs when the last `Rc` reference drops
@@ -464,25 +458,18 @@ impl Hash for TaggedValue {
             TaggedValue::Arrow {
                 params,
                 rest,
-                body,
-                env,
-                home,
                 array_pattern,
-                // ADR-0106 item 2 step 1: `body_def` is **derived** data (the
-                // same body, pre-extracted into a standalone arena), so it is
-                // deliberately NOT part of the arrow's identity — `eq` ignores
-                // it, and so must `Hash` (a field in neither keeps the
-                // `Hash`/`Eq` contract intact). Binding it here with `_`
-                // documents that omission.
-                body_def: _,
+                body_def,
+                binds,
+                handlers,
             } => {
                 10u8.hash(state);
                 params.hash(state);
                 rest.hash(state);
-                body.hash(state);
-                hash_map_entries(env.iter().map(|(k, v)| (k.as_ref(), v)), state);
-                home.hash(state);
                 array_pattern.hash(state);
+                body_def.hash(state);
+                hash_map_entries(binds.iter().map(|(k, v)| (k.as_ref(), v)), state);
+                handlers.hash(state);
             }
             TaggedValue::Resource(r) => {
                 11u8.hash(state);
@@ -600,8 +587,9 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             }
         };
     }
-    // Arrow-value: {"__arrow__": true, "params": [...], "body": <idx>,
-    // "env": {...}, "array_pattern": <bool>, "body_def": <tv>}
+    // Arrow value: {"__arrow__": true, "params": [...], "body_def": <tv>,
+    // "rest"?: str, "array_pattern"?: bool, "binds"?: {...},
+    // "handlers"?: [...]} — self-contained serializable data (ADR-0106).
     if o.get("__arrow__").and_then(|v| v.as_bool()) == Some(true) {
         let params: Rc<[String]> = match o.get("params") {
             Some(Value::Array(a)) => {
@@ -613,36 +601,32 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             }
             _ => Rc::from(Vec::<String>::new()),
         };
-        let body = o
-            .get("body")
-            .and_then(|v| v.as_u64())
-            .map(|u| u as usize)
-            .unwrap_or(0);
-        let env = match o.get("env") {
-            Some(e) => env_from_json(e).unwrap_or_default(),
-            _ => Rc::new(FxHashMap::default()),
-        };
         let rest = o.get("rest").and_then(|v| v.as_str()).map(Rc::from);
-        let home = o.get("__home__").and_then(|v| v.as_u64());
         let array_pattern = o
             .get("array_pattern")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        // Optional serialized body definition (ADR-0106 item 2): an opaque
-        // tagged value (`{"__ast__": <serialized Ast>}`) carried by the arrow
-        // so its body is self-contained. Absent -> `None`, preserving the
-        // legacy `body`/`home` fallback.
         let body_def = o
             .get("body_def")
-            .map(|v| Rc::new(TaggedValue::from(v.clone())));
+            .map(|v| Rc::new(TaggedValue::from(v.clone())))
+            .unwrap_or_else(|| Rc::new(TaggedValue::Null));
+        let binds = match o.get("binds") {
+            Some(Value::Object(m)) => Rc::new(obj_map_to_hashmap(m.clone())),
+            _ => Rc::new(FxHashMap::default()),
+        };
+        let handlers: Rc<[TaggedValue]> = match o.get("handlers") {
+            Some(Value::Array(a)) => {
+                Rc::from(a.iter().map(|v| TaggedValue::from(v.clone())).collect::<Vec<_>>())
+            }
+            _ => Rc::from(Vec::<TaggedValue>::new()),
+        };
         return TaggedValue::Arrow {
             params,
             rest,
-            body,
-            env,
-            home,
             array_pattern,
             body_def,
+            binds,
+            handlers,
         };
     }
     // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
@@ -709,161 +693,6 @@ fn bytes_to_value(b: &[u8]) -> Value {
     serde_json::json!({ "__bytes__": arr })
 }
 
-// ---------------------------------------------------------------------------
-// Closure-env registry — arrows serialize `"env"` by reference
-// ---------------------------------------------------------------------------
-
-/// A process-global registry of captured closure environments.
-///
-/// `tagged_to_value` serializes [`TaggedValue::Arrow::env`] as
-/// `{"__envref__": <id>}` instead of inlining the map: envs are shared
-/// `Rc`s whose entries may contain further arrows carrying their own
-/// envs, so inline JSON serialization expands a shared DAG into an
-/// exponentially duplicated tree (module records of closures with
-/// helper-capturing helpers were observed to OOM past ~10 GB).
-///
-/// Ids are fresh counter values — never raw pointers — and `by_ptr` pins
-/// each interned `Rc` so a pointer address can never be recycled while
-/// its entry lives. `by_id` may be *replaced* by [`stamp_env_home`] (the
-/// stamped copy of a map resolves under the same id).
-///
-/// Entries are pinned forever — the same lifetime model as `__home__`
-/// eval frames; both are process-local references and cannot cross a real
-/// serialization boundary (wire/disk), just like `body`'s AST index.
-struct EnvRefs {
-    /// `Rc` pointer address → (id, pinned `Rc`). The stored `Rc` keeps the
-    /// allocation alive, so the address key stays unique.
-    by_ptr: FxHashMap<usize, (u64, Rc<FxHashMap<Rc<str>, TaggedValue>>)>,
-    /// Registry id → current env map (replaced in place by stamping).
-    by_id: FxHashMap<u64, Rc<FxHashMap<Rc<str>, TaggedValue>>>,
-    next: u64,
-}
-
-thread_local! {
-    // Thread-local like `HOME_FRAMES` in the tree-walk engine: envs hold
-    // `Rc`s, so a registry entry can only ever be resolved on the thread
-    // that interned it.
-    static ENV_REFS: RefCell<EnvRefs> = RefCell::new(EnvRefs {
-        by_ptr: FxHashMap::default(),
-        by_id: FxHashMap::default(),
-        next: 1,
-    });
-}
-
-/// Intern a captured env and return its stable registry id: the same `Rc`
-/// always maps to the same id, and the registry pins the `Rc` so its
-/// pointer key can never be recycled while references exist.
-pub fn intern_env(env: &Rc<FxHashMap<Rc<str>, TaggedValue>>) -> u64 {
-    let key = Rc::as_ptr(env) as usize;
-    ENV_REFS.with(|cell| {
-        let mut refs = cell.borrow_mut();
-        if let Some((id, _)) = refs.by_ptr.get(&key) {
-            return *id;
-        }
-        let id = refs.next;
-        refs.next += 1;
-        refs.by_ptr.insert(key, (id, Rc::clone(env)));
-        refs.by_id.insert(id, Rc::clone(env));
-        id
-    })
-}
-
-/// Resolve a `{"__envref__": <id>}` reference back to the shared env map.
-pub fn env_ref_lookup(id: u64) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
-    ENV_REFS.with(|cell| cell.borrow().by_id.get(&id).cloned())
-}
-
-/// Decode an arrow's `"env"` JSON field into the shared env map: either a
-/// `{"__envref__": <id>}` registry reference or a legacy inline object.
-/// Returns `None` when `v` is not an object; an unresolvable ref yields
-/// an empty env (the same default as a missing `env` field).
-pub fn env_from_json(v: &Value) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
-    let m = v.as_object()?;
-    if let Some(id) = m.get("__envref__").and_then(|v| v.as_u64()) {
-        return Some(env_ref_lookup(id).unwrap_or_default());
-    }
-    Some(Rc::new(obj_map_to_hashmap(m.clone())))
-}
-
-/// Stamp `home` on every unhomed arrow reachable through registered env
-/// `id`, including envs nested inside those arrows' own envs.
-///
-/// Module-boundary sealing calls this because JSON-side `stamp_home`
-/// cannot see env contents once envs serialize by reference — nested
-/// arrows are stamped here in `TaggedValue` space instead. The walk is a
-/// DAG traversal memoized on registry id, so shared envs are visited
-/// once.
-pub fn stamp_env_home(id: u64, home: u64) {
-    if let Some(env) = env_ref_lookup(id) {
-        let mut seen = HashSet::new();
-        stamp_env_home_rec(env, home, &mut seen);
-    }
-}
-
-fn stamp_env_home_rec(
-    env: Rc<FxHashMap<Rc<str>, TaggedValue>>,
-    home: u64,
-    seen: &mut HashSet<u64>,
-) {
-    // Interning assigns an id even to envs that were never serialized, so
-    // every visited map has a registry slot the stamped copy can replace.
-    let id = intern_env(&env);
-    if !seen.insert(id) {
-        return;
-    }
-    let mut stamped = (*env).clone();
-    let mut changed = false;
-    for val in stamped.values_mut() {
-        changed |= stamp_value_home(val, home, seen);
-    }
-    if changed {
-        // Replace the env under its existing id: `id` is embedded in
-        // already-serialized envrefs, so lookups keep resolving it — now
-        // to the stamped copy.
-        ENV_REFS.with(|cell| {
-            cell.borrow_mut().by_id.insert(id, Rc::new(stamped));
-        });
-    }
-}
-
-/// Returns `true` when `v` (or something inside it) was stamped.
-fn stamp_value_home(v: &mut TaggedValue, home: u64, seen: &mut HashSet<u64>) -> bool {
-    match v {
-        TaggedValue::Arrow { env, home: h, .. } => {
-            stamp_env_home_rec(Rc::clone(env), home, seen);
-            if h.is_none() {
-                *h = Some(home);
-                true
-            } else {
-                false
-            }
-        }
-        TaggedValue::Obj(o) => {
-            let mut m = (**o).clone();
-            let mut changed = false;
-            for val in m.values_mut() {
-                changed |= stamp_value_home(val, home, seen);
-            }
-            if changed {
-                *v = TaggedValue::Obj(Rc::new(m));
-            }
-            changed
-        }
-        TaggedValue::Arr(a) => {
-            let mut items = a.to_vec();
-            let mut changed = false;
-            for val in items.iter_mut() {
-                changed |= stamp_value_home(val, home, seen);
-            }
-            if changed {
-                *v = TaggedValue::Arr(Rc::from(items));
-            }
-            changed
-        }
-        _ => false,
-    }
-}
-
 impl From<TaggedValue> for Value {
     fn from(v: TaggedValue) -> Value {
         tagged_to_value(&v)
@@ -921,31 +750,32 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
         TaggedValue::Arrow {
             params,
             rest,
-            body,
-            env,
-            home,
             array_pattern,
             body_def,
+            binds,
+            handlers,
         } => {
             let mut v = serde_json::json!({
                 "__arrow__": true,
                 "params": params.iter().collect::<Vec<_>>(),
-                "body": body,
-                "env": {"__envref__": intern_env(env)},
+                "body_def": tagged_to_value(body_def),
             });
             if let Some(r) = rest {
                 v["rest"] = Value::String(r.to_string());
             }
-            if let Some(h) = home {
-                v["__home__"] = Value::from(*h);
-            }
             if *array_pattern {
                 v["array_pattern"] = Value::Bool(true);
             }
-            // Serialized body definition (ADR-0106 item 2): emitted only when
-            // present, so the default arrow shape is unchanged.
-            if let Some(bd) = body_def {
-                v["body_def"] = tagged_to_value(bd);
+            if !binds.is_empty() {
+                let mut map = Map::new();
+                for (k, val) in binds.iter() {
+                    map.insert(k.to_string(), tagged_to_value(val));
+                }
+                v["binds"] = Value::Object(map);
+            }
+            if !handlers.is_empty() {
+                v["handlers"] =
+                    Value::Array(handlers.iter().map(tagged_to_value).collect());
             }
             v
         }
@@ -1376,25 +1206,27 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
             TaggedValue::Arrow {
                 params: p1,
                 rest: r1,
-                body: b1,
-                env: e1,
                 array_pattern: ap1,
-                ..
+                body_def: d1,
+                binds: e1,
+                handlers: h1,
             },
             TaggedValue::Arrow {
                 params: p2,
                 rest: r2,
-                body: b2,
-                env: e2,
                 array_pattern: ap2,
-                ..
+                body_def: d2,
+                binds: e2,
+                handlers: h2,
             },
         ) => {
             r1 == r2
                 && ap1 == ap2
                 && p1.len() == p2.len()
                 && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
-                && b1 == b2
+                && eq(d1, d2)
+                && h1.len() == h2.len()
+                && h1.iter().zip(h2.iter()).all(|(a, b)| eq(a, b))
                 && {
                     if e1.len() != e2.len() {
                         return false;
