@@ -81,6 +81,15 @@ fn resource_pointer_is_rejected() {
 }
 
 #[test]
+fn compiled_handle_is_rejected() {
+    // `{"__compiled__": id, "target": ...}` indexes the emitting process's
+    // COMPILED_REGISTRY — meaningless to any other consumer.
+    let v = json!({"program": {"__compiled__": 3, "target": "cranelift"}});
+    let err = check_portable(&v).unwrap_err();
+    assert!(err.contains("__compiled__"), "unexpected error: {err}");
+}
+
+#[test]
 fn non_marker_lookalikes_pass() {
     // Reserved keys that do not match the shapes decode interprets are
     // foreign data, not references.

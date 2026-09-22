@@ -1018,6 +1018,11 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
 ///   binds map.
 /// - `{"__resource__": {"ptr": <n>}}` — a raw process-local pointer; in
 ///   another run it decodes to a dangling [`ForeignResource`].
+/// - `{"__compiled__": <id>}` — a compiled-program handle whose artifact
+///   lives in this process's `COMPILED_REGISTRY` (`handl-runtime`'s
+///   `COMPILED_VALUE_KEY`; spelled out here because the registry crate
+///   depends on this one, not the reverse). In another process the id
+///   indexes an empty or unrelated registry.
 ///
 /// Returns `Err` describing the first offending reference found.
 pub fn check_portable(v: &Value) -> Result<(), String> {
@@ -1071,6 +1076,12 @@ fn check_portable_refs(v: &Value, defs: &FxHashSet<u64>) -> Result<(), String> {
                             .to_string(),
                     );
                 }
+            }
+            if let Some(id) = m.get("__compiled__").and_then(|v| v.as_u64()) {
+                return Err(format!(
+                    "__compiled__ {id}: compiled-program handle cannot cross a process \
+                     boundary (the artifact lives in this process's COMPILED_REGISTRY)"
+                ));
             }
             for val in m.values() {
                 check_portable_refs(val, defs)?;
