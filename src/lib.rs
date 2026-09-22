@@ -998,6 +998,96 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
 }
 
 // ---------------------------------------------------------------------------
+// Process-boundary check
+// ---------------------------------------------------------------------------
+
+/// Verify a serialized [`serde_json::Value`] document is safe to send past
+/// a process boundary — a file write, network send, or foreign consumer
+/// that cannot see this process's decode context.
+///
+/// [`tagged_to_value`] output is self-contained within one document, so
+/// in-process round-trips through [`TaggedValue::from`] never need this.
+/// Call it at egress points before the document leaves. It rejects:
+///
+/// - `{"__envref__": <id>}` — the removed process-local env registry.
+///   The `env` field it referenced is ignored on decode, so a persisted
+///   document silently loses the closure environment.
+/// - `{"__bindsref__": <id>}` with no `{"__binds_id__": <id>}` definition
+///   in the same document — a dangling document-local ref (e.g. a subtree
+///   extracted from a larger document); decode resolves it to an empty
+///   binds map.
+/// - `{"__resource__": {"ptr": <n>}}` — a raw process-local pointer; in
+///   another run it decodes to a dangling [`ForeignResource`].
+///
+/// Returns `Err` describing the first offending reference found.
+pub fn check_portable(v: &Value) -> Result<(), String> {
+    let mut defs = FxHashSet::default();
+    collect_binds_ids(v, &mut defs);
+    check_portable_refs(v, &defs)
+}
+
+/// Pre-pass: collect every `__binds_id__` definition id in the document.
+fn collect_binds_ids(v: &Value, defs: &mut FxHashSet<u64>) {
+    match v {
+        Value::Object(m) => {
+            if let Some(id) = m.get("__binds_id__").and_then(|v| v.as_u64()) {
+                defs.insert(id);
+            }
+            for val in m.values() {
+                collect_binds_ids(val, defs);
+            }
+        }
+        Value::Array(a) => {
+            for val in a {
+                collect_binds_ids(val, defs);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn check_portable_refs(v: &Value, defs: &FxHashSet<u64>) -> Result<(), String> {
+    match v {
+        Value::Object(m) => {
+            if let Some(id) = m.get("__envref__") {
+                return Err(format!(
+                    "__envref__ {id}: process-local env registry reference cannot cross a \
+                     process boundary (the registry no longer exists; decode drops it silently)"
+                ));
+            }
+            if let Some(id) = m.get("__bindsref__").and_then(|v| v.as_u64()) {
+                if !defs.contains(&id) {
+                    return Err(format!(
+                        "__bindsref__ {id}: dangling document-local reference (no __binds_id__ \
+                         definition in this document)"
+                    ));
+                }
+            }
+            if let Some(res) = m.get("__resource__") {
+                if res.get("ptr").and_then(|v| v.as_i64()).is_some() {
+                    return Err(
+                        "__resource__: process-local pointer cannot cross a process boundary \
+                         (decodes to a dangling foreign resource)"
+                            .to_string(),
+                    );
+                }
+            }
+            for val in m.values() {
+                check_portable_refs(val, defs)?;
+            }
+            Ok(())
+        }
+        Value::Array(a) => {
+            for val in a {
+                check_portable_refs(val, defs)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Accessors (mirror common serde_json patterns)
 // ---------------------------------------------------------------------------
 
