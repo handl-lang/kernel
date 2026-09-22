@@ -308,10 +308,12 @@ pub fn is_tag_value(value: &Value) -> bool {
 /// The reserved keys are the double-underscore-prefixed host sentinels:
 /// `__tag__` (ADR-0055), `__registry__` (ADR-0054 — host type registry
 /// identity), `__language__` (ADR-0041), `__ast__` (ADR-0041 §6), and
-/// `__arrow__` (ADR-0052/ADR-0106 self-contained arrow values). These are
-/// minted by host primitives (`tag_value`, the host type registry
-/// `construct` op, `language_value`, `ast_value`, the `closure` op, the
-/// `.hnl` module loader), never by user object literals. The eval engines
+/// `__arrow__` (ADR-0052/ADR-0106 self-contained arrow values), and
+/// `__compiled__` (ADR-0047 §3 compiled-program handles into the
+/// process-local `COMPILED_REGISTRY`). These are minted by host primitives
+/// (`tag_value`, the host type registry `construct` op, `language_value`,
+/// `ast_value`, the `closure` op, the `.hnl` module loader,
+/// `compiled_value`), never by user object literals. The eval engines
 /// call this to reject such keys at object-construction time, making the
 /// sentinels unforgeable.
 pub fn is_reserved_value_key(key: &str) -> bool {
@@ -322,6 +324,7 @@ pub fn is_reserved_value_key(key: &str) -> bool {
             | LANGUAGE_VALUE_KEY
             | AST_VALUE_KEY
             | "__arrow__"
+            | "__compiled__"
     )
 }
 
@@ -429,6 +432,7 @@ mod value_tests {
         assert!(is_reserved_value_key("__language__"));
         assert!(is_reserved_value_key("__ast__"));
         assert!(is_reserved_value_key("__arrow__"));
+        assert!(is_reserved_value_key("__compiled__"));
         assert!(!is_reserved_value_key("name"));
         assert!(!is_reserved_value_key("__proto__"));
     }
