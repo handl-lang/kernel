@@ -28,7 +28,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::{Map, Number, Value};
 
 // ---------------------------------------------------------------------------
@@ -368,7 +368,10 @@ pub enum TaggedValue {
         body_def: Rc<TaggedValue>,
         /// Residual explicit bindings the substituted body still
         /// references (rec-region binders, non-serializable captures).
-        /// Serialized inline as `"binds"` when non-empty.
+        /// Serialized as `"binds"` when non-empty — inline for unshared
+        /// maps, `{"__bindsref__": <id>}` for `Rc`-shared ones (shared
+        /// maps intern into a thread-local registry so a binds DAG does
+        /// not expand exponentially).
         binds: Rc<FxHashMap<Rc<str>, TaggedValue>>,
         /// Handlers carried by deep-handler attach (ADR-0076), as data.
         /// Serialized inline as `"handlers"` when non-empty.
@@ -508,17 +511,29 @@ where
 
 impl From<Value> for TaggedValue {
     fn from(v: Value) -> TaggedValue {
-        match v {
-            Value::Null => TaggedValue::Null,
-            Value::Bool(b) => TaggedValue::Bool(b),
-            Value::Number(n) => number_to_tagged(n),
-            Value::String(s) => TaggedValue::Str(Rc::from(s)),
-            Value::Array(a) => {
-                let els: Vec<TaggedValue> = a.into_iter().map(TaggedValue::from).collect();
-                TaggedValue::Arr(Rc::from(els))
-            }
-            Value::Object(o) => object_to_tagged(o),
+        let mut ctx = DeCtx::default();
+        collect_binds_defs(&v, &mut ctx);
+        tagged_from(v, &mut ctx)
+    }
+}
+
+/// Decode a [`serde_json::Value`] into a [`TaggedValue`], threading the
+/// document-local [`DeCtx`] so `__bindsref__` markers resolve to the
+/// shared map their `__binds_id__` definition produced.
+fn tagged_from(v: Value, ctx: &mut DeCtx) -> TaggedValue {
+    match v {
+        Value::Null => TaggedValue::Null,
+        Value::Bool(b) => TaggedValue::Bool(b),
+        Value::Number(n) => number_to_tagged(n),
+        Value::String(s) => TaggedValue::Str(Rc::from(s)),
+        Value::Array(a) => {
+            let els: Vec<TaggedValue> = a
+                .into_iter()
+                .map(|v| tagged_from(v, ctx))
+                .collect();
+            TaggedValue::Arr(Rc::from(els))
         }
+        Value::Object(o) => object_to_tagged(o, ctx),
     }
 }
 
@@ -545,7 +560,7 @@ fn json_array_to_bytes(arr: &[Value]) -> Option<Vec<u8>> {
     Some(out)
 }
 
-fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
+fn object_to_tagged(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
     // Sym: {"__sym__": {"handle": <n>, "name": "...", "parent": <sym or
     // null>}} — a nominal identity (ADR-0106 §2). Malformed payloads fall
     // back to a plain object (matching the lenient `__bytes__` style).
@@ -568,8 +583,8 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
     if let Some(pair_val) = o.get("__pair__") {
         if let Some(arr) = pair_val.as_array() {
             if arr.len() == 2 {
-                let a = TaggedValue::from(arr[0].clone());
-                let b = TaggedValue::from(arr[1].clone());
+                let a = tagged_from(arr[0].clone(), ctx);
+                let b = tagged_from(arr[1].clone(), ctx);
                 return TaggedValue::Pair(Rc::new((a, b)));
             }
         }
@@ -577,13 +592,13 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
     // Either: {"__either__": "left"|"right", "value": v}
     if let Some(side) = o.get("__either__").and_then(|v| v.as_str()) {
         let value = o.get("value").cloned().unwrap_or(Value::Null);
-        let inner = TaggedValue::from(value);
+        let inner = tagged_from(value, ctx);
         return match side {
             "left" => TaggedValue::EitherLeft(Rc::new(inner)),
             "right" => TaggedValue::EitherRight(Rc::new(inner)),
             _ => {
                 // Unknown side: fall back to a plain object.
-                map_to_obj(o)
+                map_to_obj(o, ctx)
             }
         };
     }
@@ -608,16 +623,18 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             .unwrap_or(false);
         let body_def = o
             .get("body_def")
-            .map(|v| Rc::new(TaggedValue::from(v.clone())))
+            .map(|v| Rc::new(tagged_from(v.clone(), ctx)))
             .unwrap_or_else(|| Rc::new(TaggedValue::Null));
         let binds = match o.get("binds") {
-            Some(Value::Object(m)) => Rc::new(obj_map_to_hashmap(m.clone())),
+            Some(v) => binds_from_json(v, ctx).unwrap_or_default(),
             _ => Rc::new(FxHashMap::default()),
         };
         let handlers: Rc<[TaggedValue]> = match o.get("handlers") {
-            Some(Value::Array(a)) => {
-                Rc::from(a.iter().map(|v| TaggedValue::from(v.clone())).collect::<Vec<_>>())
-            }
+            Some(Value::Array(a)) => Rc::from(
+                a.iter()
+                    .map(|v| tagged_from(v.clone(), ctx))
+                    .collect::<Vec<_>>(),
+            ),
             _ => Rc::from(Vec::<TaggedValue>::new()),
         };
         return TaggedValue::Arrow {
@@ -642,11 +659,11 @@ fn object_to_tagged(o: Map<String, Value>) -> TaggedValue {
             return TaggedValue::Resource(Rc::new(fr));
         }
     }
-    map_to_obj(o)
+    map_to_obj(o, ctx)
 }
 
-fn map_to_obj(o: Map<String, Value>) -> TaggedValue {
-    TaggedValue::Obj(Rc::new(obj_map_to_hashmap(o)))
+fn map_to_obj(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
+    TaggedValue::Obj(Rc::new(obj_map_to_hashmap(o, ctx)))
 }
 
 /// Decode the inner payload of a `{"__sym__": {...}}` JSON object into a
@@ -680,10 +697,150 @@ fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
     Some(TaggedValue::Sym(Rc::new(sym)))
 }
 
-fn obj_map_to_hashmap(o: Map<String, Value>) -> FxHashMap<Rc<str>, TaggedValue> {
+fn obj_map_to_hashmap(
+    o: Map<String, Value>,
+    ctx: &mut DeCtx,
+) -> FxHashMap<Rc<str>, TaggedValue> {
     o.into_iter()
-        .map(|(k, v)| (Rc::from(k), TaggedValue::from(v)))
+        .map(|(k, v)| (Rc::from(k), tagged_from(v, ctx)))
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Arrow-binds dedup — shared `binds` maps serialize by document-local ref
+// ---------------------------------------------------------------------------
+
+/// Encode context for [`tagged_to_value`]: dedups `Rc`-shared `binds`
+/// maps so a binds DAG does not expand exponentially into JSON.
+///
+/// Sibling arrows in a rec region share `binds` maps whose entries hold
+/// further arrows carrying their own binds — inlining expands the shared
+/// DAG into an exponentially duplicated tree (the same blowup the
+/// removed `__envref__` registry fixed for the old `env` field). A
+/// shared map's *first* occurrence serializes inline with a
+/// `"__binds_id__": <n>` marker; later occurrences emit
+/// `{"__bindsref__": <n>}`. Refs always point backward in document order
+/// (the DFS emitter visits the definition first), so the encoding is
+/// self-contained — no process-local registry — preserving ADR-0106's
+/// "arrow = self-contained serializable data" contract.
+///
+/// Unshared maps (`Rc` strong count 1) always serialize inline: they
+/// cannot recur, so the plain-object form keeps the exact round-trip.
+#[derive(Default)]
+struct SerCtx {
+    /// `Rc` pointer address → document-local id, for maps already
+    /// emitted (as `__binds_id__` definitions) in this document.
+    by_ptr: FxHashMap<usize, u64>,
+    next: u64,
+}
+
+/// Decode context for [`TaggedValue::from`]/[`tagged_from`]: maps each
+/// `__binds_id__` definition to its decoded `Rc` map so later
+/// `__bindsref__` occurrences resolve to the same shared map.
+///
+/// `defs` holds the raw JSON of every `__binds_id__` definition in the
+/// document, pre-collected by [`collect_binds_defs`] before decoding
+/// starts. `serde_json::Map` iterates keys in sorted order, not encoding
+/// order, so a `__bindsref__` can be visited before its definition —
+/// refs resolve lazily out of `defs` regardless of document position.
+/// `in_progress` marks definitions currently being decoded so a cyclic
+/// binds graph terminates (the cyclic edge decodes to an empty map).
+#[derive(Default)]
+struct DeCtx {
+    by_id: FxHashMap<u64, Rc<FxHashMap<Rc<str>, TaggedValue>>>,
+    defs: FxHashMap<u64, Value>,
+    in_progress: FxHashSet<u64>,
+}
+
+/// Pre-scan a document for `"__binds_id__"` definitions so
+/// [`binds_from_json`] can resolve refs in any visitation order.
+fn collect_binds_defs(v: &Value, ctx: &mut DeCtx) {
+    match v {
+        Value::Object(m) => {
+            if let Some(id) = m.get("__binds_id__").and_then(|v| v.as_u64()) {
+                ctx.defs.entry(id).or_insert_with(|| v.clone());
+            }
+            for value in m.values() {
+                collect_binds_defs(value, ctx);
+            }
+        }
+        Value::Array(a) => {
+            for value in a {
+                collect_binds_defs(value, ctx);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Decode an arrow's `"binds"` JSON field into the shared map:
+/// `{"__bindsref__": <id>}` resolves the `__binds_id__` definition —
+/// decoded on demand from the document-wide [`DeCtx::defs`] table so a
+/// ref is valid no matter where in the document its definition sits;
+/// `{"__binds_id__": <id>, ...entries}` decodes the entries and
+/// registers them under `id`; a plain object is an ordinary inline map.
+/// Returns `None` when `v` is not an object; an unresolvable ref yields
+/// an empty map (the same default as a missing `binds` field).
+fn binds_from_json(
+    v: &Value,
+    ctx: &mut DeCtx,
+) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
+    let m = v.as_object()?;
+    if let Some(id) = m.get("__bindsref__").and_then(|v| v.as_u64()) {
+        return Some(resolve_binds_ref(id, ctx));
+    }
+    let id = m.get("__binds_id__").and_then(|v| v.as_u64());
+    let marked = id.is_some_and(|id| ctx.in_progress.insert(id));
+    let rc = decode_binds_map(m, id, ctx);
+    if marked {
+        ctx.in_progress.remove(&id.unwrap());
+    }
+    Some(rc)
+}
+
+/// Resolve a `__bindsref__` id to its shared map: returns the already
+/// decoded map when present, otherwise decodes the definition's raw JSON
+/// from [`DeCtx::defs`] on demand. A ref to a definition currently being
+/// decoded (a cyclic edge) or absent from the document yields an empty
+/// map — `Rc<FxHashMap>` cannot express a forward/cyclic placeholder.
+fn resolve_binds_ref(
+    id: u64,
+    ctx: &mut DeCtx,
+) -> Rc<FxHashMap<Rc<str>, TaggedValue>> {
+    if let Some(rc) = ctx.by_id.get(&id) {
+        return Rc::clone(rc);
+    }
+    let Some(def) = ctx.defs.get(&id).cloned() else {
+        return Rc::default();
+    };
+    if !ctx.in_progress.insert(id) {
+        return Rc::default();
+    }
+    let rc = match def.as_object() {
+        Some(m) => decode_binds_map(m, Some(id), ctx),
+        None => Rc::default(),
+    };
+    ctx.in_progress.remove(&id);
+    rc
+}
+
+/// Decode a binds object's entries (excluding the `__binds_id__`
+/// marker) into a fresh `Rc` map, registering it under `id` when given.
+fn decode_binds_map(
+    m: &Map<String, Value>,
+    id: Option<u64>,
+    ctx: &mut DeCtx,
+) -> Rc<FxHashMap<Rc<str>, TaggedValue>> {
+    let map: FxHashMap<Rc<str>, TaggedValue> = m
+        .iter()
+        .filter(|(k, _)| k.as_str() != "__binds_id__")
+        .map(|(k, v)| (Rc::from(k.as_str()), tagged_from(v.clone(), ctx)))
+        .collect();
+    let rc = Rc::new(map);
+    if let Some(id) = id {
+        ctx.by_id.insert(id, Rc::clone(&rc));
+    }
+    rc
 }
 
 /// Encode a byte buffer as `{"__bytes__": [n, ...]}` — the JSON form of
@@ -704,6 +861,13 @@ impl From<TaggedValue> for Value {
 /// This borrows the value (cloning the inner data as needed) so it can be
 /// used for both `From<TaggedValue>` and reference-based conversions.
 pub fn tagged_to_value(v: &TaggedValue) -> Value {
+    tagged_to_value_ctx(v, &mut SerCtx::default())
+}
+
+/// The recursive [`tagged_to_value`] body, threading the document-local
+/// [`SerCtx`] so `Rc`-shared `binds` maps dedup into `__binds_id__` /
+/// `__bindsref__` markers.
+fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
     match v {
         TaggedValue::Null => Value::Null,
         TaggedValue::Bool(b) => Value::Bool(*b),
@@ -718,7 +882,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             // inline. The nested encoding keeps the value self-contained
             // (O(depth) per sym; chains in this kernel are short).
             let parent = match s.parent() {
-                Some(p) => tagged_to_value(&TaggedValue::Sym(Rc::new(p.clone()))),
+                Some(p) => tagged_to_value_ctx(&TaggedValue::Sym(Rc::new(p.clone())), ctx),
                 None => Value::Null,
             };
             serde_json::json!({
@@ -730,22 +894,29 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             })
         }
         TaggedValue::Bytes(b) => bytes_to_value(b),
-        TaggedValue::Arr(a) => Value::Array(a.iter().map(tagged_to_value).collect()),
+        TaggedValue::Arr(a) => Value::Array(
+            a.iter()
+                .map(|v| tagged_to_value_ctx(v, ctx))
+                .collect(),
+        ),
         TaggedValue::Obj(o) => {
             let mut map = Map::new();
             for (k, val) in o.iter() {
-                map.insert(k.to_string(), tagged_to_value(val));
+                map.insert(k.to_string(), tagged_to_value_ctx(val, ctx));
             }
             Value::Object(map)
         }
         TaggedValue::Pair(p) => {
-            serde_json::json!({"__pair__": [tagged_to_value(&p.0), tagged_to_value(&p.1)]})
+            serde_json::json!({"__pair__": [
+                tagged_to_value_ctx(&p.0, ctx),
+                tagged_to_value_ctx(&p.1, ctx),
+            ]})
         }
         TaggedValue::EitherLeft(inner) => {
-            serde_json::json!({"__either__": "left", "value": tagged_to_value(inner)})
+            serde_json::json!({"__either__": "left", "value": tagged_to_value_ctx(inner, ctx)})
         }
         TaggedValue::EitherRight(inner) => {
-            serde_json::json!({"__either__": "right", "value": tagged_to_value(inner)})
+            serde_json::json!({"__either__": "right", "value": tagged_to_value_ctx(inner, ctx)})
         }
         TaggedValue::Arrow {
             params,
@@ -758,7 +929,7 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
             let mut v = serde_json::json!({
                 "__arrow__": true,
                 "params": params.iter().collect::<Vec<_>>(),
-                "body_def": tagged_to_value(body_def),
+                "body_def": tagged_to_value_ctx(body_def, ctx),
             });
             if let Some(r) = rest {
                 v["rest"] = Value::String(r.to_string());
@@ -767,15 +938,52 @@ pub fn tagged_to_value(v: &TaggedValue) -> Value {
                 v["array_pattern"] = Value::Bool(true);
             }
             if !binds.is_empty() {
-                let mut map = Map::new();
-                for (k, val) in binds.iter() {
-                    map.insert(k.to_string(), tagged_to_value(val));
+                // Shared binds (`Rc` strong count > 1 — sibling arrows,
+                // rec-region references) dedup into document-local refs:
+                // first occurrence emits the map with a `__binds_id__`
+                // marker, repeats emit `{"__bindsref__": id}`. Inlining
+                // every occurrence would expand the shared DAG
+                // exponentially. Unshared maps stay inline so the
+                // self-contained round-trip is preserved.
+                if Rc::strong_count(binds) > 1 {
+                    let key = Rc::as_ptr(binds) as usize;
+                    match ctx.by_ptr.get(&key) {
+                        Some(id) => {
+                            v["binds"] = serde_json::json!({"__bindsref__": id});
+                        }
+                        None => {
+                            let id = ctx.next;
+                            ctx.next += 1;
+                            ctx.by_ptr.insert(key, id);
+                            let mut map = Map::new();
+                            map.insert(
+                                "__binds_id__".to_string(),
+                                Value::from(id),
+                            );
+                            for (k, val) in binds.iter() {
+                                map.insert(
+                                    k.to_string(),
+                                    tagged_to_value_ctx(val, ctx),
+                                );
+                            }
+                            v["binds"] = Value::Object(map);
+                        }
+                    }
+                } else {
+                    let mut map = Map::new();
+                    for (k, val) in binds.iter() {
+                        map.insert(k.to_string(), tagged_to_value_ctx(val, ctx));
+                    }
+                    v["binds"] = Value::Object(map);
                 }
-                v["binds"] = Value::Object(map);
             }
             if !handlers.is_empty() {
-                v["handlers"] =
-                    Value::Array(handlers.iter().map(tagged_to_value).collect());
+                v["handlers"] = Value::Array(
+                    handlers
+                        .iter()
+                        .map(|v| tagged_to_value_ctx(v, ctx))
+                        .collect(),
+                );
             }
             v
         }
