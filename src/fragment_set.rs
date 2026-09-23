@@ -126,15 +126,19 @@ impl<T: Fragment> FragmentSet<T> {
 
     /// Compute the ids from `requires` that would be missing after merging
     /// `id` (with the given `replaces`).
+    ///
+    /// The post-merge id set is `id_index − replaces + {id}`; each
+    /// requirement is tested against it directly rather than by
+    /// materializing that set. Building the set cloned every fragment id on
+    /// every merge, which made assembly quadratic in the fragment count.
     fn missing_requires(&self, id: &str, replaces: &[String], requires: &[String]) -> Vec<String> {
-        let mut post_ids: BTreeSet<String> = self.id_index.keys().cloned().collect();
-        for rid in replaces {
-            post_ids.remove(rid);
-        }
-        post_ids.insert(id.to_string());
         requires
             .iter()
-            .filter(|r| !post_ids.contains(*r))
+            .filter(|r| {
+                let r = r.as_str();
+                r != id
+                    && (replaces.iter().any(|rep| rep == r) || !self.id_index.contains_key(r))
+            })
             .cloned()
             .collect()
     }
