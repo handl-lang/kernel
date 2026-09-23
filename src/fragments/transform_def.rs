@@ -181,6 +181,13 @@ pub enum TransformCondition {
         /// The AST node kind the resolved child must have.
         kind: String,
     },
+    /// The node must have *some* child of `kind`, at any position. This is
+    /// the shape-agnostic companion to `KindAt` for variable-arity children
+    /// — e.g. a `block` holding a bare `type-annot` statement.
+    AnyChildKind {
+        /// The AST node kind at least one child must have.
+        kind: String,
+    },
     /// The node's payload at `path` must equal `value`.
     PayloadEq {
         /// The payload path to test (interpretation is engine-defined).
