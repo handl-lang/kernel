@@ -726,12 +726,50 @@ fn obj_map_to_hashmap(
 ///
 /// Unshared maps (`Rc` strong count 1) always serialize inline: they
 /// cannot recur, so the plain-object form keeps the exact round-trip.
+///
+/// Serialization-scoped base for `__binds_id__` numbering.
+///
+/// Ids must be unique across a *decoded* document, and one document can
+/// embed values that were serialized separately -- a module's bindings are
+/// serialized once and later embedded in a module record -- each starting
+/// its own numbering at 0. Colliding ids make a `__bindsref__` resolve to
+/// the wrong definition, which is how an arrow ends up carrying *another*
+/// arrow's binds (its `body_def` from one arrow, its `binds` from
+/// another). A process-wide counter keeps ids unique across
+/// serializations; ids are opaque `u64` labels in the JSON.
+static BINDS_ID_BASE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Ids are handed out in blocks of this size, one block per serialization.
+const BINDS_ID_STRIDE: u64 = 1 << 32;
+
 #[derive(Default)]
 struct SerCtx {
     /// `Rc` pointer address → document-local id, for maps already
     /// emitted (as `__binds_id__` definitions) in this document.
     by_ptr: FxHashMap<usize, u64>,
+    /// The maps `by_ptr` is keyed by, held for the whole document.
+    ///
+    /// A bare address is only unique while the allocation lives: if an
+    /// earlier arrow's `Rc` is dropped mid-document, the allocator can
+    /// hand the same address to a *different* binds map, which then
+    /// serializes as a `__bindsref__` to the first one's id — the arrow
+    /// decodes with another arrow's binds (its `body_def` from one arrow,
+    /// its `binds` from another). Keeping the `Rc`s alive makes the
+    /// address a stable identity for the duration.
+    keep_alive: Vec<Rc<FxHashMap<Rc<str>, TaggedValue>>>,
     next: u64,
+}
+
+impl SerCtx {
+    /// A context whose `__binds_id__` numbering starts in a fresh block, so
+    /// its ids never collide with another serialization's (see
+    /// [`BINDS_ID_BASE`]).
+    fn new() -> Self {
+        Self {
+            next: BINDS_ID_BASE.fetch_add(BINDS_ID_STRIDE, std::sync::atomic::Ordering::Relaxed),
+            ..Self::default()
+        }
+    }
 }
 
 /// Decode context for [`TaggedValue::from`]/[`tagged_from`]: maps each
@@ -861,7 +899,7 @@ impl From<TaggedValue> for Value {
 /// This borrows the value (cloning the inner data as needed) so it can be
 /// used for both `From<TaggedValue>` and reference-based conversions.
 pub fn tagged_to_value(v: &TaggedValue) -> Value {
-    tagged_to_value_ctx(v, &mut SerCtx::default())
+    tagged_to_value_ctx(v, &mut SerCtx::new())
 }
 
 /// The recursive [`tagged_to_value`] body, threading the document-local
@@ -955,6 +993,10 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
                             let id = ctx.next;
                             ctx.next += 1;
                             ctx.by_ptr.insert(key, id);
+                            // Pin the map: the address is the identity, so
+                            // it must not be freed and reused by another
+                            // map while this document is being written.
+                            ctx.keep_alive.push(Rc::clone(binds));
                             let mut map = Map::new();
                             map.insert(
                                 "__binds_id__".to_string(),
