@@ -126,7 +126,11 @@ impl Instantiate<'_> {
             .payload
             .get("children")
             .and_then(|c| c.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_u64().map(|i| i as usize)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_u64().map(|i| i as usize))
+                    .collect()
+            })
             .unwrap_or_default();
         let arity = children.len();
         // `op` borrows `self.lang` — resolve the flags now so the borrow
@@ -287,7 +291,8 @@ impl Instantiate<'_> {
                 if vidx < self.src.len() {
                     let mut b = bound.clone();
                     if *key == "body" {
-                        if let Some(params) = node.payload.get("params").and_then(|p| p.as_array()) {
+                        if let Some(params) = node.payload.get("params").and_then(|p| p.as_array())
+                        {
                             for p in params {
                                 if let Some(s) = p.as_str() {
                                     b.insert(Rc::from(s));
@@ -305,7 +310,10 @@ impl Instantiate<'_> {
                 }
             }
         }
-        if let Some(cs) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+        if let Some(cs) = new_payload
+            .get_mut("children")
+            .and_then(|c| c.as_array_mut())
+        {
             for (i, &nidx) in new_children.iter().enumerate() {
                 if let Some(slot) = cs.get_mut(i) {
                     *slot = Value::from(nidx);
@@ -331,7 +339,10 @@ impl Instantiate<'_> {
                     new_children.push(self.copy_raw(AstRef::new(i as usize))? as u64);
                 }
             }
-            if let Some(cs) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+            if let Some(cs) = new_payload
+                .get_mut("children")
+                .and_then(|c| c.as_array_mut())
+            {
                 for (i, nidx) in new_children.iter().enumerate() {
                     if let Some(slot) = cs.get_mut(i) {
                         *slot = Value::from(*nidx);
@@ -399,7 +410,11 @@ impl Instantiate<'_> {
             .payload
             .get("children")
             .and_then(|c| c.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_u64().map(|i| i as usize)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_u64().map(|i| i as usize))
+                    .collect()
+            })
             .unwrap_or_default();
         let callee_pos = self.role_pos(&node, "callee").unwrap_or(0);
         let mut new_children = Vec::with_capacity(children.len());
@@ -412,7 +427,10 @@ impl Instantiate<'_> {
             new_children.push(nidx as u64);
         }
         let mut new_payload = node.payload.clone();
-        if let Some(cs) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+        if let Some(cs) = new_payload
+            .get_mut("children")
+            .and_then(|c| c.as_array_mut())
+        {
             for (i, nidx) in new_children.iter().enumerate() {
                 if let Some(slot) = cs.get_mut(i) {
                     *slot = Value::from(*nidx);
@@ -437,14 +455,21 @@ impl Instantiate<'_> {
             .payload
             .get("children")
             .and_then(|c| c.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_u64().map(|i| i as usize)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_u64().map(|i| i as usize))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut new_children = Vec::with_capacity(children.len());
         for &cidx in &children {
             new_children.push(self.copy_pattern(AstRef::new(cidx), bound)? as u64);
         }
         let mut new_payload = node.payload.clone();
-        if let Some(cs) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+        if let Some(cs) = new_payload
+            .get_mut("children")
+            .and_then(|c| c.as_array_mut())
+        {
             for (i, nidx) in new_children.iter().enumerate() {
                 if let Some(slot) = cs.get_mut(i) {
                     *slot = Value::from(*nidx);
@@ -475,7 +500,11 @@ impl Instantiate<'_> {
             .payload
             .get("children")
             .and_then(|c| c.as_array())
-            .map(|a| a.iter().filter_map(|v| v.as_u64().map(|i| i as usize)).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_u64().map(|i| i as usize))
+                    .collect()
+            })
             .unwrap_or_default();
         let mut new_children = Vec::with_capacity(children.len());
         for (i, &cidx) in children.iter().enumerate() {
@@ -487,7 +516,10 @@ impl Instantiate<'_> {
             new_children.push(nidx as u64);
         }
         let mut new_payload = node.payload.clone();
-        if let Some(cs) = new_payload.get_mut("children").and_then(|c| c.as_array_mut()) {
+        if let Some(cs) = new_payload
+            .get_mut("children")
+            .and_then(|c| c.as_array_mut())
+        {
             for (i, nidx) in new_children.iter().enumerate() {
                 if let Some(slot) = cs.get_mut(i) {
                     *slot = Value::from(*nidx);
@@ -530,8 +562,7 @@ impl Instantiate<'_> {
                 }
                 let callee_pos = self.role_pos(node, "callee");
                 if callee_pos.is_some() {
-                    if let Some(children) =
-                        node.payload.get("children").and_then(|c| c.as_array())
+                    if let Some(children) = node.payload.get("children").and_then(|c| c.as_array())
                     {
                         for (i, c) in children.iter().enumerate() {
                             if Some(i) == callee_pos {
@@ -806,15 +837,9 @@ mod tests {
             shape("arm", vec![role("pattern"), role("body")]),
             shape("type-annot", vec![role("subject"), role("annot")]),
             shape("pi", vec![role("param"), role("body")]),
-            shape(
-                "field-access",
-                vec![role("target"), role("field")],
-            ),
-            shape(
-                "entry",
-                vec![role("key"), role("value")],
-            )
-            .with_literal_children([("key".into(), vec!["var".into()])]),
+            shape("field-access", vec![role("target"), role("field")]),
+            shape("entry", vec![role("key"), role("value")])
+                .with_literal_children([("key".into(), vec!["var".into()])]),
             shape("object", vec![var_role("entries")]),
         ];
         for s in shapes {
@@ -909,7 +934,9 @@ mod tests {
         let x = ast.push(var("x")).index();
         let y = ast.push(var("y")).index();
         let body = ast.push(node("binary.add", &[x, y], Value::Null)).index();
-        let f = ast.push(node("function", &[params, body], Value::Null)).index();
+        let f = ast
+            .push(node("function", &[params, body], Value::Null))
+            .index();
         let out = ast
             .instantiate(
                 AstRef::new(f),
@@ -931,16 +958,16 @@ mod tests {
         //   → first stmt substitutes x=9; third keeps bound x, y→lit(2)
         let x1 = ast.push(var("x")).index();
         let one = ast.push(num(1)).index();
-        let s1 = ast.push(node("binary.add", &[x1, one], Value::Null)).index();
+        let s1 = ast
+            .push(node("binary.add", &[x1, one], Value::Null))
+            .index();
         let t = ast.push(var("x")).index();
         let z = ast.push(num(0)).index();
         let s2 = ast.push(node("assign", &[t, z], Value::Null)).index();
         let x2 = ast.push(var("x")).index();
         let y = ast.push(var("y")).index();
         let s3 = ast.push(node("binary.add", &[x2, y], Value::Null)).index();
-        let blk = ast
-            .push(node("block", &[s1, s2, s3], Value::Null))
-            .index();
+        let blk = ast.push(node("block", &[s1, s2, s3], Value::Null)).index();
         let out = ast
             .instantiate(
                 AstRef::new(blk),
@@ -1028,9 +1055,7 @@ mod tests {
         let mut ast = Ast::new();
         let h = ast.push(var("h")).index();
         let tv = ast.push(var("t")).index();
-        let rest = ast
-            .push(node("rest", &[tv], Value::Null))
-            .index();
+        let rest = ast.push(node("rest", &[tv], Value::Null)).index();
         let pat = ast.push(node("array", &[h, rest], Value::Null)).index();
         let hv = ast.push(var("h")).index();
         let yv = ast.push(var("y")).index();
@@ -1100,12 +1125,10 @@ mod tests {
         let y = ast.push(var("y")).index();
         let add = ast.push(node("binary.add", &[x, y], Value::Null)).index();
         let f = ast
-            .push(
-                AstNode::new("arrow-lit").with_payload(json!({
-                    "params": ["x"],
-                    "body": add,
-                })),
-            )
+            .push(AstNode::new("arrow-lit").with_payload(json!({
+                "params": ["x"],
+                "body": add,
+            })))
             .index();
         let out = ast
             .instantiate(

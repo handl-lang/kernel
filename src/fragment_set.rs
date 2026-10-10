@@ -136,8 +136,7 @@ impl<T: Fragment> FragmentSet<T> {
             .iter()
             .filter(|r| {
                 let r = r.as_str();
-                r != id
-                    && (replaces.iter().any(|rep| rep == r) || !self.id_index.contains_key(r))
+                r != id && (replaces.iter().any(|rep| rep == r) || !self.id_index.contains_key(r))
             })
             .cloned()
             .collect()
