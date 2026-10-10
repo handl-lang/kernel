@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use handl_value::{TaggedValue, check_portable, tagged_to_value};
+use handl_value::{check_portable, tagged_to_value, TaggedValue};
 use rustc_hash::FxHashMap;
 use serde_json::json;
 

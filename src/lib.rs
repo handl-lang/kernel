@@ -21,7 +21,6 @@
 //!   by the arrow-calculus `App` combinator — self-contained serializable
 //!   data with no captured environment (ADR-0106).
 
-
 use std::ffi::c_void;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -527,10 +526,7 @@ fn tagged_from(v: Value, ctx: &mut DeCtx) -> TaggedValue {
         Value::Number(n) => number_to_tagged(n),
         Value::String(s) => TaggedValue::Str(Rc::from(s)),
         Value::Array(a) => {
-            let els: Vec<TaggedValue> = a
-                .into_iter()
-                .map(|v| tagged_from(v, ctx))
-                .collect();
+            let els: Vec<TaggedValue> = a.into_iter().map(|v| tagged_from(v, ctx)).collect();
             TaggedValue::Arr(Rc::from(els))
         }
         Value::Object(o) => object_to_tagged(o, ctx),
@@ -697,10 +693,7 @@ fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
     Some(TaggedValue::Sym(Rc::new(sym)))
 }
 
-fn obj_map_to_hashmap(
-    o: Map<String, Value>,
-    ctx: &mut DeCtx,
-) -> FxHashMap<Rc<str>, TaggedValue> {
+fn obj_map_to_hashmap(o: Map<String, Value>, ctx: &mut DeCtx) -> FxHashMap<Rc<str>, TaggedValue> {
     o.into_iter()
         .map(|(k, v)| (Rc::from(k), tagged_from(v, ctx)))
         .collect()
@@ -819,10 +812,7 @@ fn collect_binds_defs(v: &Value, ctx: &mut DeCtx) {
 /// registers them under `id`; a plain object is an ordinary inline map.
 /// Returns `None` when `v` is not an object; an unresolvable ref yields
 /// an empty map (the same default as a missing `binds` field).
-fn binds_from_json(
-    v: &Value,
-    ctx: &mut DeCtx,
-) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
+fn binds_from_json(v: &Value, ctx: &mut DeCtx) -> Option<Rc<FxHashMap<Rc<str>, TaggedValue>>> {
     let m = v.as_object()?;
     if let Some(id) = m.get("__bindsref__").and_then(|v| v.as_u64()) {
         return Some(resolve_binds_ref(id, ctx));
@@ -841,10 +831,7 @@ fn binds_from_json(
 /// from [`DeCtx::defs`] on demand. A ref to a definition currently being
 /// decoded (a cyclic edge) or absent from the document yields an empty
 /// map — `Rc<FxHashMap>` cannot express a forward/cyclic placeholder.
-fn resolve_binds_ref(
-    id: u64,
-    ctx: &mut DeCtx,
-) -> Rc<FxHashMap<Rc<str>, TaggedValue>> {
+fn resolve_binds_ref(id: u64, ctx: &mut DeCtx) -> Rc<FxHashMap<Rc<str>, TaggedValue>> {
     if let Some(rc) = ctx.by_id.get(&id) {
         return Rc::clone(rc);
     }
@@ -932,11 +919,9 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
             })
         }
         TaggedValue::Bytes(b) => bytes_to_value(b),
-        TaggedValue::Arr(a) => Value::Array(
-            a.iter()
-                .map(|v| tagged_to_value_ctx(v, ctx))
-                .collect(),
-        ),
+        TaggedValue::Arr(a) => {
+            Value::Array(a.iter().map(|v| tagged_to_value_ctx(v, ctx)).collect())
+        }
         TaggedValue::Obj(o) => {
             let mut map = Map::new();
             for (k, val) in o.iter() {
@@ -998,15 +983,9 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
                             // map while this document is being written.
                             ctx.keep_alive.push(Rc::clone(binds));
                             let mut map = Map::new();
-                            map.insert(
-                                "__binds_id__".to_string(),
-                                Value::from(id),
-                            );
+                            map.insert("__binds_id__".to_string(), Value::from(id));
                             for (k, val) in binds.iter() {
-                                map.insert(
-                                    k.to_string(),
-                                    tagged_to_value_ctx(val, ctx),
-                                );
+                                map.insert(k.to_string(), tagged_to_value_ctx(val, ctx));
                             }
                             v["binds"] = Value::Object(map);
                         }
@@ -1828,7 +1807,13 @@ fn boundary_at(k: u64, n: u64, c: &TaggedValue, tgt_side: bool) -> TaggedValue {
 /// it is an identity cell — `α ∘ₖ id` keeps `α`'s witness, `id ∘ₖ α`
 /// keeps `α`'s). `∘₀` on 1-cells (`n == 1`) is sequential 1-cell
 /// composition — the `Arrow{first, second}` record.
-fn comp_at(k: u64, n: u64, a: &TaggedValue, b: &TaggedValue, b_id: bool) -> Result<TaggedValue, String> {
+fn comp_at(
+    k: u64,
+    n: u64,
+    a: &TaggedValue,
+    b: &TaggedValue,
+    b_id: bool,
+) -> Result<TaggedValue, String> {
     if n <= 1 {
         // `∘₀` on 1-cells: sequential/whiskering composition.
         return Ok(compose1(a, b));
@@ -1944,11 +1929,10 @@ pub fn cell_compose(diagram: &TaggedValue) -> Result<TaggedValue, String> {
     let seed = iter
         .next()
         .ok_or_else(|| "compose: empty pasting diagram".to_string())?;
-    let (_, mut acc) =
-        compose_step(seed).map_err(|e| format!("compose step 0: {e}"))?;
+    let (_, mut acc) = compose_step(seed).map_err(|e| format!("compose step 0: {e}"))?;
     for (i, step) in iter.enumerate() {
-        let (axis, cell) = compose_step(step)
-            .map_err(|e| format!("compose step {}: {e}", i + 1))?;
+        let (axis, cell) =
+            compose_step(step).map_err(|e| format!("compose step {}: {e}", i + 1))?;
         acc = cell_comp_axis(axis, 2, &acc, &cell)
             .map_err(|e| format!("compose step {}: {e}", i + 1))?;
     }
@@ -2150,7 +2134,9 @@ mod cell_tests {
             serde_json::json!({"__tag__": "Cell2", "__src__": 3, "__tgt__": 3, "value": 3})
         );
         // `1 ∘₁ 2` — boundary mismatch.
-        assert!(cell2_comp_axis(1, &int(1), &int(2)).unwrap_err().contains("boundary"));
+        assert!(cell2_comp_axis(1, &int(1), &int(2))
+            .unwrap_err()
+            .contains("boundary"));
     }
 
     #[test]
@@ -2178,16 +2164,21 @@ mod cell_tests {
         assert_eq!(cell_src(&c), cell2(int(0), int(1), int(8)));
         assert_eq!(cell_tgt(&c), cell2(int(2), int(3), int(9)));
         assert_eq!(cell_witness(&c), int(200));
-        assert_eq!(
-            c.get("__tag__").and_then(|t| t.as_str()),
-            Some("Cell")
-        );
+        assert_eq!(c.get("__tag__").and_then(|t| t.as_str()), Some("Cell"));
     }
 
     #[test]
     fn comp_axis2_boundary_mismatch() {
-        let a = cell3(cell2(int(0), int(1), int(8)), cell2(int(1), int(2), int(5)), int(1));
-        let b = cell3(cell2(int(7), int(2), int(5)), cell2(int(2), int(3), int(9)), int(2));
+        let a = cell3(
+            cell2(int(0), int(1), int(8)),
+            cell2(int(1), int(2), int(5)),
+            int(1),
+        );
+        let b = cell3(
+            cell2(int(7), int(2), int(5)),
+            cell2(int(2), int(3), int(9)),
+            int(2),
+        );
         let err = cell_comp_axis(2, 2, &a, &b).unwrap_err();
         assert!(err.contains("boundary"), "got {err}");
     }
@@ -2271,7 +2262,10 @@ mod cell_tests {
             {"axis": 1, "cell": {"__tag__": "Cell2", "__src__": 9, "__tgt__": 3, "value": 20}},
         ]));
         let err = cell_compose(&bad).unwrap_err();
-        assert!(err.contains("step 1") && err.contains("boundary"), "got {err}");
+        assert!(
+            err.contains("step 1") && err.contains("boundary"),
+            "got {err}"
+        );
 
         // Non-array and empty diagrams reject cleanly.
         assert!(cell_compose(&int(1)).is_err());
