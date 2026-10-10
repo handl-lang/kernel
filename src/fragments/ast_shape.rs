@@ -220,6 +220,24 @@ pub struct AstShapeDef {
     /// pattern). Absent = this node kind is not a pattern shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pattern_role: Option<String>,
+    /// Optional structural **faces** (ADR-0123). A small, closed vocabulary
+    /// naming the structural role a node kind plays, so a generic engine can
+    /// dispatch on the role instead of the canonical kind name:
+    ///
+    /// - `binding` — the kind introduces a binding (`assign`, `bind`, …);
+    /// - `lambda` — the kind is a function/arrow form (`function`, `rec`, …);
+    /// - `call` — the kind is an application (`call`, `call` patterns);
+    /// - `arrow` — the kind is the dimension/arrow form (`dim_arrow`).
+    ///
+    /// A face names the *family*; where a family has several **layouts**
+    /// (e.g. binding: `assign` has `target`/`value` roles, `bind` carries
+    /// `payload.name`), the layout is distinguished by the existing child
+    /// roles, not by more faces — see ADR-0123 §"Finding".
+    ///
+    /// Absent = the kind plays no declared face; engines keep their canonical
+    /// kind-name fallback, exactly as for `literal_children`/`pattern_role`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub faces: Vec<String>,
 }
 
 fn is_payload_null(v: &Value) -> bool {
@@ -239,7 +257,14 @@ impl AstShapeDef {
             children: None,
             literal_children: std::collections::BTreeMap::new(),
             pattern_role: None,
+            faces: Vec::new(),
         }
+    }
+
+    /// Attach structural faces (ADR-0123).
+    pub fn with_faces(mut self, faces: Vec<String>) -> Self {
+        self.faces = faces;
+        self
     }
 
     /// Attach a payload schema.

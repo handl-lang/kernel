@@ -487,6 +487,34 @@ impl Language {
         self.pattern_role(node_kind).map(|r| r == role)
     }
 
+    /// Whether `node_kind`'s shape declares the structural `face` (ADR-0123)
+    /// — e.g. `"binding"`, `"lambda"`, `"call"`, `"arrow"`.
+    ///
+    /// This is the data-driven replacement for dispatching on canonical kind
+    /// names (`kind == "assign"`) in *generic* components: a language that
+    /// spells its binder `set` still answers `shape_has_face("set",
+    /// "binding")` because the face travels with the shape data.
+    ///
+    /// A face names the family only. Where a family has several layouts
+    /// (binding has `assign`'s `target`/`value` roles vs `bind`'s
+    /// `payload.name`), the caller distinguishes them by the keys that
+    /// actually differ — the declared child roles — rather than by adding
+    /// faces. See ADR-0123 §"Finding".
+    pub fn shape_has_face(&self, node_kind: &str, face: &str) -> bool {
+        self.ast
+            .get_by_identity(node_kind)
+            .is_some_and(|def| def.faces.iter().any(|f| f == face))
+    }
+
+    /// Whether `node_kind` declares any face at all (ADR-0123). Lets a caller
+    /// distinguish "declares no faces" (keep the canonical fallback) from
+    /// "declares faces but not this one" (authoritative negative).
+    pub fn declares_faces(&self, node_kind: &str) -> bool {
+        self.ast
+            .get_by_identity(node_kind)
+            .is_some_and(|def| !def.faces.is_empty())
+    }
+
     /// Whether `node_kind`'s shape declares any variadic child role (ADR-0081).
     ///
     /// Engines use this to replace `kind == "paren" || kind == "array"` shape
