@@ -79,6 +79,11 @@ fn is_zero(i: &i32) -> bool {
 ///   [`RewriteStep`] against the original node. `payload`, when present, is a
 ///   **shallow patch**: provided keys overwrite, absent keys are preserved
 ///   from the original node's payload.
+/// - [`TransformRule::Replace`] rewrites the matched node *by* an existing
+///   descendant instead of allocating a node: the result **is** the node at
+///   child-index `path`. It is a [`RewriteStep::KeepPath`] promoted to the
+///   rule level, and it is what expresses a *root-eliminating* law (one whose
+///   right-hand side is a subterm).
 /// - [`TransformRule::Native`] is the disciplined escape hatch: dispatch
 ///   stays in `TransformDef` data, only the implementation is Rust. The name
 ///   (e.g. `"desugar.while"`) is resolved against the native-rewrite registry
@@ -94,6 +99,25 @@ pub enum TransformRule {
         /// Optional shallow payload patch merged into the new node.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         payload: Option<Value>,
+    },
+    /// Replace the matched node *by* an existing descendant (ADR-0127).
+    ///
+    /// The rewritten node **is** the node at child-index `path` below the
+    /// matched node, remapped into the output arena — no node is created.
+    /// This is [`RewriteStep::KeepPath`] promoted to the rule level: where
+    /// [`Declarative`](Self::Declarative) always allocates a node of
+    /// `target_kind` (and therefore cannot express a law that *eliminates
+    /// its root*), `Replace` returns one that already exists. A
+    /// root-eliminating law such as `double_neg: neg(neg(a)) → a` is exactly
+    /// `Replace { path: [0, 0] }`.
+    ///
+    /// `path` is interpreted exactly as [`RewriteStep::KeepPath`]'s: a
+    /// non-empty sequence of child indices starting at the matched node. A
+    /// path that does not resolve to an existing descendant is an **error**,
+    /// never a silently fabricated node.
+    Replace {
+        /// Child-index path from the matched node to the result node.
+        path: Vec<usize>,
     },
     /// A named native rewrite (e.g. `"desugar.while"`), interpreted by the
     /// native-rewrite registry of whichever transform engine runs the pass.
@@ -425,7 +449,6 @@ mod tests {
         let j = serde_json::to_string(&def).unwrap();
         let back: TransformDef = serde_json::from_str(&j).unwrap();
         assert_eq!(def, back);
-
         // Every RewriteStep / TransformCondition variant round-trips.
         let steps = vec![
             RewriteStep::Keep(0),
@@ -469,6 +492,26 @@ mod tests {
         let j = serde_json::to_string(&conds).unwrap();
         let back: Vec<TransformCondition> = serde_json::from_str(&j).unwrap();
         assert_eq!(conds, back);
+    }
+
+    #[test]
+    fn serde_roundtrip_replace() {
+        // `Replace` round-trips through JSON like every other rule form.
+        // (The YAML `!Replace` tag spelling is pinned end-to-end by
+        // `handl-kit-data-canonical`'s `catopt_fragments` test, which loads
+        // catopt's emitted `!Replace` rows through `language_from_dir`.)
+        let def = TransformDef::new(
+            "t.replace",
+            "optimize",
+            "neg",
+            TransformRule::Replace {
+                path: vec![0, 0],
+            },
+        );
+        let j = serde_json::to_string(&def).unwrap();
+        assert!(j.contains("\"Replace\""), "{j}");
+        let back: TransformDef = serde_json::from_str(&j).unwrap();
+        assert_eq!(def, back);
     }
 
     #[test]
