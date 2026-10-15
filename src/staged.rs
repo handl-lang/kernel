@@ -35,6 +35,22 @@ pub struct Token {
     pub end: usize,
 }
 
+/// A token annotated with its source span.
+///
+/// The data-driven lexer (`handl_language::Token`) carries only `kind` and
+/// `text` — no span. This helper type augments a token with the byte offsets
+/// of its match in the source, which LSP/tooling hosts need for range-based
+/// features (hover, goto-definition, semantic tokens).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpannedToken {
+    /// The token kind id (e.g. `"token.identifier"`).
+    pub kind: String,
+    /// The matched source text.
+    pub text: String,
+    /// The byte span of the match in the source.
+    pub span: Span,
+}
+
 impl Token {
     /// The byte [`Span`] covering this token's source text, or `None` when
     /// the token carries no position (e.g. hand-built test tokens).

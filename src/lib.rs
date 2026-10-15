@@ -46,6 +46,7 @@ pub mod quantified_laws;
 pub mod staged;
 /// The arrow-calculus `Term` kernel (ADR-0052).
 pub mod term;
+pub mod token_classes;
 /// Proof verdicts for the partial-evaluator typechecker (ADR-0068).
 pub mod verdict;
 /// Term combinator versioning.
@@ -80,6 +81,7 @@ pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
+pub use token_classes::TokenClasses;
 pub use term::{
     ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };
@@ -143,7 +145,7 @@ impl plugin_engine::LanguageView for Language {
         self.rewrite_rule(name)
     }
 }
-pub use staged::{Source, Token, Tokens, ValueOut, eval, lex, parse, run};
+pub use staged::{Source, SpannedToken, Token, Tokens, ValueOut, eval, lex, parse, run};
 pub use verdict::{Proof, Verdict};
 pub use version::SchemeVersion;
 
