@@ -2,6 +2,9 @@
 name = "handl-language"
 version.workspace = true
 edition.workspace = true
+description = "The `Language` data schema and staged `lex`/`parse`/`eval` dispatch signatures for the HAndL platform (ADR-0044)."
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 plugin-engine = { workspace = true }
