@@ -7,23 +7,22 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-handl-language = { path = "../handl-language" }
-handl-kit-data-canonical = { workspace = true }
-handl-runtime = { path = "../handl-runtime" }
-handl-plugin-engine-exec = { path = "../plugin-engine-exec" }
-handl-plugin-engine-exec-tree-walk = { path = "../plugin-engine-exec-tree-walk" }
-serde_json = { workspace = true }
+handl-language = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-kit-data-canonical = { git = "https://github.com/handl-lang/lang", rev = "4f0f2faa4f70381552491cb3f25fd6a82d819937" }
+handl-runtime = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-plugin-engine-exec = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-plugin-engine-exec-tree-walk = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+serde_json = "1"
 
 [dev-dependencies]
-handl-platform = { path = "../platform" }
-handl-plugin-engine-exec-bytecode = { path = "../plugin-engine-exec-bytecode" }
+handl-platform = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-plugin-engine-exec-bytecode = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
 handl-plugin-engine-exec-cranelift = { git = "https://github.com/handl-lang/native", rev = "0bc91da548697c78bc59ebef6080aed6370c4264" }
-handl-plugin-engine-exec-tree-walk = { path = "../plugin-engine-exec-tree-walk" }
-handl-plugin-engine-lex-pattern = { path = "../plugin-engine-lex-pattern" }
-handl-plugin-engine-parse-pratt = { path = "../plugin-engine-parse-pratt" }
-handl-plugin-lib-lang-lex = { workspace = true }
-handl-plugin-lib-lang-parse = { workspace = true }
-handl-plugin-lib-lang-eval = { workspace = true }
-handl-plugin-lib-lang-compile = { workspace = true }
-handl-plugin-lib-lang-run-compiled = { workspace = true }
-handl-kit-canonical = { workspace = true }
+handl-plugin-engine-lex-pattern = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-plugin-engine-parse-pratt = { git = "https://github.com/handl-lang/platform", rev = "5df37a70d3ee6636d8250e938cd2b3c920a28550" }
+handl-plugin-lib-lang-lex = { git = "https://github.com/handl-lang/stdlib", rev = "a4a357f8a9b462e3bb0d70bbdc8189a300a5b0f1" }
+handl-plugin-lib-lang-parse = { git = "https://github.com/handl-lang/stdlib", rev = "a4a357f8a9b462e3bb0d70bbdc8189a300a5b0f1" }
+handl-plugin-lib-lang-eval = { git = "https://github.com/handl-lang/stdlib", rev = "a4a357f8a9b462e3bb0d70bbdc8189a300a5b0f1" }
+handl-plugin-lib-lang-compile = { git = "https://github.com/handl-lang/stdlib", rev = "a4a357f8a9b462e3bb0d70bbdc8189a300a5b0f1" }
+handl-plugin-lib-lang-run-compiled = { git = "https://github.com/handl-lang/stdlib", rev = "a4a357f8a9b462e3bb0d70bbdc8189a300a5b0f1" }
+handl-kit-canonical = { git = "https://github.com/handl-lang/kit-canonical", rev = "c3b1a6a0f13bf58d149b6ba4ae544502e063b6d9" }
