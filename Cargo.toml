@@ -1,0 +1,29 @@
+[package]
+name = "handl-defining-handl"
+version.workspace = true
+edition.workspace = true
+description = "The **self-hosting infrastructure** for ADR-0044 Phase 8."
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+handl-language = { path = "../handl-language" }
+handl-kit-data-canonical = { workspace = true }
+handl-runtime = { path = "../handl-runtime" }
+handl-plugin-engine-exec = { path = "../plugin-engine-exec" }
+handl-plugin-engine-exec-tree-walk = { path = "../plugin-engine-exec-tree-walk" }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+handl-platform = { path = "../platform" }
+handl-plugin-engine-exec-bytecode = { path = "../plugin-engine-exec-bytecode" }
+handl-plugin-engine-exec-cranelift = { git = "https://github.com/handl-lang/native", rev = "0bc91da548697c78bc59ebef6080aed6370c4264" }
+handl-plugin-engine-exec-tree-walk = { path = "../plugin-engine-exec-tree-walk" }
+handl-plugin-engine-lex-pattern = { path = "../plugin-engine-lex-pattern" }
+handl-plugin-engine-parse-pratt = { path = "../plugin-engine-parse-pratt" }
+handl-plugin-lib-lang-lex = { workspace = true }
+handl-plugin-lib-lang-parse = { workspace = true }
+handl-plugin-lib-lang-eval = { workspace = true }
+handl-plugin-lib-lang-compile = { workspace = true }
+handl-plugin-lib-lang-run-compiled = { workspace = true }
+handl-kit-canonical = { workspace = true }
