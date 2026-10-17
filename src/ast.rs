@@ -110,6 +110,67 @@ fn collect_name_strings(
     }
 }
 
+/// Names the subtree *references* as variables — payloads of `var`-kind
+/// nodes only, not every payload string.
+///
+/// [`subtree_name_candidates`] is deliberately conservative: it gathers
+/// every string in every payload, so a literal like `bytes := "bytes"`
+/// (the bare-name/`import * as` lowering) reads as a self-reference and
+/// the bound name appears wherever it is merely *mentioned* — record
+/// keys, op names, import specs. For a self-recursion check that is a
+/// false positive: recursion requires the name to be *referenced*, which
+/// the grammar spells as a `var` node.
+///
+/// A node counts as a variable reference when it plays the `leaf`
+/// pattern role and carries its name as the payload — either a bare
+/// string or `{"name": <s>}`. `is_var` supplies the predicate (e.g.
+/// `lang.pattern_role_is(kind, "leaf")` with a `kind == "var"` fallback,
+/// as `instantiate` does); keeping it a parameter leaves the traversal
+/// generic over languages that spell the variable leaf differently.
+///
+/// Returns `None` when any reachable node is unresolvable, matching
+/// [`subtree_name_candidates`].
+pub fn subtree_var_names(
+    mut node_at: impl FnMut(AstRef) -> Option<AstNode>,
+    mut is_var: impl FnMut(&AstNode) -> bool,
+    root: AstRef,
+) -> Option<std::collections::HashSet<std::rc::Rc<str>>> {
+    let mut out = std::collections::HashSet::new();
+    let mut visited = std::collections::HashSet::new();
+    let mut stack = vec![root];
+    while let Some(r) = stack.pop() {
+        if !visited.insert(r) {
+            continue;
+        }
+        let node = node_at(r)?;
+        if is_var(&node) {
+            if let Some(name) = node
+                .payload
+                .as_str()
+                .or_else(|| node.payload.get("name").and_then(Value::as_str))
+            {
+                out.insert(std::rc::Rc::from(name));
+            }
+        }
+        if let Value::Object(map) = &node.payload {
+            for (k, val) in map {
+                if k == "children" {
+                    if let Some(arr) = val.as_array() {
+                        for el in arr.iter().filter_map(|e| e.as_u64()) {
+                            stack.push(AstRef::new(el as usize));
+                        }
+                    }
+                } else if ARENA_REF_PAYLOAD_KEYS.contains(&k.as_str()) {
+                    if let Some(i) = val.as_u64() {
+                        stack.push(AstRef::new(i as usize));
+                    }
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
 /// A span of byte offsets in source text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct Span {
