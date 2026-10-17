@@ -110,41 +110,7 @@ pub fn interpret_with_handlers(
             };
 
             let callee_val = interpret_with_handlers(callee, input, handlers)?;
-
-            // Bound-arrow record `{"__term__": <Term>, "__bound__": [v..]}`:
-            // a frozen partial application — `__term__` runs on the
-            // concatenation of `__bound__` and this call's arguments.
-            if let Some(obj) = callee_val.as_object() {
-                if let (Some(term_val), Some(Value::Array(bound))) =
-                    (obj.get("__term__"), obj.get("__bound__"))
-                {
-                    if let Ok(scheme) = from_value::<Term>(term_val.clone()) {
-                        let mut full_input = bound.clone();
-                        match arg_input {
-                            Value::Array(vals) => full_input.extend(vals),
-                            v => full_input.push(v),
-                        }
-                        return interpret_with_handlers(
-                            &scheme,
-                            Value::Array(full_input),
-                            handlers,
-                        );
-                    }
-                }
-            }
-
-            // If the callee evaluates to a `Term` value, run it.
-            if let Ok(scheme) = from_value::<Term>(callee_val.clone()) {
-                return interpret_with_handlers(&scheme, arg_input, handlers);
-            }
-
-            // String callees are host-function names; the small interpreter
-            // has no registry, so report it clearly.
-            if callee_val.as_str().is_some() {
-                return Err("App: host-function callees are not supported".to_string());
-            }
-
-            Err(format!("App: callee is not an arrow value: {callee_val}"))
+            apply_arrow(&callee_val, arg_input, handlers)
         }
 
         Term::Handle {
@@ -168,6 +134,79 @@ pub fn interpret_with_handlers(
 
         other => Err(format!("unsupported Term: {other:?}")),
     }
+}
+
+/// Apply an arrow *value* to an argument value — the callee dispatch
+/// shared by `Term::App` and the `flow` op: bound-arrow records
+/// (`{__term__, __bound__}` — a frozen partial application whose term
+/// runs on `__bound__ ++ args`), `>>>` composite records
+/// (`{__tag__: "Arrow", first, second}` — `second(first(arg))`, the
+/// engines' `apply_app` composite arm), and serialized-`Term` arrow
+/// values (`Arr` quotes). Host-function string callees need a module
+/// registry this interpreter does not carry, so they report clearly.
+fn apply_arrow(
+    callee_val: &Value,
+    arg_input: Value,
+    handlers: &HashMap<String, Value>,
+) -> Result<Value, String> {
+    if let Some(obj) = callee_val.as_object() {
+        // `>>>` composite `{"__tag__": "Arrow", first, second}`: run
+        // `first` on the args, then `second` on the result — the
+        // engines' `apply_app` composite arm (`f >>> g` applied is
+        // `g(f(x))`).
+        if obj.get("__tag__").and_then(|t| t.as_str()) == Some("Arrow") {
+            if let (Some(first), Some(second)) = (obj.get("first"), obj.get("second")) {
+                let mid = apply_arrow(first, arg_input, handlers)?;
+                return apply_arrow(second, mid, handlers);
+            }
+        }
+        // Bound-arrow record `{"__term__": <Term>, "__bound__": [v..]}`:
+        // a frozen partial application — `__term__` runs on the
+        // concatenation of `__bound__` and this call's arguments.
+        if let (Some(term_val), Some(Value::Array(bound))) =
+            (obj.get("__term__"), obj.get("__bound__"))
+        {
+            if let Ok(scheme) = from_value::<Term>(term_val.clone()) {
+                let mut full_input = bound.clone();
+                match arg_input {
+                    Value::Array(vals) => full_input.extend(vals),
+                    v => full_input.push(v),
+                }
+                return interpret_with_handlers(&scheme, Value::Array(full_input), handlers);
+            }
+        }
+    }
+
+    // If the callee evaluates to a `Term` value, run it.
+    if let Ok(scheme) = from_value::<Term>(callee_val.clone()) {
+        return interpret_with_handlers(&scheme, arg_input, handlers);
+    }
+
+    // String callees are host-function names; the small interpreter
+    // has no registry, so report it clearly.
+    if callee_val.as_str().is_some() {
+        return Err("App: host-function callees are not supported".to_string());
+    }
+
+    Err(format!("App: callee is not an arrow value: {callee_val}"))
+}
+
+/// Whether `v` is an arrow *value* the `flow` dispatch can compose —
+/// the interpreter's representation of the engines' `is_arrow_like`:
+/// a `>>>` composite record (`{__tag__: "Arrow", first, …}`) or a
+/// serialized `Term` (the `Arr`-quoted arrow value). Bound-arrow
+/// records (`{__term__, __bound__}`) are callable through
+/// [`apply_arrow`] but are *not* arrow-like — matching the engines,
+/// where `f >>> g` on bound records applies rather than composes.
+fn is_arrow_value(v: &Value) -> bool {
+    if let Some(obj) = v.as_object() {
+        if obj.get("__tag__").and_then(|t| t.as_str()) == Some("Arrow")
+            && (obj.get("first").is_some() || obj.get("inputs").is_some())
+        {
+            return true;
+        }
+    }
+    from_value::<Term>(v.clone()).is_ok()
 }
 
 /// Resolve a `Seq` axis slot to its concrete axis index.
@@ -656,6 +695,25 @@ fn eval_op(
 
         "assert" => {
             Err("assert: keyword assertions are not supported by the arrow interpreter".into())
+        }
+
+        // `flow` — the `>>>` value dispatch (`eval.flow`): both operands
+        // evaluate against the incoming value; two arrow values compose
+        // (`cell_comp_axis` axis 0 → `Arrow{first, second}`), otherwise
+        // the right value applies to the left — the engines' `flow`
+        // arm. The lowerer emits this for `x >>> f` operands that hold
+        // *values* (slot/param-held arrows, call results) rather than
+        // body-arrow schemes, which `Seq` composes directly.
+        "flow" => {
+            if args.len() != 2 {
+                return Err(format!("flow: expected 2 args, got {}", args.len()));
+            }
+            let a = interpret_with_handlers(&args[0], input.clone(), handlers)?;
+            let b = interpret_with_handlers(&args[1], input.clone(), handlers)?;
+            if is_arrow_value(&a) && is_arrow_value(&b) {
+                return cell_comp_axis(0, 1, &a, &b);
+            }
+            apply_arrow(&b, a, handlers)
         }
 
         other => {
