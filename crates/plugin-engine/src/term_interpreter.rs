@@ -635,15 +635,44 @@ fn eval_op(
         // are *total* (a non-object input reports false, never an error)
         // so a non-matching scrutinee falls through to the next arm —
         // the `arr_len` → `-1` convention, extended to objects.
-        "is_obj" => Ok(Value::Bool(input.is_object())),
+        "is_obj" => Ok(Value::Bool(tagged_is_obj(&input))),
+
+        // `obj_key` — coerce a computed object-pattern key expression's
+        // value to a field name: `v.as_str().unwrap_or("")`, mirroring
+        // `try_object_pattern`'s `key_val.as_str().unwrap_or("")`. The
+        // lowerer wraps runtime-valued pattern keys in it so
+        // `field_access`/`obj_except` always see a string key.
+        "obj_key" => {
+            let t = args
+                .first()
+                .ok_or_else(|| "obj_key: missing argument")?;
+            let v = interpret_with_handlers(t, input, handlers)?;
+            Ok(Value::String(v.as_str().unwrap_or("").to_string()))
+        }
 
         // `has_field[:k]` — the input is an object *and* carries key `k`.
+        // Two surfaces: `lit` is the static key (the `Seq[pv, ·]`-riding
+        // form whose args are inert), or with no `lit` the
+        // `field_access`-style computed form `has_field(target, key)`
+        // where both args evaluate on the input — the arrow-lowered
+        // runtime-valued object-pattern key. A non-string key coerces
+        // to `""`, mirroring `try_object_pattern`.
         "has_field" => {
-            let key = lit
-                .and_then(Value::as_str)
-                .ok_or_else(|| "has_field: missing key literal")?;
+            if let Some(key) = lit.and_then(Value::as_str) {
+                return Ok(Value::Bool(
+                    tagged_is_obj(&input)
+                        && input.as_object().is_some_and(|o| o.contains_key(key)),
+                ));
+            }
+            if args.len() < 2 {
+                return Err("has_field: missing key literal".into());
+            }
+            let target = interpret_with_handlers(&args[0], input.clone(), handlers)?;
+            let key = interpret_with_handlers(&args[1], input, handlers)?;
+            let key = key.as_str().unwrap_or("");
             Ok(Value::Bool(
-                input.as_object().map(|o| o.contains_key(key)) == Some(true),
+                tagged_is_obj(&target)
+                    && target.as_object().is_some_and(|o| o.contains_key(key)),
             ))
         }
 
@@ -653,8 +682,7 @@ fn eval_op(
         // `payload_fields`. Only consulted by binder paths behind a
         // `has_field "__tag__"` guard, so a non-object input errors.
         "tag_fields" => {
-            let obj = input
-                .as_object()
+            let obj = tagged_obj(&input)
                 .ok_or_else(|| "tag_fields: input is not an object")?;
             let mut fields: Vec<(&String, &Value)> = obj
                 .iter()
@@ -667,18 +695,33 @@ fn eval_op(
         }
 
         // `obj_except[:keys]` — the object-pattern `...rest` binder's
-        // payload: the input object minus the listed (matched) keys.
+        // payload: the object minus the listed (matched) keys.
         // Evaluated lazily from an arm body, so a non-object input errors.
+        // Two surfaces: `lit` is the static key list (input is the
+        // object), or with no `lit` `obj_except(target, keys)` where both
+        // args evaluate on the input and `keys` is an array — the
+        // arrow-lowered form for patterns with runtime-valued keys
+        // (static keys ride in the same list as constants). Elements
+        // coerce like `has_field`'s computed key (`as_str().unwrap_or("")`).
         "obj_except" => {
-            let keys = lit
-                .and_then(Value::as_array)
-                .ok_or_else(|| "obj_except: missing keys literal")?;
-            let obj = input
-                .as_object()
+            let (obj_val, keys) = if let Some(ks) = lit.and_then(Value::as_array) {
+                (input, ks.clone())
+            } else if args.len() >= 2 {
+                let target = interpret_with_handlers(&args[0], input.clone(), handlers)?;
+                let ks = interpret_with_handlers(&args[1], input, handlers)?;
+                let ks = ks
+                    .as_array()
+                    .cloned()
+                    .ok_or_else(|| "obj_except: keys are not an array".to_string())?;
+                (target, ks)
+            } else {
+                return Err("obj_except: missing keys literal".into());
+            };
+            let obj = tagged_obj(&obj_val)
                 .ok_or_else(|| "obj_except: input is not an object")?;
             let mut out = Map::new();
             for (k, v) in obj {
-                if !keys.iter().any(|k2| k2.as_str() == Some(k.as_str())) {
+                if !keys.iter().any(|k2| k2.as_str().unwrap_or("") == k.as_str()) {
                     out.insert(k.clone(), v.clone());
                 }
             }
@@ -856,6 +899,25 @@ fn is_truthy(value: &Value) -> bool {
         Value::Number(n) => n.as_f64().map_or(false, |f| f != 0.0),
         Value::String(s) => !s.is_empty(),
         _ => true,
+    }
+}
+
+/// Whether `v` is an object *as the engines' `try_object_pattern` sees
+/// it*: `TaggedValue::Obj` after the wire-shape decode, which excludes
+/// the `__pair__`/`__either__`/`__bytes__`/`__sym__`/`__arrow__`/
+/// `__resource__` marker records (they decode to non-Obj variants).
+/// A raw `serde_json::Value::is_object` would count a `{"__pair__": …}`
+/// wire pair as an object the engines never pattern-match.
+fn tagged_is_obj(v: &Value) -> bool {
+    matches!(TaggedValue::from(v.clone()), TaggedValue::Obj(_))
+}
+
+/// The object map of `v` when [`tagged_is_obj`] holds.
+fn tagged_obj(v: &Value) -> Option<&Map<String, Value>> {
+    if tagged_is_obj(v) {
+        v.as_object()
+    } else {
+        None
     }
 }
 
