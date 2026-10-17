@@ -421,6 +421,13 @@ pub struct GrammarRow {
     /// right binding power.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub binding_power: Option<(u8, u8)>,
+    /// Whether the infix operator must sit on the same line as its left
+    /// operand — `true` for postfix `[`/`(`/`field`/`?.`, so a newline
+    /// ends the expression instead of gluing the next statement in
+    /// (e.g. `x + 1\n[…]` parses as `x + 1` then an array literal, not
+    /// `x + 1[…]`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub same_line: bool,
     /// The child shape this row produces.
     pub child_shape: AstShapeRef,
     /// ids this fragment declares it replaces.
@@ -444,6 +451,7 @@ impl GrammarRow {
             token: token.into(),
             position,
             binding_power: None,
+            same_line: false,
             child_shape,
             replaces: Vec::new(),
             requires: Vec::new(),
