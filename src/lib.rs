@@ -881,6 +881,60 @@ impl From<TaggedValue> for Value {
     }
 }
 
+/// Self-reference marker — installed into a self-recursive arrow's
+/// `binds` under its own bound name (e.g. `alen := (xs) ~> …alen…`).
+///
+/// `binds` is an immutable `Rc` snapshot taken at mint time, before the
+/// bound name's own value exists, so a `name → itself` entry cannot be
+/// constructed cyclically. Instead the binding site stores this marker
+/// and the apply site (`apply_arrow_body`) re-seeds the name with the
+/// arrow value being applied, which resolves self-calls at any depth.
+/// The marker is plain serializable data so a serialized arrow keeps
+/// working after a JSON round-trip.
+pub fn self_ref_marker() -> TaggedValue {
+    let mut m = FxHashMap::default();
+    m.insert(
+        Rc::from("__tag__"),
+        TaggedValue::Str(Rc::from("__self_ref__")),
+    );
+    TaggedValue::Obj(Rc::new(m))
+}
+
+/// Whether `v` is the self-reference marker installed by
+/// [`self_ref_marker`].
+pub fn is_self_ref_marker(v: &TaggedValue) -> bool {
+    matches!(v, TaggedValue::Obj(m)
+        if m.get("__tag__").and_then(|t| t.as_str()) == Some("__self_ref__"))
+}
+
+/// Install the self-reference marker into an arrow's `binds` under
+/// `name`. Used by binding sites (`:=`/`=`/`bind`) whose right-hand side
+/// references the name being bound. No-op for non-arrow values.
+pub fn with_self_ref_bind(value: &TaggedValue, name: &str) -> TaggedValue {
+    if let TaggedValue::Arrow {
+        params,
+        rest,
+        array_pattern,
+        body_def,
+        binds,
+        handlers,
+    } = value
+    {
+        let mut m = (**binds).clone();
+        m.insert(Rc::from(name), self_ref_marker());
+        TaggedValue::Arrow {
+            params: params.clone(),
+            rest: rest.clone(),
+            array_pattern: *array_pattern,
+            body_def: body_def.clone(),
+            binds: Rc::new(m),
+            handlers: handlers.clone(),
+        }
+    } else {
+        value.clone()
+    }
+}
+
 /// Convert a [`TaggedValue`] into a [`serde_json::Value`].
 ///
 /// This borrows the value (cloning the inner data as needed) so it can be
