@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # A PAT (or GitHub App token) with read access to the private sibling
+      # repos. Without it, cross-repo git deps cannot be fetched.
+      CI_TOKEN: ${{ secrets.CI_TOKEN }}
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: auth for private sibling git deps
+        run: |
+          if [ -n "$CI_TOKEN" ]; then
+            git config --global url."https://x-access-token:${CI_TOKEN}@github.com/".insteadOf "https://github.com/"
+          else
+            echo "::warning::CI_TOKEN is not set — private sibling git deps will fail to fetch"
+          fi
+
+      - name: drop local [patch] tables
+        # The [patch] blocks point at sibling checkouts for local development
+        # (ADR-0128 §Resolution). CI has no siblings, so it resolves the
+        # pinned `rev` git deps instead.
+        run: |
+          python3 - <<'PY'
+          import pathlib, re
+
+          pat = re.compile(
+              r'\n\[patch\."https://github\.com/handl-lang/[^"]+"\]'
+              r'[\s\S]*?(?=\n\[|\Z)'
+          )
+          for p in sorted(pathlib.Path('.').rglob('Cargo.toml')):
+              if 'target/' in str(p):
+                  continue
+              t = p.read_text()
+              n = pat.sub('\n', t)
+              if n != t:
+                  p.write_text(n)
+                  print('stripped [patch] from', p)
+          PY
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: check + test
+        run: |
+          if [ -f Cargo.toml ]; then
+            cargo check --workspace --all-targets
+            cargo test --workspace --no-fail-fast
+          else
+            echo "no Cargo.toml yet - code lands with its ADR-0128 phase"
+          fi

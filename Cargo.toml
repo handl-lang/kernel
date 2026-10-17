@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/handl-language",
+    "crates/handl-value",
+    "crates/plugin-engine",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/handl-lang/kernel"
+
+[workspace.dependencies]
+plugin-engine = { path = "crates/plugin-engine" }
+serde = "1"
+serde_json = "1"
+thiserror = "2"
+
+[profile.dev]
+opt-level = 1
