@@ -20,6 +20,9 @@
 //!   `{"__arrow__": true, "params": [...], "body_def": {...}}` shape used
 //!   by the arrow-calculus `App` combinator — self-contained serializable
 //!   data with no captured environment (ADR-0106).
+//! - [`TaggedValue::Tensor`] is a dense row-major `f64` tensor carried
+//!   opaquely through host functions — the `{"__tensor__": {"shape",
+//!   "data", "dtype": "f64"}}` wire form `host-tensor` uses.
 
 use std::ffi::c_void;
 use std::fmt;
@@ -135,6 +138,75 @@ impl fmt::Debug for ForeignResource {
             .finish()
     }
 }
+// ---------------------------------------------------------------------------
+// TensorValue — dense row-major f64 tensor (the host-tensor wire payload)
+// ---------------------------------------------------------------------------
+
+/// A dense, row-major `f64` tensor — the payload of
+/// [`TaggedValue::Tensor`].
+///
+/// Mirrors the `{"__tensor__": {"shape": [d, ...], "data": [x, ...],
+/// "dtype": "f64"}}` wire form `host-tensor` emits across its `Function`
+/// boundary: `shape` is the extent per axis (rank = `shape.len()`),
+/// `data` the flat row-major payload with `data.len() == product(shape)`.
+/// `dtype` is implicit — `"f64"` is the only element type this variant
+/// carries.
+///
+/// Unlike [`ForeignResource`], a tensor is a *value*, not an opaque
+/// handle: equality is structural over `shape` + `data` (elementwise
+/// `f64` `==`, matching [`TaggedValue::Float`]'s comparison — so `0.0`
+/// and `-0.0` compare equal and a `NaN` element makes a tensor unequal
+/// to itself), and hashing agrees (elements hash as `f64` bits with
+/// `-0.0` normalized to `+0.0`, since `0.0 == -0.0` but their bit
+/// patterns differ).
+#[derive(Clone, PartialEq)]
+pub struct TensorValue {
+    /// Extent per axis; `shape.len()` is the rank. An empty `shape` is a
+    /// scalar tensor (one element).
+    pub shape: Vec<usize>,
+    /// Flat row-major payload; `data.len() == product(shape)`. `Rc`-
+    /// backed so a value-preserving view/reshape can share storage.
+    pub data: Rc<Vec<f64>>,
+}
+
+impl TensorValue {
+    /// Construct a tensor, enforcing `data.len() == product(shape)`
+    /// (the product is checked — shape extents whose product overflows
+    /// `usize` are rejected).
+    pub fn new(shape: Vec<usize>, data: Vec<f64>) -> Result<TensorValue, String> {
+        let expected = shape.iter().try_fold(1usize, |acc, &d| acc.checked_mul(d));
+        match expected {
+            Some(n) if n == data.len() => Ok(TensorValue {
+                shape,
+                data: Rc::new(data),
+            }),
+            Some(n) => Err(format!(
+                "tensor: data length {} does not match product of shape {shape:?} ({n})",
+                data.len()
+            )),
+            None => Err(format!(
+                "tensor: product of shape {shape:?} overflows usize"
+            )),
+        }
+    }
+
+    /// The rank (number of axes).
+    pub fn rank(&self) -> usize {
+        self.shape.len()
+    }
+}
+
+impl fmt::Debug for TensorValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Compact debug: the payload can be large, so print the shape
+        // and element count rather than every element.
+        f.debug_struct("TensorValue")
+            .field("shape", &self.shape)
+            .field("len", &self.data.len())
+            .finish()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Sym — nominal identity (ADR-0106 §2, Phase 2 kernel primitives)
 // ---------------------------------------------------------------------------
@@ -297,6 +369,9 @@ impl fmt::Display for Sym {
 /// - [`TaggedValue::Sym`] is a nominal identity (ADR-0106 §2): identity
 ///   equality by handle, not structural equality. `PartialEq`/`Hash` are
 ///   hand-written for this reason (see the [`Sym`] docs).
+/// - [`TaggedValue::Tensor`] is a dense row-major `f64` tensor — a
+///   pass-through carrier for host tensor ops (the `{"__tensor__": …}`
+///   wire form `host-tensor` uses), structurally equal by shape + data.
 #[derive(Clone, Debug)]
 pub enum TaggedValue {
     Null,
@@ -384,6 +459,23 @@ pub enum TaggedValue {
     /// cannot be serialized. Decoding from JSON produces a `Resource`
     /// with `finalizer = None`.
     Resource(Rc<ForeignResource>),
+    /// A dense row-major `f64` tensor — an opaque-to-the-VM host value
+    /// carried through host functions (engines never interpret it).
+    ///
+    /// The JSON encoding is
+    /// `{"__tensor__": {"shape": [d, ...], "data": [x, ...],
+    /// "dtype": "f64"}}` — the same wire form `host-tensor` produces and
+    /// consumes, so values round-trip across the `Function` boundary.
+    /// `dtype` is optional on decode but only `"f64"` is accepted; a
+    /// malformed payload (non-array `shape`/`data`, a negative or
+    /// non-integer extent, a `data` length other than `product(shape)`,
+    /// or another `dtype`) falls back to a plain object, matching the
+    /// lenient `__bytes__`/`__sym__` convention.
+    ///
+    /// A tensor is a *value*: equality and hashing are structural over
+    /// `shape` + `data`, not pointer identity (contrast
+    /// [`TaggedValue::Resource`]). See [`TensorValue`].
+    Tensor(Rc<TensorValue>),
 }
 
 impl Default for TaggedValue {
@@ -481,6 +573,22 @@ impl Hash for TaggedValue {
                 12u8.hash(state);
                 s.hash(state);
             }
+            TaggedValue::Tensor(t) => {
+                13u8.hash(state);
+                t.shape.hash(state);
+                for x in t.data.iter() {
+                    // Hash consistent with elementwise `==` equality:
+                    // normalize -0.0 → +0.0 (0.0 == -0.0 but their bit
+                    // patterns differ). NaN never compares equal, so its
+                    // payload bits are unconstrained.
+                    let bits = if *x == 0.0 {
+                        0.0f64.to_bits()
+                    } else {
+                        x.to_bits()
+                    };
+                    bits.hash(state);
+                }
+            }
         }
     }
 }
@@ -574,6 +682,18 @@ fn object_to_tagged(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
                 return TaggedValue::Bytes(Rc::new(buf));
             }
         }
+    }
+    // Tensor: {"__tensor__": {"shape": [d, ...], "data": [x, ...],
+    // "dtype"?: "f64"}} — a dense row-major f64 tensor, the host-tensor
+    // wire form. Malformed payloads (bad dtype, non-integer extents, a
+    // data length that is not product(shape)) fall back to a plain
+    // object, matching the lenient `__bytes__`/`__sym__` style.
+    if let Some(t) = o
+        .get("__tensor__")
+        .and_then(|v| v.as_object())
+        .and_then(tensor_from_json)
+    {
+        return t;
     }
     // Pair: {"__pair__": [a, b]}
     if let Some(pair_val) = o.get("__pair__") {
@@ -691,6 +811,37 @@ fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
         parent,
     };
     Some(TaggedValue::Sym(Rc::new(sym)))
+}
+
+/// Decode the inner payload of a `{"__tensor__": {...}}` JSON object into
+/// a [`TaggedValue::Tensor`]. Returns `None` when the payload is
+/// malformed — a `dtype` present but not `"f64"`, a non-array `shape` or
+/// `data`, a negative/non-integer/`usize`-overflowing extent, a
+/// non-numeric element, or a `data` length that is not `product(shape)` —
+/// so the caller falls back to a plain object (the lenient `__bytes__`
+/// convention). `dtype` is optional on decode, matching `host-tensor`'s
+/// `decode_tensor`.
+fn tensor_from_json(inner: &Map<String, Value>) -> Option<TaggedValue> {
+    if let Some(dtype) = inner.get("dtype") {
+        if dtype.as_str() != Some("f64") {
+            return None;
+        }
+    }
+    let shape: Vec<usize> = inner
+        .get("shape")?
+        .as_array()?
+        .iter()
+        .map(|d| d.as_u64().and_then(|n| usize::try_from(n).ok()))
+        .collect::<Option<_>>()?;
+    let data: Vec<f64> = inner
+        .get("data")?
+        .as_array()?
+        .iter()
+        .map(|x| x.as_f64())
+        .collect::<Option<_>>()?;
+    TensorValue::new(shape, data)
+        .ok()
+        .map(|t| TaggedValue::Tensor(Rc::new(t)))
 }
 
 fn obj_map_to_hashmap(o: Map<String, Value>, ctx: &mut DeCtx) -> FxHashMap<Rc<str>, TaggedValue> {
@@ -1069,6 +1220,21 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
                 "__resource__": { "ptr": r.ptr as i64 }
             })
         }
+        TaggedValue::Tensor(t) => {
+            // The host-tensor wire form: `{"__tensor__": {"shape": [...],
+            // "data": [...], "dtype": "f64"}}`. serde_json renders
+            // non-finite floats as `null` (matching `Float`'s encoding);
+            // such a payload then decodes as a plain object rather than
+            // a `Tensor`, the same graceful degradation `Float(NaN)` →
+            // `Null` already applies.
+            serde_json::json!({
+                "__tensor__": {
+                    "shape": t.shape,
+                    "data": t.data.as_slice(),
+                    "dtype": "f64",
+                }
+            })
+        }
     }
 }
 
@@ -1253,6 +1419,20 @@ impl TaggedValue {
         }
     }
 
+    /// Returns the value as a [`TensorValue`] reference if it is a
+    /// `Tensor` (dense row-major `f64` host value).
+    pub fn as_tensor(&self) -> Option<&TensorValue> {
+        match self {
+            TaggedValue::Tensor(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if the value is a `Tensor`.
+    pub fn is_tensor(&self) -> bool {
+        matches!(self, TaggedValue::Tensor(_))
+    }
+
     /// Returns `true` if the value is a nominal identity (`Sym`).
     pub fn is_sym(&self) -> bool {
         matches!(self, TaggedValue::Sym(_))
@@ -1306,6 +1486,13 @@ pub fn bytes(b: impl Into<Vec<u8>>) -> TaggedValue {
 /// when called with `ptr`.
 pub unsafe fn resource(ptr: *mut c_void, finalizer: Option<unsafe fn(*mut c_void)>) -> TaggedValue {
     TaggedValue::Resource(Rc::new(ForeignResource::new(ptr, finalizer)))
+}
+
+/// Construct a `Tensor` value from a `shape` (extent per axis) and a
+/// flat row-major `f64` payload — the [`TensorValue`] invariant
+/// `data.len() == product(shape)` is enforced (see [`TensorValue::new`]).
+pub fn tensor(shape: Vec<usize>, data: Vec<f64>) -> Result<TaggedValue, String> {
+    TensorValue::new(shape, data).map(|t| TaggedValue::Tensor(Rc::new(t)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1453,6 +1640,9 @@ pub fn truthy(v: &TaggedValue) -> bool {
         TaggedValue::Resource(_) => true,
         // Nominal identities are always truthy (a sym exists).
         TaggedValue::Sym(_) => true,
+        // Tensors are always truthy (an opaque host value exists —
+        // unlike `Bytes`, emptiness is a shape property, not falsiness).
+        TaggedValue::Tensor(_) => true,
         _ => true,
     }
 }
@@ -1621,6 +1811,9 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
         }
         // Resources are equal by opaque pointer identity.
         (TaggedValue::Resource(a), TaggedValue::Resource(b)) => a.ptr == b.ptr,
+        // Tensors are values: structural equality over shape + data
+        // (elementwise f64 `==`, matching `Float`).
+        (TaggedValue::Tensor(x), TaggedValue::Tensor(y)) => x == y,
         _ => false,
     }
 }
