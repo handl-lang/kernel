@@ -1,0 +1,20 @@
+[package]
+name = "handl-lib-cmp"
+version = "0.1.0"
+edition = "2024"
+description = "cmp: Handl stdlib port (ADR-0128 split)."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/handl-lang/lib-cmp"
+
+[dependencies]
+handl-platform = { git = "https://github.com/handl-lang/platform", branch = "main" }
+handl-plugin-lib-handl = { git = "https://github.com/handl-lang/platform", branch = "main" }
+handl-lib-ops = { git = "https://github.com/handl-lang/kernel", branch = "main" }
+serde_json = "1"
+
+[patch."https://github.com/handl-lang/lib-ops"]
+handl-lib-ops = { path = "../kernel/crates/ops" }
+
+[patch."https://github.com/handl-lang/platform"]
+handl-platform = { path = "../platform/crates/platform" }
+handl-plugin-lib-handl = { path = "../platform/crates/plugin-lib-handl" }

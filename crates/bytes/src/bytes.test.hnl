@@ -1,0 +1,17 @@
+from "./index" import * as bytes
+
+test_bytes_roundtrip := assert bytes.to_list(bytes.from_list([104, 105])) = [104, 105]
+
+test_bytes_len := assert bytes.len(bytes.from_list([1, 2, 3])) = 3
+
+test_bytes_at := assert bytes.at(bytes.from_list([10, 20, 30]), 1) = 20
+
+test_bytes_concat := assert bytes.to_list(bytes.concat(bytes.from_list([1, 2]), bytes.from_list([3]))) = [1, 2, 3]
+
+test_bytes_slice := assert bytes.to_list(bytes.slice(bytes.from_list([1, 2, 3, 4, 5]), 1, 3)) = [2, 3, 4]
+
+test_bytes_slice_clamp := assert bytes.to_list(bytes.slice(bytes.from_list([1, 2, 3]), 1, 99)) = [2, 3]
+
+test_bytes_utf8_roundtrip := assert bytes.utf8_decode(bytes.utf8_encode("héllo →")) = "héllo →"
+
+test_bytes_utf8_encode_len := assert bytes.len(bytes.utf8_encode("→")) = 3

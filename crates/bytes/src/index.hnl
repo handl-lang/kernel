@@ -1,0 +1,63 @@
+--- bytes -- byte-buffer primitives for the `Bytes` scalar type.
+---
+--- Single source of truth for the `bytes` stdlib interface: 8 functions
+--- covering construction from lists of ints, projection back to lists,
+--- concatenation, slicing, length, indexing, and UTF-8 coding. `Bytes` is
+--- the contiguous byte-buffer value type declared in `value_types.yaml`
+--- (ADR-0083 §2.1, encoded on the JSON boundary as `{"__bytes__": [n,
+--- ...]}`); before this module the only producer was the FFI `out_buf`
+--- descriptor, so `.hnl` code had no way to build or inspect one.
+---
+--- All 8 functions are FFI atoms: `Bytes` has no literal syntax and no
+--- eval-vocabulary constructor, so construction, indexing, slicing, and
+--- UTF-8 coding cannot be expressed as pure handl arrows. The
+--- `op`/`handl` declaration form (ADR-0077 Phase 2) declares the
+--- interface; the Rust `Function` impls in
+--- `plugin-lib-stdlib::ops::bytes` provide the logic and are registered
+--- in an `OpRegistry` that dispatches each `op` to its native impl.
+---
+--- `bytes.slice(b, offset, len)` clamps the window to the buffer (like
+--- `str.slice`); `bytes.at(b, i)` errors when `i` is out of bounds (like
+--- `str.char_at`); `bytes.utf8_decode` errors on invalid UTF-8.
+---
+--- ## Capability declarations (ADR-0077 Phase 4)
+--- bytes.from_list -- build a Bytes buffer from a list of ints (each must be 0..=255).
+--- bytes.to_list -- project a Bytes buffer to a list of ints.
+--- bytes.concat -- concatenate two Bytes buffers.
+--- bytes.slice -- copy out the `len`-byte window at `offset`, clamped to the buffer.
+--- bytes.len -- byte length of a Bytes buffer.
+--- bytes.at -- the byte at `index` (error when out of bounds).
+--- bytes.utf8_encode -- UTF-8 encode a String into Bytes.
+--- bytes.utf8_decode -- UTF-8 decode Bytes into a String (error on invalid UTF-8).
+cap "bytes.from_list"
+cap "bytes.to_list"
+cap "bytes.concat"
+cap "bytes.slice"
+cap "bytes.len"
+cap "bytes.at"
+cap "bytes.utf8_encode"
+cap "bytes.utf8_decode"
+op "bytes.from_list" : (List Int) -> Bytes
+  guarantee: True
+op "bytes.to_list" : Bytes -> (List Int)
+  guarantee: True
+op "bytes.concat" : (Bytes * Bytes) -> Bytes
+  guarantee: True
+op "bytes.slice" : (Bytes * Int * Int) -> Bytes
+  guarantee: True
+op "bytes.len" : Bytes -> Int
+  guarantee: True
+op "bytes.at" : (Bytes * Int) -> Int
+  guarantee: True
+op "bytes.utf8_encode" : String -> Bytes
+  guarantee: True
+op "bytes.utf8_decode" : Bytes -> String
+  guarantee: True
+handle "bytes.from_list" with rust_bytes_from_list
+handle "bytes.to_list" with rust_bytes_to_list
+handle "bytes.concat" with rust_bytes_concat
+handle "bytes.slice" with rust_bytes_slice
+handle "bytes.len" with rust_bytes_len
+handle "bytes.at" with rust_bytes_at
+handle "bytes.utf8_encode" with rust_bytes_utf8_encode
+handle "bytes.utf8_decode" with rust_bytes_utf8_decode
