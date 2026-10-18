@@ -1,0 +1,13 @@
+[package]
+name = "handl-ext"
+version.workspace = true
+edition.workspace = true
+description = "Shared ABI for `hnl` dynamic extensions — JSON over a C boundary (ADR-0149)."
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+libloading = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
