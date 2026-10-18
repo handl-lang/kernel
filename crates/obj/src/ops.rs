@@ -13,7 +13,7 @@ use handl_plugin_lib_handl::OpRegistry;
 use serde_json::{Map, Value};
 
 /// The op names declared in `obj.hnl`.
-pub const OBJ_OPS: &[&str] = &["obj.keys", "obj.values", "obj.entries"];
+pub const OBJ_OPS: &[&str] = &["obj.keys", "obj.values", "obj.entries", "obj.set", "obj.from_entries"];
 
 fn require_one_object(args: &[Value]) -> Result<&Map<String, Value>, EvalError> {
     let arg = args.first().ok_or_else(|| {
@@ -79,11 +79,60 @@ impl Function for Entries {
     }
 }
 
+/// `obj.set(obj: object, key: string, value: value) -> object`
+#[derive(Debug, Clone, Copy)]
+pub struct Set;
+
+impl Function for Set {
+    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+        let input = require_one_object(&args[..1])?;
+        let key = args
+            .get(1)
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| EvalError::TypeMismatch("obj.set key must be a string".to_string()))?;
+        let val = args
+            .get(2)
+            .cloned()
+            .ok_or_else(|| EvalError::TypeMismatch("obj.set expects 3 args".to_string()))?;
+        let mut obj = input.clone();
+        obj.insert(key.to_string(), val);
+        Ok(Value::Object(obj))
+    }
+}
+
+/// `obj.from_entries(entries: array<[string, value]>) -> object`
+#[derive(Debug, Clone, Copy)]
+pub struct FromEntries;
+
+impl Function for FromEntries {
+    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+        let entries = args
+            .first()
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| EvalError::TypeMismatch("obj.from_entries expects an array".to_string()))?;
+        let mut obj = serde_json::Map::new();
+        for e in entries {
+            let pair = e
+                .as_array()
+                .ok_or_else(|| EvalError::TypeMismatch("entry must be [key, value]".to_string()))?;
+            let key = pair
+                .first()
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| EvalError::TypeMismatch("entry key must be a string".to_string()))?;
+            let val = pair.get(1).cloned().unwrap_or(Value::Null);
+            obj.insert(key.to_string(), val);
+        }
+        Ok(Value::Object(obj))
+    }
+}
+
 /// Build the [`OpRegistry`] for the `obj` module.
 pub fn obj_op_registry() -> OpRegistry {
     let mut registry = OpRegistry::new();
     registry.register("obj.keys", Arc::new(Keys));
     registry.register("obj.values", Arc::new(Values));
     registry.register("obj.entries", Arc::new(Entries));
+    registry.register("obj.set", Arc::new(Set));
+    registry.register("obj.from_entries", Arc::new(FromEntries));
     registry
 }
