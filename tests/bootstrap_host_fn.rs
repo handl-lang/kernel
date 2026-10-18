@@ -25,11 +25,11 @@
 use handl_defining_handl::{corpus, language};
 use handl_language::{Ast, AstNode, Language, Value, language_value};
 use handl_platform::ModuleLookup;
-use handl_plugin_engine_exec_bytecode::BytecodeCompileEngine;
-use handl_plugin_engine_exec_cranelift::CraneliftCompileEngine;
-use handl_plugin_engine_exec_tree_walk::TreeWalkEngine;
-use handl_plugin_engine_lex_pattern::DataLexerEngine;
-use handl_plugin_engine_parse_pratt::PrattEngine;
+use hnl_engine_exec_bytecode::BytecodeCompileEngine;
+use hnl_engine_exec_cranelift::CraneliftCompileEngine;
+use hnl_engine_exec_tree_walk::TreeWalkEngine;
+use hnl_engine_lex_pattern::DataLexerEngine;
+use hnl_engine_parse_pratt::PrattEngine;
 use handl_plugin_lib_lang_compile::CompileModule;
 use handl_plugin_lib_lang_eval::EvalModule;
 use handl_plugin_lib_lang_lex::LexModule;

@@ -49,9 +49,9 @@
 //! future work, enabled by keeping `compile` a function on data.
 
 use handl_defining_handl::{corpus, language};
-use handl_plugin_engine_exec::{EvalEngine, EvalRequest};
-use handl_plugin_engine_exec_cranelift::CraneliftEngine;
-use handl_plugin_engine_exec_tree_walk::TreeWalkEngine;
+use hnl_engine_exec::{EvalEngine, EvalRequest};
+use hnl_engine_exec_cranelift::CraneliftEngine;
+use hnl_engine_exec_tree_walk::TreeWalkEngine;
 
 /// The 1st Futamura projection sanity check: fix `lang = handlLanguage`,
 /// compile it once (build a `CraneliftEngine`), then evaluate multiple

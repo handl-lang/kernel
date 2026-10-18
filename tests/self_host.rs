@@ -30,11 +30,11 @@
 
 use handl_defining_handl::{corpus, language};
 use handl_language::LangError;
-use handl_plugin_engine_exec::{EvalEngine, EvalRequest};
-use handl_plugin_engine_exec_bytecode::BytecodeEngine;
-use handl_plugin_engine_exec_cranelift::CraneliftEngine;
-use handl_plugin_engine_exec_tree_walk::TreeWalkEngine;
-use handl_plugin_engine_parse_pratt::PrattEngine;
+use hnl_engine_exec::{EvalEngine, EvalRequest};
+use hnl_engine_exec_bytecode::BytecodeEngine;
+use hnl_engine_exec_cranelift::CraneliftEngine;
+use hnl_engine_exec_tree_walk::TreeWalkEngine;
+use hnl_engine_parse_pratt::PrattEngine;
 use handl_runtime::{EngineRegistry, Runtime, RuntimeConfig};
 use std::rc::Rc;
 
