@@ -1,0 +1,1 @@
+do { lang = self; eval(lang, parse(lang, lex(lang, "1 + 2"))) }

@@ -1,0 +1,28 @@
+[package]
+name = "handl-defining-handl"
+version.workspace = true
+edition.workspace = true
+description = "The **self-hosting infrastructure** for ADR-0044 Phase 8."
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+handl-language = { git = "https://github.com/handl-lang/kernel", branch = "main" }
+handl-kit-data-canonical = { git = "https://github.com/handl-lang/kit-data-canonical", branch = "main" }
+handl-runtime = { git = "https://github.com/handl-lang/host", branch = "main" }
+hnl-engine-exec = { git = "https://github.com/handl-lang/engine-exec", branch = "main" }
+hnl-engine-exec-tree-walk = { git = "https://github.com/handl-lang/engine-exec-tree-walk", branch = "main" }
+serde_json = "1"
+
+[dev-dependencies]
+handl-platform = { git = "https://github.com/handl-lang/host", branch = "main" }
+hnl-engine-exec-bytecode = { git = "https://github.com/handl-lang/engine-exec-bytecode", branch = "main" }
+hnl-engine-exec-cranelift = { git = "https://github.com/handl-lang/engine-exec-cranelift", branch = "main" }
+hnl-engine-lex-pattern = { git = "https://github.com/handl-lang/engine-lex-pattern", branch = "main" }
+hnl-engine-parse-pratt = { git = "https://github.com/handl-lang/engine-parse-pratt", branch = "main" }
+handl-plugin-lib-lang-lex = { git = "https://github.com/handl-lang/lib-lang-lex", branch = "main" }
+handl-plugin-lib-lang-parse = { git = "https://github.com/handl-lang/lib-lang-parse", branch = "main" }
+handl-plugin-lib-lang-eval = { git = "https://github.com/handl-lang/lib-lang-eval", branch = "main" }
+handl-plugin-lib-lang-compile = { git = "https://github.com/handl-lang/lib-lang-compile", branch = "main" }
+handl-plugin-lib-lang-run-compiled = { git = "https://github.com/handl-lang/lib-lang-run-compiled", branch = "main" }
+handl-kit-canonical = { git = "https://github.com/handl-lang/kit-canonical", branch = "main" }
