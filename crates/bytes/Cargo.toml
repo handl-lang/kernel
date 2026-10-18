@@ -9,9 +9,9 @@ repository = "https://github.com/handl-lang/lib-bytes"
 [dependencies]
 # ADR-0128 §Resolution: platform + lib-ops come from the sibling checkouts for
 # local development (see the `[patch]` tables); CI resolves the git sources.
-handl-platform = { git = "https://github.com/handl-lang/platform", branch = "main" }
+handl-platform = { git = "https://github.com/handl-lang/host", branch = "main" }
 handl-value = { git = "https://github.com/handl-lang/kernel", branch = "main" }
-handl-plugin-lib-handl = { git = "https://github.com/handl-lang/platform", branch = "main" }
+handl-plugin-lib-handl = { git = "https://github.com/handl-lang/host", branch = "main" }
 handl-lib-ops = { git = "https://github.com/handl-lang/kernel", branch = "main" }
 serde_json = "1"
 
@@ -21,6 +21,6 @@ handl-value = { path = "../kernel/crates/handl-value" }
 [patch."https://github.com/handl-lang/lib-ops"]
 handl-lib-ops = { path = "../kernel/crates/ops" }
 
-[patch."https://github.com/handl-lang/platform"]
-handl-platform = { path = "../platform/crates/platform" }
-handl-plugin-lib-handl = { path = "../platform/crates/plugin-lib-handl" }
+[patch."https://github.com/handl-lang/host"]
+handl-platform = { path = "../host/crates/platform" }
+handl-plugin-lib-handl = { path = "../host/crates/plugin-lib-handl" }

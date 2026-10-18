@@ -27,7 +27,7 @@ dependencies = [
 [[package]]
 name = "handl-kit-arrow-lower"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
  "serde_json",
@@ -168,7 +168,7 @@ dependencies = [
 [[package]]
 name = "handl-platform"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "semver",
  "serde",
@@ -180,7 +180,7 @@ dependencies = [
 [[package]]
 name = "handl-plugin-ext-diag"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
  "handl-platform",
@@ -202,7 +202,7 @@ dependencies = [
 [[package]]
 name = "handl-plugin-lib-handl"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
  "handl-lib-dedent",
@@ -226,7 +226,7 @@ dependencies = [
 [[package]]
 name = "handl-plugin-module"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "handl-platform",
  "serde_json",
@@ -235,7 +235,7 @@ dependencies = [
 [[package]]
 name = "handl-runtime"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/platform?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
+source = "git+https://github.com/handl-lang/host?branch=main#acb6ab8550a46408cc3fc0be7c7e0db3659bbf9c"
 dependencies = [
  "handl-kit-arrow-lower",
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
