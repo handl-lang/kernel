@@ -22,7 +22,7 @@ dependencies = [
 name = "handl-language"
 version = "0.1.0"
 dependencies = [
- "plugin-engine",
+ "hnl-engine",
  "serde",
  "serde_json",
  "thiserror",
@@ -33,6 +33,24 @@ name = "handl-value"
 version = "0.1.0"
 dependencies = [
  "rustc-hash",
+ "serde_json",
+]
+
+[[package]]
+name = "handl-value"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kernel?branch=main#b57e922f9d8b93bfdb6865fb607d6eed3d0203d1"
+dependencies = [
+ "rustc-hash",
+ "serde_json",
+]
+
+[[package]]
+name = "hnl-engine"
+version = "0.1.0"
+dependencies = [
+ "handl-value 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
+ "serde",
  "serde_json",
 ]
 
@@ -57,15 +75,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "plugin-engine"
-version = "0.1.0"
-dependencies = [
- "handl-value",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "proc-macro2"
