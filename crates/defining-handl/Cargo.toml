@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-handl-language = { git = "https://github.com/handl-lang/kernel", branch = "main" }
+handl-language = { path = "../handl-language" }
 handl-kit-data-canonical = { git = "https://github.com/handl-lang/kit-data-canonical", branch = "main" }
 handl-runtime = { git = "https://github.com/handl-lang/host", branch = "main" }
 hnl-engine-exec = { git = "https://github.com/handl-lang/engine-exec", branch = "main" }

@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/handl-ext",
+    "crates/defining-handl",
     "crates/handl-language",
     "crates/handl-value",
     "crates/bytes",
