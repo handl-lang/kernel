@@ -22,10 +22,10 @@ use crate::error::LangError;
 ///
 /// - `body` — the closure/function form `{"params": [...], "body": <idx>}`
 ///   (and its hand-built `data`/`rec` counterparts). Read as an arena index
-///   by every engine: `plugin-engine-exec-tree-walk/src/lib.rs` (closure
-///   arm), `plugin-engine-exec-bytecode/src/{compile.rs,vm.rs}`,
-///   `plugin-engine-exec-cranelift/src/lib.rs`, and
-///   `plugin-engine-transform-rewrite/src/native/desugar.rs`.
+///   by every engine: `hnl-engine-exec-tree-walk/src/lib.rs` (closure
+///   arm), `hnl-engine-exec-bytecode/src/{compile.rs,vm.rs}`,
+///   `hnl-engine-exec-cranelift/src/lib.rs`, and
+///   `hnl-engine-transform-rewrite/src/native/desugar.rs`.
 ///
 /// Everything else a payload carries is data, not a reference: child roles
 /// index positionally into `payload["children"]` (ADR-0081), and fields such

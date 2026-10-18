@@ -87,7 +87,7 @@ pub enum LangError {
     /// A lexing failure: the source text could not be tokenized (e.g. an
     /// unrecognized character, or an unterminated delimited block).
     ///
-    /// Added for the data-driven lexer engine (`plugin-engine-lex-pattern`),
+    /// Added for the data-driven lexer engine (`hnl-engine-lex-pattern`),
     /// which reports the byte offset where lexing stalled.
     #[error("lex error at position {position}: {message}")]
     LexError {

@@ -1,0 +1,1764 @@
+name: handl-value
+path: crates/handl-value/Cargo.toml
+purpose: Fast tagged value representation for eval engines.
+api:
+- name: handl-value
+  kind: module
+  file: crates/handl-value/Cargo.toml
+  line: 1
+  module: handl-value
+- name: arrow
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 11
+  module: handl-value
+- name: plain_values_are_portable
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 23
+  module: handl-value
+- name: self_contained_binds_refs_are_portable
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 35
+  module: handl-value
+- name: legacy_envref_is_rejected
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 52
+  module: handl-value
+- name: dangling_bindsref_is_rejected
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 59
+  module: handl-value
+- name: bindsref_with_definition_in_document_passes
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 68
+  module: handl-value
+- name: resource_pointer_is_rejected
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 77
+  module: handl-value
+- name: compiled_handle_is_rejected
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 84
+  module: handl-value
+- name: non_marker_lookalikes_pass
+  kind: function
+  file: crates/handl-value/tests/boundary.rs
+  line: 93
+  module: handl-value
+- name: round_trip
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 19
+  module: handl-value
+- name: round_trip_null
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 25
+  module: handl-value
+- name: round_trip_bool
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 30
+  module: handl-value
+- name: round_trip_int
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 36
+  module: handl-value
+- name: round_trip_float
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 43
+  module: handl-value
+- name: round_trip_string
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 49
+  module: handl-value
+- name: round_trip_bytes
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 55
+  module: handl-value
+- name: bytes_accessor_and_truthiness
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 69
+  module: handl-value
+- name: round_trip_array
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 82
+  module: handl-value
+- name: round_trip_object
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 91
+  module: handl-value
+- name: round_trip_pair
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 99
+  module: handl-value
+- name: round_trip_either_left
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 108
+  module: handl-value
+- name: round_trip_either_right
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 116
+  module: handl-value
+- name: round_trip_arrow
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 124
+  module: handl-value
+- name: arithmetic_int_plus_int
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 158
+  module: handl-value
+- name: arithmetic_int_plus_float
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 164
+  module: handl-value
+- name: arithmetic_float_plus_float
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 171
+  module: handl-value
+- name: arithmetic_type_error
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 177
+  module: handl-value
+- name: arithmetic_sub_mul_div_mod
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 183
+  module: handl-value
+- name: arithmetic_div_by_zero
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 211
+  module: handl-value
+- name: comparison_lt
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 221
+  module: handl-value
+- name: comparison_eq_ints_floats_strings
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 229
+  module: handl-value
+- name: pair_helpers
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 250
+  module: handl-value
+- name: either_helpers
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 264
+  module: handl-value
+- name: truthiness_rules
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 286
+  module: handl-value
+- name: tval_macro_null
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 315
+  module: handl-value
+- name: tval_macro_bool
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 322
+  module: handl-value
+- name: tval_macro_int
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 328
+  module: handl-value
+- name: tval_macro_float
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 335
+  module: handl-value
+- name: tval_macro_str
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 342
+  module: handl-value
+- name: tval_macro_array
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 349
+  module: handl-value
+- name: tval_macro_array_mixed
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 359
+  module: handl-value
+- name: tval_macro_object
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 370
+  module: handl-value
+- name: tval_macro_nested
+  kind: function
+  file: crates/handl-value/tests/basics.rs
+  line: 379
+  module: handl-value
+- name: FINALIZER_CALLS
+  kind: const
+  file: crates/handl-value/tests/resource.rs
+  line: 20
+  module: handl-value
+- name: test_finalizer
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 24
+  module: handl-value
+- name: reset_counter
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 28
+  module: handl-value
+- name: resource_with_finalizer_calls_it_on_drop
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 37
+  module: handl-value
+- name: resource_without_finalizer_drops_cleanly
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 49
+  module: handl-value
+- name: resource_finalizer_runs_once_even_with_clones
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 63
+  module: handl-value
+- name: resource_double_drop_guard_prevents_double_free
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 81
+  module: handl-value
+- name: as_resource_returns_foreign_resource
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 102
+  module: handl-value
+- name: resource_equality_by_pointer_identity
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 119
+  module: handl-value
+- name: resource_is_truthy
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 128
+  module: handl-value
+- name: resource_encodes_to_json_debug_form
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 138
+  module: handl-value
+- name: resource_decodes_from_json_with_no_finalizer
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 150
+  module: handl-value
+- name: resource_json_roundtrips_ptr_address
+  kind: function
+  file: crates/handl-value/tests/resource.rs
+  line: 164
+  module: handl-value
+- name: hash_of
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 19
+  module: handl-value
+- name: sym_freshness_two_syms_unequal
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 30
+  module: handl-value
+- name: sym_freshness_handles_distinct
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 42
+  module: handl-value
+- name: sym_eq_hash_consistency
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 53
+  module: handl-value
+- name: sym_hash_matches_rebuilt_copy
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 65
+  module: handl-value
+- name: same_name_distinct_syms_unequal
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 80
+  module: handl-value
+- name: same_name_different_parents_still_unequal
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 95
+  module: handl-value
+- name: sym_parent_chain_is_descendant_of
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 108
+  module: handl-value
+- name: has_ancestor_is_inclusive_instanceof_semantics
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 136
+  module: handl-value
+- name: value_level_helpers_delegate_to_sym
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 156
+  module: handl-value
+- name: sym_from_parent_value_errors_on_non_nominal
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 189
+  module: handl-value
+- name: sym_json_shape_is_explicit_data
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 216
+  module: handl-value
+- name: sym_round_trip_with_parent_preserves_identity
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 241
+  module: handl-value
+- name: sym_malformed_json_falls_back_to_plain_object
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 273
+  module: handl-value
+- name: sym_nested_malformed_parent_falls_back_to_plain_object
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 294
+  module: handl-value
+- name: deep_chain_float_number_root
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 319
+  module: handl-value
+- name: diamond_free_single_parent_invariant
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 337
+  module: handl-value
+- name: sym_in_object_container_equality_is_identity
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 370
+  module: handl-value
+- name: obj_with
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 384
+  module: handl-value
+- name: sym_is_truthy
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 395
+  module: handl-value
+- name: sym_display_includes_name_and_handle
+  kind: function
+  file: crates/handl-value/tests/nominal.rs
+  line: 400
+  module: handl-value
+- name: ForeignResource
+  kind: type
+  file: crates/handl-value/src/lib.rs
+  line: 59
+  module: handl-value
+- name: new
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 82
+  module: handl-value
+- name: ptr
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 91
+  module: handl-value
+- name: is_dropped
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 96
+  module: handl-value
+- name: drop
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 102
+  module: handl-value
+- name: eq
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 122
+  module: handl-value
+- name: fmt
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 130
+  module: handl-value
+- name: SYM_NEXT_HANDLE
+  kind: const
+  file: crates/handl-value/src/lib.rs
+  line: 150
+  module: handl-value
+- name: Sym
+  kind: type
+  file: crates/handl-value/src/lib.rs
+  line: 183
+  module: handl-value
+- name: fresh
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 196
+  module: handl-value
+- name: fresh_with_parent
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 207
+  module: handl-value
+- name: handle
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 217
+  module: handl-value
+- name: name
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 222
+  module: handl-value
+- name: parent
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 227
+  module: handl-value
+- name: is_descendant_of
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 234
+  module: handl-value
+- name: has_ancestor
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 248
+  module: handl-value
+- name: chain
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 254
+  module: handl-value
+- name: eq
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 267
+  module: handl-value
+- name: hash
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 277
+  module: handl-value
+- name: fmt
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 285
+  module: handl-value
+- name: TaggedValue
+  kind: type
+  file: crates/handl-value/src/lib.rs
+  line: 301
+  module: handl-value
+- name: default
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 390
+  module: handl-value
+- name: eq
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 401
+  module: handl-value
+- name: hash
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 416
+  module: handl-value
+- name: hash_map_entries
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 491
+  module: handl-value
+- name: from
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 512
+  module: handl-value
+- name: tagged_from
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 522
+  module: handl-value
+- name: number_to_tagged
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 536
+  module: handl-value
+- name: json_array_to_bytes
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 549
+  module: handl-value
+- name: object_to_tagged
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 559
+  module: handl-value
+- name: map_to_obj
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 661
+  module: handl-value
+- name: sym_from_json
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 669
+  module: handl-value
+- name: obj_map_to_hashmap
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 696
+  module: handl-value
+- name: BINDS_ID_BASE
+  kind: const
+  file: crates/handl-value/src/lib.rs
+  line: 733
+  module: handl-value
+- name: BINDS_ID_STRIDE
+  kind: const
+  file: crates/handl-value/src/lib.rs
+  line: 736
+  module: handl-value
+- name: SerCtx
+  kind: type
+  file: crates/handl-value/src/lib.rs
+  line: 739
+  module: handl-value
+- name: new
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 760
+  module: handl-value
+- name: DeCtx
+  kind: type
+  file: crates/handl-value/src/lib.rs
+  line: 780
+  module: handl-value
+- name: collect_binds_defs
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 788
+  module: handl-value
+- name: binds_from_json
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 815
+  module: handl-value
+- name: resolve_binds_ref
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 834
+  module: handl-value
+- name: decode_binds_map
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 854
+  module: handl-value
+- name: bytes_to_value
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 873
+  module: handl-value
+- name: from
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 879
+  module: handl-value
+- name: self_ref_marker
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 894
+  module: handl-value
+- name: is_self_ref_marker
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 905
+  module: handl-value
+- name: with_self_ref_bind
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 913
+  module: handl-value
+- name: tagged_to_value
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 942
+  module: handl-value
+- name: tagged_to_value_ctx
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 949
+  module: handl-value
+- name: check_portable
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1103
+  module: handl-value
+- name: collect_binds_ids
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1110
+  module: handl-value
+- name: check_portable_refs
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1129
+  module: handl-value
+- name: as_i64
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1182
+  module: handl-value
+- name: as_f64
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1190
+  module: handl-value
+- name: as_str
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1199
+  module: handl-value
+- name: as_bytes
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1207
+  module: handl-value
+- name: as_bool
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1215
+  module: handl-value
+- name: as_array
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1223
+  module: handl-value
+- name: as_object
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1231
+  module: handl-value
+- name: as_resource
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1240
+  module: handl-value
+- name: as_sym
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1249
+  module: handl-value
+- name: is_sym
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1257
+  module: handl-value
+- name: get
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1263
+  module: handl-value
+- name: is_null
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1271
+  module: handl-value
+- name: is_array
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1276
+  module: handl-value
+- name: pair
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1286
+  module: handl-value
+- name: bytes
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1291
+  module: handl-value
+- name: resource
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1307
+  module: handl-value
+- name: sym
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1317
+  module: handl-value
+- name: sym_with_parent
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1323
+  module: handl-value
+- name: sym_from_parent_value
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1333
+  module: handl-value
+- name: is_nominal
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1341
+  module: handl-value
+- name: nominal_parent
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1347
+  module: handl-value
+- name: is_descendant_of
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1354
+  module: handl-value
+- name: has_ancestor
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1364
+  module: handl-value
+- name: pair_fst
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1372
+  module: handl-value
+- name: pair_snd
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1380
+  module: handl-value
+- name: either_left
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1388
+  module: handl-value
+- name: either_right
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1393
+  module: handl-value
+- name: is_either_left
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1403
+  module: handl-value
+- name: is_either_right
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1414
+  module: handl-value
+- name: either_value
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1425
+  module: handl-value
+- name: truthy
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1444
+  module: handl-value
+- name: as_f64
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1465
+  module: handl-value
+- name: add
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1471
+  module: handl-value
+- name: sub
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1484
+  module: handl-value
+- name: mul
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1497
+  module: handl-value
+- name: div
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1511
+  module: handl-value
+- name: mod_
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1530
+  module: handl-value
+- name: lt
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1549
+  module: handl-value
+- name: eq
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1562
+  module: handl-value
+- name: cell2
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1634
+  module: handl-value
+- name: mk_cell
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1649
+  module: handl-value
+- name: compose1
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1663
+  module: handl-value
+- name: cell_dim
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1680
+  module: handl-value
+- name: nat
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1694
+  module: handl-value
+- name: is_cell
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1702
+  module: handl-value
+- name: cell_src
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1719
+  module: handl-value
+- name: cell_tgt
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1737
+  module: handl-value
+- name: cell_witness
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1756
+  module: handl-value
+- name: cell_is_id
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1763
+  module: handl-value
+- name: cell2_id
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1772
+  module: handl-value
+- name: cell2_comp_v
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1779
+  module: handl-value
+- name: cell2_src
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1784
+  module: handl-value
+- name: cell2_tgt
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1789
+  module: handl-value
+- name: cell2_whisker
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1795
+  module: handl-value
+- name: record_proj
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1808
+  module: handl-value
+- name: cell2_is_id
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1816
+  module: handl-value
+- name: promote
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1824
+  module: handl-value
+- name: boundary_at
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1839
+  module: handl-value
+- name: comp_at
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1864
+  module: handl-value
+- name: cell_comp_axis
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1925
+  module: handl-value
+- name: cell2_comp_axis
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1959
+  module: handl-value
+- name: cell_compose
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1978
+  module: handl-value
+- name: compose_step
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 1999
+  module: handl-value
+- name: IntoTval
+  kind: trait
+  file: crates/handl-value/src/lib.rs
+  line: 2022
+  module: handl-value
+- name: impl_into_tval_int
+  kind: macro
+  file: crates/handl-value/src/lib.rs
+  line: 2026
+  module: handl-value
+- name: impl_into_tval_float
+  kind: macro
+  file: crates/handl-value/src/lib.rs
+  line: 2038
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2054
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2060
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2066
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2072
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2078
+  module: handl-value
+- name: into_tval
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2084
+  module: handl-value
+- name: tval
+  kind: macro
+  file: crates/handl-value/src/lib.rs
+  line: 2109
+  module: handl-value
+- name: cell_tests
+  kind: module
+  file: crates/handl-value/src/lib.rs
+  line: 2143
+  module: handl-value
+- name: cell3
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2147
+  module: handl-value
+- name: int
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2151
+  module: handl-value
+- name: cell_dim_recognizes_cell_shapes
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2156
+  module: handl-value
+- name: arrow_record_boundaries
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2170
+  module: handl-value
+- name: comp_axis1_atoms_is_legacy_cell2
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2183
+  module: handl-value
+- name: comp_axis0_keeps_horizontal_shape
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2197
+  module: handl-value
+- name: comp_axis2_pastes_3cells
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2210
+  module: handl-value
+- name: comp_axis2_boundary_mismatch
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2225
+  module: handl-value
+- name: comp_axis1_on_3cells_pastes_lower_boundaries
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2241
+  module: handl-value
+- name: comp_promotes_lower_dimensional_operands
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2257
+  module: handl-value
+- name: comp_axis_at_dimension_errors
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2269
+  module: handl-value
+- name: compose_runs_pasting_diagram
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2278
+  module: handl-value
+- name: compose_at_axis2_and_step_errors
+  kind: function
+  file: crates/handl-value/src/lib.rs
+  line: 2301
+  module: handl-value
+deps:
+- rustc-hash
+- serde_json
+- handl_value
+- rustc_hash
+- serde_json
+- handl_value
+- rustc_hash
+- serde_json
+- handl_value
+- handl_value
+- serde_json
+- handl_value
+- serde_json
+- rustc_hash
+- serde_json
+notes: ''
+verify:
+- crates/handl-value/Cargo.toml
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/boundary.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/basics.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/resource.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/tests/nominal.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+- crates/handl-value/src/lib.rs
+provenance:
+  files:
+  - crates/handl-value/Cargo.toml
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  - crates/handl-value/src/lib.rs
+  hashes:
+  - 86d17e5654bbf4cdb5233e416bd346a7362f0f7c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  commit_sha: dca68a81fa9be7ac362ce26637155647fb7a70e3
+  generated_at: '1792281103'
+  generator: kuda-template/0.1.0

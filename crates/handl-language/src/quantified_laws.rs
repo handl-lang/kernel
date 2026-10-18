@@ -47,7 +47,7 @@
 //! [`law_equal`](crate::law_inference::law_equal) from
 //! [`law_inference`](crate::law_inference).
 
-use plugin_engine::TermData;
+use hnl_engine::TermData;
 
 use crate::law_inference::law_equal;
 use crate::term::{ArrSource, Term};

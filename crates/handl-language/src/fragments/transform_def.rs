@@ -9,7 +9,7 @@
 //!
 //! This crate holds only the **data**: [`TransformRule`], [`RewriteStep`],
 //! and [`TransformCondition`] are the rewrite *vocabulary* — they are
-//! interpreted by transform engines (e.g. `plugin-engine-transform-rewrite`),
+//! interpreted by transform engines (e.g. `hnl-engine-transform-rewrite`),
 //! never executed here. The `Native` rule variant and the
 //! `Splice`/`Apply`/`PayloadEq` vocabulary are declared now so the schema is
 //! complete; they need no runtime support in this crate.

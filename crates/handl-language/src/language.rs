@@ -680,7 +680,7 @@ mod tests {
     use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
     use crate::fragments::{RewriteStep, TransformCondition, TransformRule};
     use crate::term::{ArrSource, Term};
-    use plugin_engine::TermData;
+    use hnl_engine::TermData;
 
     fn td(t: TermData) -> Term {
         t.to_term().expect("TermData -> Term")

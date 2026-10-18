@@ -6,7 +6,7 @@
 //!
 //! This crate holds only the **data**: [`LintCheck`] and [`LintFix`] are the
 //! rule *vocabulary* — they are interpreted by lint engines (e.g.
-//! `plugin-engine-lint`), never executed here. The `Native` check variant is
+//! `hnl-engine-lint`), never executed here. The `Native` check variant is
 //! the disciplined escape hatch (same pattern as [`TransformRule::Native`]):
 //! dispatch stays in `LintRuleDef` data while the implementation — scope
 //! analysis, whole-source checks, host-tool composition — is supplied by a

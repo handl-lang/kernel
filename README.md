@@ -4,7 +4,7 @@ The arrow-calculus kernel of the Handl platform (ADR-0040): the calculus
 vocabulary itself and nothing else — `Plugin`, `Host`, `Operation`,
 `Behavior`, `RuleAcceptor`, `Contribution`, `Term`/`Value` shapes.
 
-- `crates/plugin-engine` — the composition primitives every engine,
+- `crates/hnl-engine` — the composition primitives every engine,
   emitter, and host builds on.
 - `crates/handl-language` — the `Language` data schema and the staged
   `lex`/`parse`/`eval` dispatch signatures (ADR-0044 "language as data").

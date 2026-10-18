@@ -67,7 +67,7 @@
 
 use std::collections::HashMap;
 
-use plugin_engine::TermData;
+use hnl_engine::TermData;
 
 use crate::law_inference::{
     LawCheckResult, LawPattern, LawStatus, infer_laws, law_equal, uses_first,

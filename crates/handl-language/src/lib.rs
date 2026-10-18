@@ -76,7 +76,7 @@ pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
     normalize, uses_first,
 };
-pub use plugin_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
+pub use hnl_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
 pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
@@ -86,16 +86,16 @@ pub use term::{
     ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };
 
-impl plugin_engine::AstView for Ast {
+impl hnl_engine::AstView for Ast {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn node_kind(&self, r: plugin_engine::AstRef) -> Option<&str> {
+    fn node_kind(&self, r: hnl_engine::AstRef) -> Option<&str> {
         self.get(AstRef::new(r)).map(|n| n.kind.as_str())
     }
 
-    fn node_child(&self, r: plugin_engine::AstRef, index: usize) -> Option<plugin_engine::AstRef> {
+    fn node_child(&self, r: hnl_engine::AstRef, index: usize) -> Option<hnl_engine::AstRef> {
         let node = self.get(AstRef::new(r))?;
         node.payload
             .get("children")?
@@ -106,7 +106,7 @@ impl plugin_engine::AstView for Ast {
     }
 }
 
-impl plugin_engine::LanguageView for Language {
+impl hnl_engine::LanguageView for Language {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

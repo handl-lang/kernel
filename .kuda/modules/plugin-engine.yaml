@@ -1,0 +1,1265 @@
+name: plugin-engine
+path: crates/plugin-engine/Cargo.toml
+purpose: Foundation types for pluggable interpretation and rewrite models.
+api:
+- name: plugin-engine
+  kind: module
+  file: crates/plugin-engine/Cargo.toml
+  line: 1
+  module: plugin-engine
+- name: TermData
+  kind: type
+  file: crates/plugin-engine/src/term_data.rs
+  line: 50
+  module: plugin-engine
+- name: tag
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 58
+  module: plugin-engine
+- name: is_tag
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 63
+  module: plugin-engine
+- name: is_hott_tag
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 73
+  module: plugin-engine
+- name: get
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 96
+  module: plugin-engine
+- name: get_term
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 101
+  module: plugin-engine
+- name: get_str
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 106
+  module: plugin-engine
+- name: get_term_list
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 111
+  module: plugin-engine
+- name: nat_literal
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 121
+  module: plugin-engine
+- name: axis
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 133
+  module: plugin-engine
+- name: dim
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 144
+  module: plugin-engine
+- name: dim_label
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 155
+  module: plugin-engine
+- name: arr_source
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 170
+  module: plugin-engine
+- name: globular_dim
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 184
+  module: plugin-engine
+- name: arr
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 236
+  module: plugin-engine
+- name: const_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 245
+  module: plugin-engine
+- name: op
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 253
+  module: plugin-engine
+- name: op_dim
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 274
+  module: plugin-engine
+- name: dim_const
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 295
+  module: plugin-engine
+- name: seq
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 300
+  module: plugin-engine
+- name: seq_axis
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 310
+  module: plugin-engine
+- name: first
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 320
+  module: plugin-engine
+- name: choice
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 325
+  module: plugin-engine
+- name: loop_feedback
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 330
+  module: plugin-engine
+- name: app
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 335
+  module: plugin-engine
+- name: iter
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 341
+  module: plugin-engine
+- name: child
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 352
+  module: plugin-engine
+- name: handle
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 357
+  module: plugin-engine
+- name: rewrite
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 367
+  module: plugin-engine
+- name: path
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 380
+  module: plugin-engine
+- name: equiv
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 390
+  module: plugin-engine
+- name: cell_id
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 400
+  module: plugin-engine
+- name: src
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 405
+  module: plugin-engine
+- name: tgt
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 410
+  module: plugin-engine
+- name: cell_comp_v
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 415
+  module: plugin-engine
+- name: whisker
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 424
+  module: plugin-engine
+- name: record_proj
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 434
+  module: plugin-engine
+- name: record_with
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 443
+  module: plugin-engine
+- name: tag_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 455
+  module: plugin-engine
+- name: univalence
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 460
+  module: plugin-engine
+- name: glue
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 465
+  module: plugin-engine
+- name: fibrant
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 470
+  module: plugin-engine
+- name: jelim
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 475
+  module: plugin-engine
+- name: refine
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 485
+  module: plugin-engine
+- name: cobind
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 494
+  module: plugin-engine
+- name: from_term
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 505
+  module: plugin-engine
+- name: to_term
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 514
+  module: plugin-engine
+- name: as_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 519
+  module: plugin-engine
+- name: into_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 524
+  module: plugin-engine
+- name: term_to_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 541
+  module: plugin-engine
+- name: arr_source_to_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 641
+  module: plugin-engine
+- name: rewrite_witness_to_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 651
+  module: plugin-engine
+- name: side_to_value
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 661
+  module: plugin-engine
+- name: value_to_term
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 672
+  module: plugin-engine
+- name: value_to_dim
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 768
+  module: plugin-engine
+- name: value_to_axis
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 779
+  module: plugin-engine
+- name: value_to_arr_source
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 789
+  module: plugin-engine
+- name: value_to_rewrite_witness
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 808
+  module: plugin-engine
+- name: value_to_side
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 836
+  module: plugin-engine
+- name: field
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 845
+  module: plugin-engine
+- name: field_str
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 853
+  module: plugin-engine
+- name: field_term
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 861
+  module: plugin-engine
+- name: field_term_list
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 869
+  module: plugin-engine
+- name: tests
+  kind: module
+  file: crates/plugin-engine/src/term_data.rs
+  line: 880
+  module: plugin-engine
+- name: c
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 883
+  module: plugin-engine
+- name: dim1
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 889
+  module: plugin-engine
+- name: sample_terms
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 902
+  module: plugin-engine
+- name: every_variant_round_trips_through_term_data
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 1014
+  module: plugin-engine
+- name: unknown_tag_decodes_to_opaque
+  kind: function
+  file: crates/plugin-engine/src/term_data.rs
+  line: 1034
+  module: plugin-engine
+- name: Side
+  kind: type
+  file: crates/plugin-engine/src/term.rs
+  line: 17
+  module: plugin-engine
+- name: Term
+  kind: type
+  file: crates/plugin-engine/src/term.rs
+  line: 26
+  module: plugin-engine
+- name: ArrSource
+  kind: type
+  file: crates/plugin-engine/src/term.rs
+  line: 230
+  module: plugin-engine
+- name: RewriteWitness
+  kind: type
+  file: crates/plugin-engine/src/term.rs
+  line: 243
+  module: plugin-engine
+- name: default_dim_value
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 255
+  module: plugin-engine
+- name: default_axis_value
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 262
+  module: plugin-engine
+- name: default_dim
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 270
+  module: plugin-engine
+- name: default_axis
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 275
+  module: plugin-engine
+- name: is_default_axis
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 280
+  module: plugin-engine
+- name: nat_literal
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 289
+  module: plugin-engine
+- name: dim_label
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 307
+  module: plugin-engine
+- name: globular_dim
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 324
+  module: plugin-engine
+- name: const_value
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 350
+  module: plugin-engine
+- name: constant
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 358
+  module: plugin-engine
+- name: named_dim
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 369
+  module: plugin-engine
+- name: op_native
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 376
+  module: plugin-engine
+- name: arr_native
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 387
+  module: plugin-engine
+- name: op_native_dim
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 401
+  module: plugin-engine
+- name: op_foreign
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 412
+  module: plugin-engine
+- name: arr_foreign
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 424
+  module: plugin-engine
+- name: op_native_lit
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 429
+  module: plugin-engine
+- name: arr_native_lit
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 440
+  module: plugin-engine
+- name: op_judgment
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 450
+  module: plugin-engine
+- name: arr_judgment
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 461
+  module: plugin-engine
+- name: op_judgment_lit
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 466
+  module: plugin-engine
+- name: arr_judgment_lit
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 481
+  module: plugin-engine
+- name: seq
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 486
+  module: plugin-engine
+- name: seq_axis
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 498
+  module: plugin-engine
+- name: first
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 507
+  module: plugin-engine
+- name: choice
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 514
+  module: plugin-engine
+- name: loop_feedback
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 522
+  module: plugin-engine
+- name: app
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 529
+  module: plugin-engine
+- name: handle
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 537
+  module: plugin-engine
+- name: desugar
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 547
+  module: plugin-engine
+- name: eliminate_handlers
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 654
+  module: plugin-engine
+- name: substitute_capability
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 771
+  module: plugin-engine
+- name: eliminate_all_handlers
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 896
+  module: plugin-engine
+- name: eliminate_handler_in_scheme
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 901
+  module: plugin-engine
+- name: tests
+  kind: module
+  file: crates/plugin-engine/src/term.rs
+  line: 906
+  module: plugin-engine
+- name: const_value_roundtrips
+  kind: function
+  file: crates/plugin-engine/src/term.rs
+  line: 911
+  module: plugin-engine
+- name: interpret
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 18
+  module: plugin-engine
+- name: interpret_with_handlers
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 27
+  module: plugin-engine
+- name: apply_arrow
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 147
+  module: plugin-engine
+- name: is_arrow_value
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 201
+  module: plugin-engine
+- name: seq_axis_index
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 217
+  module: plugin-engine
+- name: term_dim
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 233
+  module: plugin-engine
+- name: cell_comp_axis
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 243
+  module: plugin-engine
+- name: cell_compose
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 251
+  module: plugin-engine
+- name: cell_axis_op_dim
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 259
+  module: plugin-engine
+- name: eval_op
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 271
+  module: plugin-engine
+- name: pair_components
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 839
+  module: plugin-engine
+- name: mk_pair
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 855
+  module: plugin-engine
+- name: either_side
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 859
+  module: plugin-engine
+- name: either_left_value
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 884
+  module: plugin-engine
+- name: is_truthy
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 896
+  module: plugin-engine
+- name: tagged_is_obj
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 911
+  module: plugin-engine
+- name: tagged_obj
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 916
+  module: plugin-engine
+- name: either_right_value
+  kind: function
+  file: crates/plugin-engine/src/term_interpreter.rs
+  line: 924
+  module: plugin-engine
+- name: term
+  kind: module
+  file: crates/plugin-engine/src/lib.rs
+  line: 5
+  module: plugin-engine
+- name: term_data
+  kind: module
+  file: crates/plugin-engine/src/lib.rs
+  line: 6
+  module: plugin-engine
+- name: term_interpreter
+  kind: module
+  file: crates/plugin-engine/src/lib.rs
+  line: 7
+  module: plugin-engine
+- name: AstRef
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 21
+  module: plugin-engine
+- name: AstNode
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 30
+  module: plugin-engine
+- name: LanguageView
+  kind: trait
+  file: crates/plugin-engine/src/lib.rs
+  line: 39
+  module: plugin-engine
+- name: child_role_index_at
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 60
+  module: plugin-engine
+- name: AstView
+  kind: trait
+  file: crates/plugin-engine/src/lib.rs
+  line: 107
+  module: plugin-engine
+- name: LangError
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 121
+  module: plugin-engine
+- name: RewriteResult
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 127
+  module: plugin-engine
+- name: into_value
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 148
+  module: plugin-engine
+- name: ModelCtx
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 157
+  module: plugin-engine
+- name: push_handler
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 176
+  module: plugin-engine
+- name: pop_handler
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 181
+  module: plugin-engine
+- name: Model
+  kind: trait
+  file: crates/plugin-engine/src/lib.rs
+  line: 187
+  module: plugin-engine
+- name: is_hott_tag
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 222
+  module: plugin-engine
+- name: CompositeModel
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 249
+  module: plugin-engine
+- name: new
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 262
+  module: plugin-engine
+- name: Value
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 272
+  module: plugin-engine
+- name: run
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 274
+  module: plugin-engine
+- name: rewrite
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 287
+  module: plugin-engine
+- name: ModelData
+  kind: trait
+  file: crates/plugin-engine/src/lib.rs
+  line: 314
+  module: plugin-engine
+- name: CompositeDataModel
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 336
+  module: plugin-engine
+- name: new
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 350
+  module: plugin-engine
+- name: run_data
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 360
+  module: plugin-engine
+- name: ModelDataAdapter
+  kind: type
+  file: crates/plugin-engine/src/lib.rs
+  line: 382
+  module: plugin-engine
+- name: run_data
+  kind: function
+  file: crates/plugin-engine/src/lib.rs
+  line: 385
+  module: plugin-engine
+deps:
+- handl-value
+- serde
+- serde_json
+- serde_json
+- serde
+- serde_json
+- serde_json
+- handl_value
+- serde_json
+- term
+- term_data
+- term_interpreter
+notes: ''
+verify:
+- crates/plugin-engine/Cargo.toml
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term_data.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/term_interpreter.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+- crates/plugin-engine/src/lib.rs
+provenance:
+  files:
+  - crates/plugin-engine/Cargo.toml
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/plugin-engine/src/lib.rs
+  hashes:
+  - dea24569c1cc72d7db1e3fc98a0004a2eaa3e6f7
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  commit_sha: dca68a81fa9be7ac362ce26637155647fb7a70e3
+  generated_at: '1792281103'
+  generator: kuda-template/0.1.0

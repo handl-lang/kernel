@@ -8,7 +8,7 @@ use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, FragmentSet, GrammarPosition,
     GrammarRow, Language, SchemeVersion, Term, TokenKindDef, capabilities,
 };
-use plugin_engine::{ArrSource, TermData};
+use hnl_engine::{ArrSource, TermData};
 use serde_json::Value;
 
 /// Convert `TermData` back to `Term` for APIs that require `Term`.

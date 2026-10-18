@@ -1,0 +1,107 @@
+name: kernel
+root: /home/luis/GitHub/handl-lang/kernel
+purpose: ''
+modules:
+- handl-language
+- handl-value
+- kernel
+- plugin-engine
+commands:
+- cargo check
+- cargo test --workspace
+provenance:
+  files:
+  - Cargo.toml
+  - crates/handl-language/Cargo.toml
+  - crates/plugin-engine/Cargo.toml
+  - crates/handl-value/Cargo.toml
+  - crates/handl-language/tests/merge_semantics.rs
+  - crates/handl-language/tests/conflict_policy.rs
+  - crates/handl-language/tests/serde_roundtrip.rs
+  - crates/handl-language/src/desugar.rs
+  - crates/handl-language/src/error.rs
+  - crates/handl-language/src/ast.rs
+  - crates/handl-language/src/law_inference.rs
+  - crates/handl-language/src/token_classes.rs
+  - crates/handl-language/src/quantified_laws.rs
+  - crates/handl-language/src/instantiate.rs
+  - crates/handl-language/src/term.rs
+  - crates/handl-language/src/fragment.rs
+  - crates/handl-language/src/language.rs
+  - crates/handl-language/src/capabilities.rs
+  - crates/handl-language/src/version.rs
+  - crates/handl-language/src/verdict.rs
+  - crates/handl-language/src/staged.rs
+  - crates/handl-language/src/lib.rs
+  - crates/handl-language/src/dynamic_handlers.rs
+  - crates/handl-language/src/fragment_set.rs
+  - crates/handl-language/src/fragments/lint_rule.rs
+  - crates/handl-language/src/fragments/lsp.rs
+  - crates/handl-language/src/fragments/token_kind.rs
+  - crates/handl-language/src/fragments/capability.rs
+  - crates/handl-language/src/fragments/grammar.rs
+  - crates/handl-language/src/fragments/type_rule.rs
+  - crates/handl-language/src/fragments/transform_def.rs
+  - crates/handl-language/src/fragments/option.rs
+  - crates/handl-language/src/fragments/ast_shape.rs
+  - crates/handl-language/src/fragments/lexer_rule.rs
+  - crates/handl-language/src/fragments/mod.rs
+  - crates/handl-language/src/fragments/eval_scheme.rs
+  - crates/plugin-engine/src/term_data.rs
+  - crates/plugin-engine/src/term.rs
+  - crates/plugin-engine/src/term_interpreter.rs
+  - crates/plugin-engine/src/lib.rs
+  - crates/handl-value/tests/boundary.rs
+  - crates/handl-value/tests/basics.rs
+  - crates/handl-value/tests/resource.rs
+  - crates/handl-value/tests/nominal.rs
+  - crates/handl-value/src/lib.rs
+  hashes:
+  - cd25fe16455d5172837a89ed7df7f961a63c993f
+  - 142a10f690cab01663ffc42d7ff0dd931f8dac54
+  - dea24569c1cc72d7db1e3fc98a0004a2eaa3e6f7
+  - 86d17e5654bbf4cdb5233e416bd346a7362f0f7c
+  - 808d78825393ce232e73527ccd090229c09fe52b
+  - 09430cc0185b54abccf4cde0dd7eab6b75c61c25
+  - 978d08e49ba45ba9b0441e795b3bbb75ca4f4d37
+  - b2d3d0aabb788a7b3f96ec2bb8d62eca7e41c954
+  - c126965c9d3e5f46eb236a570a044773104d9bd0
+  - d311e65052ef639fb36f9f7a615575a56dfaa6eb
+  - 5291d6ebf4c11c85457b1f515dab2dc7148bbf4b
+  - a1659902acac3c9d6247c399e85f6c98c694ed0f
+  - 2fc4aeafa5689a4c539f264792c32884cc14a7db
+  - eb10deb5773c45335081060d708a5be35524aadf
+  - f2affd199ac11d770d47bddb9c370cd65d5c8312
+  - 6177f3569b0f731ed7256d9f740c82a5044e170b
+  - 800f8ff439fc5c2b469c0200ac7e380bc8a27dc9
+  - 5c739bb5dc968502e1be076b0573bf6a9b2f6b39
+  - 20a8ab32c3a751c2709a44578d2503be5dd77db9
+  - 6f3ba41034b9cd7b3dd9b8024db3ded095f94c80
+  - 9a4b75621b1f5e2a7cb39dff39efa1d0de935b31
+  - 6766aa08499e94e6fb3c45fb9db9a1cc314eac78
+  - 5d510b072e754950c1c2c0757c5ff551be4210bb
+  - 40b7cda150fd58730a0c2877b2900502928a9873
+  - fe4538196d6c55d72f05113244e4b3e8ec1c88a2
+  - 9bbc315f7cfd80a3983eed16f717decc1a76c53f
+  - 78dd68f01878fd9af232d4433aeda6851ec8e5e5
+  - c60ea43dbeff711b0da9c1f30c1a19c5884bae40
+  - 2987283446d15114a3f183f21e6fe18d87f2cad9
+  - 250709ad920436c7eea780a823947aaf64ed2e4e
+  - 9864e31a4ca641a90c06df465601d57061d8c5f4
+  - 852e85f99fe3a1b3804ed9e3fa576b56cfedc479
+  - 20b9324d2d9321815bbb4ad30bd9967c8b32f4b1
+  - 9317f39960b70c199bb442c153b78bcfd0dc19cf
+  - 65eb1360b8bc2c8846f801be889f0ff07e7ed163
+  - 326cfbbcdf21687c9e3dcbd75dbfa5e040300c42
+  - 85d14701abcf4649eb2a890c4247b6573bded655
+  - 907ce8f0d6ee85f5b1ccdbd5d4600102dc2f8543
+  - fb795fdee8d7ae86dfd40d3c384ec9cf7783e834
+  - 9a556e6d8bf1930c092c9d44aed06b7eb84dd02d
+  - f0dfa0bd087639789f1c809159bde3d8012f965c
+  - f7000abaa6495265fa1e0beff0fb766c115b3e31
+  - 9ac908f42e40ef3bec61e920e7658c15bf708819
+  - 38a1885df06e5dbf2f79c54c5fe6ce20557aef12
+  - dacc92e8f560d28596555e1a042cbb20e51fbb74
+  commit_sha: dca68a81fa9be7ac362ce26637155647fb7a70e3
+  generated_at: '1792281103'
+  generator: kuda/0.1.0

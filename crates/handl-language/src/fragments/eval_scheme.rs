@@ -72,7 +72,7 @@ impl Fragment for EvalSchemeDef {
 mod tests {
     use super::*;
     use crate::term::{ArrSource, Term};
-    use plugin_engine::TermData;
+    use hnl_engine::TermData;
     use serde_json::Value;
 
     /// Convert `TermData` back to `Term` for APIs that require `Term`.
