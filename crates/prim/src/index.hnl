@@ -1,0 +1,25 @@
+--- prim -- the minimal atom layer for handl's arrow-based stdlib.
+---
+--- This is the `prim` contract: the declared interface every `prim`
+--- implementation must satisfy. All four `prim.*` functions are now
+--- implemented in pure handl by the `prim-handl` record
+--- (`handl-packages/prim-handl/prim-handl.hnl`). `prim.or` sits over the
+--- `math` module's `math.bit_or` integer bitwise op; `prim.compare` is
+--- expressed over the `cmp` module's total ordering.
+
+--- prim.add -- integer addition.
+cap "prim.add"
+op "prim.add" : (Int * Int) -> Int
+  guarantee: True
+--- prim.compare -- total ordering, returns -1/0/1.
+cap "prim.compare"
+op "prim.compare" : (a * b) -> Int
+  guarantee: Le(output, 1)
+--- prim.alloc -- allocate an empty list.
+cap "prim.alloc"
+op "prim.alloc" : Int -> List a
+  guarantee: LengthEq(output, 0)
+--- prim.or -- bitwise OR on integers (pure handl over `math.bit_or`).
+cap "prim.or"
+op "prim.or" : (Int * Int) -> Int
+  guarantee: True

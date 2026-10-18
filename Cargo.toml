@@ -4,6 +4,9 @@ members = [
     "crates/handl-ext",
     "crates/handl-language",
     "crates/handl-value",
+    "crates/ops",
+    "crates/prim",
+    "crates/prim-handl",
 ]
 
 [workspace.package]

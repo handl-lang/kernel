@@ -1,0 +1,38 @@
+--- prim-handl -- the pure-handl implementation of the `prim` contract
+--- (`handl-packages/prim/prim.hnl`).
+---
+--- `prim` is the minimal FFI layer for handl's arrow-based stdlib: the
+--- smallest set of atoms that cannot be expressed as handl arrow graphs.
+--- All four declared `prim.*` functions are now pure handl over table
+--- modules:
+---
+---   - `prim.add` -- pure handl: `[a, b] ~> a + b` over the builtin `+`.
+---   - `prim.alloc` -- pure handl: `n ~> []`. The contract guarantees
+---     `LengthEq(output, 0)` -- an empty list -- so no list-size primitive
+---     is needed.
+---   - `prim.or` -- pure handl: `[a, b] ~> math.bit_or(a, b)` over the
+---     `math` module's integer bitwise op (64-bit two's-complement).
+---   - `prim.compare` -- pure handl over `cmp.compare(a, b)`, folding the
+---     returned -1.0/0.0/1.0 back into the integer -1/0/1 the contract
+---     requires. This reuses the `cmp` module's total ordering, which
+---     already implements the exact compare_values semantics.
+---
+--- Registered as the `"prim"` table module (`handl-plugin-lib-stdlib`);
+--- the `math` and `cmp` dependencies resolve through the package table.
+
+{
+  -- prim.add -- integer addition.
+  add: [a, b] ~> a + b,
+
+  -- prim.alloc -- allocate an empty list (contract: LengthEq(output, 0)).
+  alloc: n ~> [],
+
+  -- prim.or -- bitwise OR over `math.bit_or` (flag composition).
+  or: [a, b] ~> math.bit_or(a, b),
+
+  -- prim.compare -- total order, expressed over `cmp.compare`.
+  compare: [a, b] ~> do {
+    c :: cmp.compare(a, b)
+    if c < 0 { -1 } else { if c > 0 { 1 } else { 0 } }
+  }
+}
