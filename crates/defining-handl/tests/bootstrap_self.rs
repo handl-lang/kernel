@@ -6,7 +6,7 @@
 //! functions. The `run` host function is dropped (ADR-0047 §4); the composed
 //! form `eval(self, parse(self, lex(self, text)))` is used instead.
 
-use handl_kit_canonical::Kit;
+use handl_kit_prelude::Kit;
 
 /// `eval(self, parse(self, lex(self, "1 + 2")))` → `3`. The canonical
 /// self-hosting bootstrap: a handl program evaluates handl source under

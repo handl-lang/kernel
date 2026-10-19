@@ -8,7 +8,7 @@ repository.workspace = true
 
 [dependencies]
 handl-language = { path = "../handl-language" }
-handl-kit-data-canonical = { git = "https://github.com/handl-lang/kit-data-canonical", branch = "main" }
+handl-kit-data-prelude = { git = "https://github.com/handl-lang/kit-data-prelude", branch = "main" }
 handl-runtime = { git = "https://github.com/handl-lang/host", branch = "main" }
 hnl-engine-exec = { git = "https://github.com/handl-lang/engine-exec", branch = "main" }
 hnl-engine-exec-tree-walk = { git = "https://github.com/handl-lang/engine-exec-tree-walk", branch = "main" }
@@ -25,4 +25,4 @@ handl-plugin-lib-lang-parse = { git = "https://github.com/handl-lang/lib-lang-pa
 handl-plugin-lib-lang-eval = { git = "https://github.com/handl-lang/lib-lang-eval", branch = "main" }
 handl-plugin-lib-lang-compile = { git = "https://github.com/handl-lang/lib-lang-compile", branch = "main" }
 handl-plugin-lib-lang-run-compiled = { git = "https://github.com/handl-lang/lib-lang-run-compiled", branch = "main" }
-handl-kit-canonical = { git = "https://github.com/handl-lang/kit-canonical", branch = "main" }
+handl-kit-prelude = { git = "https://github.com/handl-lang/kit-prelude", branch = "main" }

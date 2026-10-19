@@ -58,15 +58,15 @@ use serde_json::json;
 /// files.
 ///
 /// This is the canonical data-driven language: the same `Language` produced by
-/// [`handl_kit_data_canonical::assemble`] — the full language (tokens, grammar,
+/// [`handl_kit_data_prelude::assemble`] — the full language (tokens, grammar,
 /// eval, AST shapes, capabilities) merged into one `Language` value from the
-/// 7 YAML files in `handl-kit-data-canonical/data/`. It is "handl defining
+/// 7 YAML files in `handl-kit-data-prelude/data/`. It is "handl defining
 /// handl" for the subset.
 pub fn language() -> Language {
     // Delegate to the canonical data-driven kit assembly. This is the same
     // merged Language used by the data-driven runtime path — the single
     // source of truth for the subset.
-    handl_kit_data_canonical::assemble()
+    handl_kit_data_prelude::assemble()
         .expect("canonical data-driven kit must assemble")
         .lang()
         .clone()

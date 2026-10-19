@@ -350,8 +350,8 @@ dependencies = [
 name = "handl-defining-handl"
 version = "0.1.0"
 dependencies = [
- "handl-kit-canonical",
- "handl-kit-data-canonical",
+ "handl-kit-data-prelude",
+ "handl-kit-prelude",
  "handl-language 0.1.0",
  "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
  "handl-plugin-lib-lang-compile",
@@ -398,51 +398,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "handl-kit-canonical"
+name = "handl-kit-core"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/kit-canonical?branch=main#cb353ab7535cf9b67d7541819650b687b3e3fd66"
+source = "git+https://github.com/handl-lang/kit-core?branch=main#fd1dad9dfbb15f773d705db8def54f2eba75fee4"
 dependencies = [
- "handl-kit-data",
- "handl-kit-data-canonical",
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
- "handl-lib-base64",
- "handl-lib-hex",
- "handl-lib-ip",
- "handl-lib-json",
- "handl-lib-serialize",
- "handl-lib-tar",
- "handl-lib-url-rfc",
- "handl-lib-url-whatwg",
  "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
- "handl-plugin-ext-diag 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
- "handl-plugin-ffi",
- "handl-plugin-lib-char-native",
- "handl-plugin-lib-crypto",
  "handl-plugin-lib-handl",
- "handl-plugin-lib-kv-hashmap",
- "handl-plugin-lib-lang-compile",
- "handl-plugin-lib-lang-eval",
- "handl-plugin-lib-lang-lex",
- "handl-plugin-lib-lang-parse",
- "handl-plugin-lib-lang-run-compiled",
- "handl-plugin-lib-lang-typecheck",
- "handl-plugin-lib-otlp-std",
  "handl-plugin-lib-stdlib",
- "handl-plugin-lib-tag",
  "handl-plugin-module",
- "handl-runtime 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
- "hnl-engine-exec",
- "hnl-engine-exec-bytecode",
- "hnl-engine-exec-cranelift",
- "hnl-engine-exec-tree-walk",
- "hnl-engine-lex-pattern",
- "hnl-engine-parse",
- "hnl-engine-parse-pratt",
- "hnl-engine-typecheck",
- "hnl-engine-typecheck-handl",
- "serde",
  "serde_json",
- "toml",
 ]
 
 [[package]]
@@ -460,9 +425,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "handl-kit-data-canonical"
+name = "handl-kit-data-prelude"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/kit-data-canonical?branch=main#fb4ace4a60acc169d14a04709f255d9c762909a7"
+source = "git+https://github.com/handl-lang/kit-data-prelude?branch=main#74b2a61f791c4d1adfc122521269fa7fce4149e5"
 dependencies = [
  "handl-kit-data",
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
@@ -471,6 +436,114 @@ dependencies = [
  "hnl-engine-transform",
  "serde_json",
  "serde_yaml",
+]
+
+[[package]]
+name = "handl-kit-ffi"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-ffi?branch=main#9a0dc53776ad150cc28ddda84127e5d74e82e272"
+dependencies = [
+ "handl-kit-core",
+ "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-plugin-ffi 0.1.0 (git+https://github.com/handl-lang/kit-ffi?branch=main)",
+ "handl-plugin-lib-handl",
+ "serde_json",
+]
+
+[[package]]
+name = "handl-kit-lang"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-lang?branch=main#02480b37607a949024659e95c3f4ae21053f31f6"
+dependencies = [
+ "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-plugin-lib-lang-compile",
+ "handl-plugin-lib-lang-eval",
+ "handl-plugin-lib-lang-lex",
+ "handl-plugin-lib-lang-parse",
+ "handl-plugin-lib-lang-run-compiled",
+ "handl-plugin-lib-lang-typecheck",
+ "handl-runtime 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+]
+
+[[package]]
+name = "handl-kit-prelude"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-prelude?branch=main#3e3a4f18c88f1f679acabebd2561171d15496303"
+dependencies = [
+ "handl-kit-core",
+ "handl-kit-data",
+ "handl-kit-data-prelude",
+ "handl-kit-ffi",
+ "handl-kit-lang",
+ "handl-kit-server",
+ "handl-kit-stdlib",
+ "handl-kit-test",
+ "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
+ "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-plugin-ext-diag 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-plugin-lib-char-native",
+ "handl-plugin-lib-handl",
+ "handl-plugin-lib-stdlib",
+ "handl-plugin-lib-tag",
+ "handl-plugin-module",
+ "handl-runtime 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "hnl-engine-exec",
+ "hnl-engine-exec-bytecode",
+ "hnl-engine-exec-cranelift",
+ "hnl-engine-exec-tree-walk",
+ "hnl-engine-lex-pattern",
+ "hnl-engine-parse",
+ "hnl-engine-parse-pratt",
+ "hnl-engine-typecheck",
+ "hnl-engine-typecheck-handl",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "handl-kit-server"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-server?branch=main#cfb93afb218690754e79cae963f1302b330e8ec4"
+dependencies = [
+ "handl-kit-core",
+ "handl-kit-data",
+ "handl-plugin-lib-handl",
+ "handl-plugin-lib-otlp-std",
+ "handl-plugin-lib-stdlib",
+]
+
+[[package]]
+name = "handl-kit-stdlib"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-stdlib?branch=main#8fcb871b52918df6a22c005144a6ee2146df624b"
+dependencies = [
+ "handl-kit-core",
+ "handl-kit-data",
+ "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
+ "handl-lib-base64",
+ "handl-lib-hex",
+ "handl-lib-ip",
+ "handl-lib-json",
+ "handl-lib-serialize",
+ "handl-lib-tar",
+ "handl-lib-url-rfc",
+ "handl-lib-url-whatwg",
+ "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-plugin-lib-handl",
+ "handl-plugin-lib-kv-hashmap",
+ "handl-plugin-lib-stdlib",
+ "hnl-engine-exec",
+]
+
+[[package]]
+name = "handl-kit-test"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-test?branch=main#adb2c57b1ba5848a60837936cacfa5bc1baffe22"
+dependencies = [
+ "handl-kit-core",
+ "handl-plugin-lib-handl",
+ "handl-plugin-lib-stdlib",
+ "handl-plugin-lib-tag",
 ]
 
 [[package]]
@@ -945,6 +1018,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "handl-plugin-ffi"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-ffi?branch=main#9a0dc53776ad150cc28ddda84127e5d74e82e272"
+dependencies = [
+ "cranelift",
+ "cranelift-jit",
+ "cranelift-module",
+ "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
+ "handl-value 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
+ "libloading",
+ "serde_json",
+]
+
+[[package]]
 name = "handl-plugin-lib-char-native"
 version = "0.1.0"
 source = "git+https://github.com/handl-lang/lib-char-native?branch=main#08d5ea0ccce5b812f40bcf725a50951f5910eae5"
@@ -1323,7 +1410,7 @@ dependencies = [
  "cranelift-object",
  "handl-language 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
  "handl-platform 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
- "handl-plugin-ffi",
+ "handl-plugin-ffi 0.1.0 (git+https://github.com/handl-lang/kit-canonical?branch=main)",
  "handl-runtime 0.1.0 (git+https://github.com/handl-lang/host?branch=main)",
  "handl-value 0.1.0 (git+https://github.com/handl-lang/kernel?branch=main)",
  "hnl-engine",

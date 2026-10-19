@@ -498,7 +498,7 @@ mod tests {
     fn serde_roundtrip_replace() {
         // `Replace` round-trips through JSON like every other rule form.
         // (The YAML `!Replace` tag spelling is pinned end-to-end by
-        // `handl-kit-data-canonical`'s `catopt_fragments` test, which loads
+        // `handl-kit-data-prelude`'s `catopt_fragments` test, which loads
         // catopt's emitted `!Replace` rows through `language_from_dir`.)
         let def = TransformDef::new(
             "t.replace",

@@ -15,7 +15,7 @@
 //! which is why this test sat behind an `#[ignore]`; the `do {}` binding is the
 //! canonical replacement, so the test is live again.
 
-use handl_kit_canonical::Kit;
+use handl_kit_prelude::Kit;
 
 /// The arrow-authored bootstrap evaluates to `3`, matching the v1 bootstrap.
 #[test]
