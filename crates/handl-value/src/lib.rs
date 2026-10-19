@@ -1438,6 +1438,114 @@ impl TaggedValue {
         matches!(self, TaggedValue::Sym(_))
     }
 
+    /// The object a value *presents* for `.hnl` read-projection — the
+    /// generic seam over the tagged encodings (ADR-0083 §2.1).
+    ///
+    /// `Obj` is its own view (an `Rc` clone, O(1)). The *opaque* variants
+    /// — values with no other eval-vocabulary destructure — project their
+    /// canonical `{"__x__": …}` wire record as a plain object:
+    /// `Tensor` → `{"__tensor__": {shape, data, dtype}}`,
+    /// `Bytes` → `{"__bytes__": [n, …]}`,
+    /// `Sym` → `{"__sym__": {handle, name, parent}}`,
+    /// `Resource` → `{"__resource__": {ptr}}`. This is the same shape
+    /// [`tagged_to_value`] emits for the boundary, so field access,
+    /// `has_field`, and record destructuring read an opaque value
+    /// exactly as they read a `.hnl`-authored record with the same
+    /// encoding — the two are the same *value* on the wire, and now the
+    /// same observation in the language.
+    ///
+    /// Variants that already carry `.hnl`-visible projections
+    /// (`Pair`, `Either`, `Arrow`, and every scalar kind) return `None`:
+    /// their wire encoding is serialization data, not an object view.
+    ///
+    /// The view is *read-only*: it materializes a fresh `Obj` (the
+    /// `Tensor`/`Bytes`/`Sym`/`Resource` arms allocate), so a program
+    /// that writes through it produces a plain record — losing
+    /// variant-ness — exactly like destructuring the wire form.
+    pub fn object_view(&self) -> Option<TaggedValue> {
+        match self {
+            TaggedValue::Obj(_) => Some(self.clone()),
+            TaggedValue::Tensor(t) => {
+                let mut inner = FxHashMap::default();
+                inner.insert(
+                    Rc::from("shape"),
+                    TaggedValue::Arr(Rc::from(
+                        t.shape
+                            .iter()
+                            .map(|&d| TaggedValue::Int(d as i64))
+                            .collect::<Vec<_>>(),
+                    )),
+                );
+                inner.insert(
+                    Rc::from("data"),
+                    TaggedValue::Arr(Rc::from(
+                        t.data
+                            .iter()
+                            .map(|&x| TaggedValue::Float(x))
+                            .collect::<Vec<_>>(),
+                    )),
+                );
+                inner.insert(Rc::from("dtype"), TaggedValue::Str(Rc::from("f64")));
+                let mut outer = FxHashMap::default();
+                outer.insert(
+                    Rc::from("__tensor__"),
+                    TaggedValue::Obj(Rc::new(inner)),
+                );
+                Some(TaggedValue::Obj(Rc::new(outer)))
+            }
+            TaggedValue::Bytes(b) => {
+                let mut outer = FxHashMap::default();
+                outer.insert(
+                    Rc::from("__bytes__"),
+                    TaggedValue::Arr(Rc::from(
+                        b.iter()
+                            .map(|&byte| TaggedValue::Int(byte as i64))
+                            .collect::<Vec<_>>(),
+                    )),
+                );
+                Some(TaggedValue::Obj(Rc::new(outer)))
+            }
+            TaggedValue::Sym(s) => {
+                let mut inner = FxHashMap::default();
+                inner.insert(
+                    Rc::from("handle"),
+                    TaggedValue::Int(s.handle() as i64),
+                );
+                inner.insert(
+                    Rc::from("name"),
+                    TaggedValue::Str(Rc::from(s.name())),
+                );
+                inner.insert(
+                    Rc::from("parent"),
+                    s.parent()
+                        .map(|p| {
+                            TaggedValue::Sym(Rc::new(p.clone()))
+                                .object_view()
+                                .unwrap_or(TaggedValue::Null)
+                        })
+                        .unwrap_or(TaggedValue::Null),
+                );
+                let mut outer = FxHashMap::default();
+                outer.insert(Rc::from("__sym__"), TaggedValue::Obj(Rc::new(inner)));
+                Some(TaggedValue::Obj(Rc::new(outer)))
+            }
+            TaggedValue::Resource(r) => {
+                let mut inner = FxHashMap::default();
+                inner.insert(
+                    Rc::from("ptr"),
+                    TaggedValue::Int(r.ptr as usize as i64),
+                );
+                let mut outer = FxHashMap::default();
+                outer.insert(
+                    Rc::from("__resource__"),
+                    TaggedValue::Obj(Rc::new(inner)),
+                );
+                Some(TaggedValue::Obj(Rc::new(outer)))
+            }
+            _ => None,
+        }
+    }
+
     /// Indexes an object value by key, mirroring `serde_json::Value::get`
     /// for string keys. Returns `None` for non-objects or missing keys.
     pub fn get(&self, key: &str) -> Option<&TaggedValue> {
@@ -2517,5 +2625,54 @@ mod cell_tests {
         // Non-array and empty diagrams reject cleanly.
         assert!(cell_compose(&int(1)).is_err());
         assert!(cell_compose(&TaggedValue::Arr(Rc::from(vec![]))).is_err());
+    }
+
+    #[test]
+    fn object_view_projects_opaque_wire_records() {
+        // `Obj` is its own view.
+        let obj = TaggedValue::from(serde_json::json!({"a": 1}));
+        let view = obj.object_view().unwrap();
+        assert!(matches!(view, TaggedValue::Obj(_)));
+        assert_eq!(view.get("a"), Some(&TaggedValue::Int(1)));
+
+        // `Tensor` projects `{"__tensor__": {shape, data, dtype}}` — the
+        // same record a `.hnl` program authors and the wire form emits.
+        let t = TaggedValue::from(serde_json::json!({
+            "__tensor__": {"shape": [2, 2], "data": [1, 2, 3, 4], "dtype": "f64"}
+        }));
+        assert!(t.is_tensor());
+        let tv = t.object_view().unwrap();
+        let inner = tv.get("__tensor__").and_then(|i| i.as_object()).unwrap();
+        assert_eq!(
+            inner.get("shape").and_then(|s| s.as_array()).unwrap().len(),
+            2
+        );
+        assert_eq!(
+            inner.get("data").and_then(|d| d.as_array()).unwrap().len(),
+            4
+        );
+        assert_eq!(
+            inner.get("dtype").and_then(|d| d.as_str()),
+            Some("f64")
+        );
+
+        // `Bytes` projects `{"__bytes__": [n, …]}`.
+        let b = TaggedValue::from(serde_json::json!({"__bytes__": [104, 105]}));
+        let bv = b.object_view().unwrap();
+        assert_eq!(
+            bv.get("__bytes__").and_then(|a| a.as_array()).unwrap().len(),
+            2
+        );
+
+        // Variants with their own `.hnl` projections (Pair, Either) and
+        // scalars have no object view.
+        assert!(TaggedValue::from(serde_json::json!({"__pair__": [1, 2]}))
+            .object_view()
+            .is_none());
+        assert!(TaggedValue::from(serde_json::json!({"__either__": "left", "value": 1}))
+            .object_view()
+            .is_none());
+        assert!(TaggedValue::Int(1).object_view().is_none());
+        assert!(TaggedValue::Null.object_view().is_none());
     }
 }
