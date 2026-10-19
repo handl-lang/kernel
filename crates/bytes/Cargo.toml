@@ -3,7 +3,7 @@ name = "handl-lib-bytes"
 version = "0.1.0"
 edition = "2024"
 description = "Byte-buffer primitives for the `Bytes` scalar type (8 FFI atoms)."
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/handl-lang/lib-bytes"
 
 [dependencies]
