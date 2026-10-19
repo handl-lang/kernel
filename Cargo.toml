@@ -275,3 +275,45 @@ handl-runtime = { path = "../host/crates/handl-runtime" }
 # kit-ffi/modules/ffi.
 [patch."https://github.com/handl-lang/kit-canonical"]
 handl-plugin-ffi = { path = "../kit-ffi/modules/ffi" }
+
+[patch."https://github.com/handl-lang/lib-comb"]
+handl-lib-comb = { path = "../lib-comb" }
+
+[patch."https://github.com/handl-lang/lib-desugar"]
+handl-lib-desugar = { path = "../lib-desugar" }
+
+[patch."https://github.com/handl-lang/lib-ffi"]
+handl-lib-ffi = { path = "../lib-ffi" }
+
+[patch."https://github.com/handl-lang/lib-kv-map"]
+handl-lib-kv-map = { path = "../lib-kv-map" }
+
+[patch."https://github.com/handl-lang/lib-loader"]
+handl-lib-loader = { path = "../lib-loader" }
+
+[patch."https://github.com/handl-lang/lib-otlp"]
+handl-lib-otlp = { path = "../lib-otlp" }
+
+[patch."https://github.com/handl-lang/lib-otlp-c"]
+handl-plugin-lib-otlp-c = { path = "../lib-otlp-c" }
+
+[patch."https://github.com/handl-lang/lib-perlin"]
+handl-lib-perlin = { path = "../lib-perlin" }
+
+[patch."https://github.com/handl-lang/lib-rand-stub"]
+handl-lib-rand-stub = { path = "../lib-rand-stub" }
+
+[patch."https://github.com/handl-lang/lib-serialize-toml-c"]
+handl-plugin-lib-serialize-toml-c = { path = "../lib-serialize-toml-c" }
+
+[patch."https://github.com/handl-lang/lib-serialize-yaml-c"]
+handl-plugin-lib-serialize-yaml-c = { path = "../lib-serialize-yaml-c" }
+
+[patch."https://github.com/handl-lang/lib-simplex"]
+handl-lib-simplex = { path = "../lib-simplex" }
+
+[patch."https://github.com/handl-lang/lib-test"]
+handl-lib-test = { path = "../lib-test" }
+
+[patch."https://github.com/handl-lang/lib-type-handl"]
+handl-lib-type-handl = { path = "../lib-type-handl" }

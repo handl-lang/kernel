@@ -55,9 +55,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.8.0"
+version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6651c9ed80effdc7db0ff72512157f901af5e3549e341e24b1dd4887d836d838"
+checksum = "877bf67ac8e52449eb2f9e98a344ea163beb70dd1f9eebe3cc5357dcfeaee4df"
 dependencies = [
  "find-msvc-tools",
  "shlex",
@@ -282,9 +282,9 @@ dependencies = [
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "flate2"
@@ -593,7 +593,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-comb"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-comb?branch=main#329d62d5e04a21c02fcccfb7bdbafd7c98acec1c"
 
 [[package]]
 name = "handl-lib-combinators"
@@ -612,7 +611,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-desugar"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-desugar?branch=main#2c204f5801a7c954559c89ffc8be50a0329849c8"
 
 [[package]]
 name = "handl-lib-encoding"
@@ -638,7 +636,6 @@ dependencies = [
 [[package]]
 name = "handl-lib-ffi"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-ffi?branch=main#3b4c57fd94abf1a72723f161824903419d7a3233"
 
 [[package]]
 name = "handl-lib-hello"
@@ -679,12 +676,10 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-kv-map"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-kv-map?branch=main#68848e6598943c3229a9cbb91d0cc3723b9b25fc"
 
 [[package]]
 name = "handl-lib-loader"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-loader?branch=main#af01d60c31b743ba167924793f91a998ebf5a808"
 
 [[package]]
 name = "handl-lib-mood"
@@ -721,7 +716,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-otlp"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-otlp?branch=main#d77a85458f28cf9490ac263c5cc2083c49a5b9a2"
 
 [[package]]
 name = "handl-lib-parse"
@@ -737,7 +731,6 @@ dependencies = [
 [[package]]
 name = "handl-lib-perlin"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-perlin?branch=main#49215272100eb415a9b2bc8ea577918d0c7432e5"
 
 [[package]]
 name = "handl-lib-prim"
@@ -754,7 +747,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-rand-stub"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-rand-stub?branch=main#213ad779e167178340da96d33b1d32d8949d0d41"
 
 [[package]]
 name = "handl-lib-result"
@@ -775,7 +767,6 @@ dependencies = [
 [[package]]
 name = "handl-lib-simplex"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-simplex?branch=main#7b24532cd1da8e54fb8d46558635f8f48f1626db"
 
 [[package]]
 name = "handl-lib-stats"
@@ -796,7 +787,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-test"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-test?branch=main#17f42adbf812ee4592d7194d21512991a426bae8"
 
 [[package]]
 name = "handl-lib-time-c"
@@ -819,7 +809,6 @@ dependencies = [
 [[package]]
 name = "handl-lib-type-handl"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-type-handl?branch=main#8b677f088181ec9fe62573a88cf24f6b79f99b81"
 
 [[package]]
 name = "handl-lib-unicode"
@@ -1023,7 +1012,6 @@ dependencies = [
 [[package]]
 name = "handl-plugin-lib-otlp-c"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-otlp-c?branch=main#233ff58e3ae29efb62b32bcfe9ac5332f1f4020a"
 dependencies = [
  "handl-language",
  "handl-platform",
@@ -1051,7 +1039,6 @@ dependencies = [
 [[package]]
 name = "handl-plugin-lib-serialize-toml-c"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-serialize-toml-c?branch=main#7a88933d4325a77030a90567fb459681b18358b5"
 dependencies = [
  "handl-lib-serialize",
  "handl-platform",
@@ -1063,7 +1050,6 @@ dependencies = [
 [[package]]
 name = "handl-plugin-lib-serialize-yaml-c"
 version = "0.1.0"
-source = "git+https://github.com/handl-lang/lib-serialize-yaml-c?branch=main#5b31db09beea2f3ffb69b1c4b204b9b35101c888"
 dependencies = [
  "handl-lib-serialize",
  "handl-platform",
@@ -2319,10 +2305,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[patch.unused]]
-name = "handl-lib-dedent"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "sepia-acp"
 version = "0.0.0"
 
@@ -2365,3 +2347,7 @@ version = "0.0.0"
 [[patch.unused]]
 name = "sepia-testkit"
 version = "0.0.0"
+
+[[patch.unused]]
+name = "handl-lib-dedent"
+version = "0.1.0"
