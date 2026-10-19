@@ -81,7 +81,11 @@ pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
 };
-pub use token_classes::TokenClasses;
+pub use token_classes::{
+    TokenClasses, is_bool_kind, is_comment_kind, is_delimiter_kind, is_doc_comment_kind,
+    is_identifier_kind, is_keyword_kind, is_null_kind, is_number_kind, is_operator_kind,
+    is_string_kind, is_template_kind,
+};
 pub use term::{
     ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };

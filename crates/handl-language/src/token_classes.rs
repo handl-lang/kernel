@@ -176,3 +176,107 @@ impl TokenClasses {
         self.docs.get(kind).map(String::as_str)
     }
 }
+// ---------------------------------------------------------------------------
+// Token classification helpers (string-based kind matching)
+// ---------------------------------------------------------------------------
+//
+// Legacy string-matching helpers, kept for callers without a `Language` at
+// hand (bootstrap paths, tests, third-party kits that declare no
+// categories). New code that has a `Language` should prefer
+// [`TokenClasses`], which answers the same questions from `lang.tokens`
+// data instead of hardcoded canonical kind ids.
+//
+// Moved here from `handl-kit-prelude` (ADR-0128 §0.8): token-kind
+// classification is a kernel primitive, not kit logic.
+
+/// Whether a token kind string represents an identifier.
+pub fn is_identifier_kind(kind: &str) -> bool {
+    kind == "token.identifier"
+}
+
+/// Whether a token kind string represents a keyword.
+pub fn is_keyword_kind(kind: &str) -> bool {
+    kind.starts_with("token.keyword")
+}
+
+/// Whether a token kind string represents a number literal.
+pub fn is_number_kind(kind: &str) -> bool {
+    kind == "token.number"
+}
+
+/// Whether a token kind string represents a string literal.
+pub fn is_string_kind(kind: &str) -> bool {
+    kind == "token.string"
+}
+
+/// Whether a token kind string represents a boolean literal.
+pub fn is_bool_kind(kind: &str) -> bool {
+    kind == "token.bool"
+}
+
+/// Whether a token kind string represents the null literal.
+pub fn is_null_kind(kind: &str) -> bool {
+    kind == "token.null"
+}
+
+/// Whether a token kind string represents a comment.
+pub fn is_comment_kind(kind: &str) -> bool {
+    kind == "token.comment" || kind == "token.doc_comment"
+}
+
+/// Whether a token kind string represents a doc comment.
+pub fn is_doc_comment_kind(kind: &str) -> bool {
+    kind == "token.doc_comment"
+}
+
+/// Whether a token kind string represents an operator.
+pub fn is_operator_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "token.bind"
+            | "token.equal"
+            | "token.plus"
+            | "token.minus"
+            | "token.star"
+            | "token.pow"
+            | "token.slash"
+            | "token.lt"
+            | "token.gt"
+            | "token.eqeq"
+            | "token.neq"
+            | "token.lte"
+            | "token.gte"
+            | "token.spaceship"
+            | "token.flow"
+            | "token.fanout"
+            | "token.pipe"
+            | "token.arrow"
+            | "token.and"
+            | "token.or"
+            | "token.bang"
+            | "token.choice"
+            | "token.percent"
+            | "token.question"
+            | "token.ellipsis"
+    )
+}
+
+/// Whether a token kind string represents a delimiter/punctuation.
+pub fn is_delimiter_kind(kind: &str) -> bool {
+    kind.starts_with("token.lparen")
+        || kind.starts_with("token.rparen")
+        || kind.starts_with("token.lbracket")
+        || kind.starts_with("token.rbracket")
+        || kind.starts_with("token.lbrace")
+        || kind.starts_with("token.rbrace")
+        || kind == "token.comma"
+        || kind == "token.dot"
+        || kind == "token.colon"
+        || kind == "token.semicolon"
+        || kind == "token.arrow"
+}
+
+/// Whether a token kind string represents a template string.
+pub fn is_template_kind(kind: &str) -> bool {
+    kind == "token.template"
+}
