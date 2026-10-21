@@ -123,8 +123,10 @@ the remaining gaps are enumerated as approximations in
 `handl-language` (`crates/handl-language/src/term.rs`): a `Term` is
 an engine-agnostic description of *what* to evaluate, not *how*.
 Engines interpret terms; the term itself is pure data — a
-serde-serializable enum, versioned by `SchemeVersion` (canonical:
-`"v2"`).
+serde-serializable enum.  Versioning lives on the `Language`, not
+the term: `Language::scheme_version` (`SchemeVersion`, canonical
+`"v2"`) declares which combinator scheme version the language's
+terms target, and engines declare which versions they support.
 
 ## The six combinators
 
@@ -140,12 +142,15 @@ serde-serializable enum, versioned by `SchemeVersion` (canonical:
 : The closed combinator set. {#tbl-combinators}
 
 These are the only arrow formers the kernel knows about.  With `op`
-and `handle` (@sec-gmsac) they are the classical six of Hughes'
-arrow interface: `arr`/`>>>` give a category, `first` gives product
-structure, `choice` sum routing, `loop` a trace, and `app` the
-`ArrowApply` strength that recovers monadic power — the
-correspondence `ArrowApply` $\cong$ `Monad` is the central theorem of
-the arrow-calculus literature [@lindley2011idioms].
+and `handle` (@sec-gmsac) they are the classical six combinators of
+Hughes' arrow interface — a set that spans four typeclasses:
+`arr`/`>>>` give a category (`Arrow`), `first` gives product
+structure, `choice` sum routing (`ArrowChoice`), `loop` a trace
+(`ArrowLoop`), and `app` closedness — the `ArrowApply` exponential
+that recovers monadic power, `ArrowApply` $\cong$ `Monad`
+[@hughes2000arrows], with the equational correspondence carried out
+in the arrow calculus itself by Lindley–Wadler–Yallop
+[@lindley2010arrow].
 
 The typing rules, at the theory level, are the usual ones.  Writing
 $f : A \to B$ for a pure function and $a : A \rightsquigarrow B$ for
@@ -189,7 +194,9 @@ Two further constructors carry the effect layer (Sanada's `op` and
   typecheck judgment (`Judgment`), or a dynamic host dispatch
   (`DynamicForeign`).
 - `Handle { body, target, impl_ }` — scope `body` under a handler:
-  `handle body with target = impl_`.  The handler is an ordinary
+  `handle body with target = impl_`.  Note `target` is a capability
+  name (`String`), not a `dim`-style term slot — grade routing keys
+  off `Op::dim`, not the handle target.  The handler is an ordinary
   arrow value, not a special construct.
 
 ## Auxiliary constructors — honest accounting
@@ -219,10 +226,11 @@ need:
   naming a derived operator (`Path`, `Equiv`, `Whisker`, `CellId`,
   …) folded out of the closed vocabulary.  The kernel carries the
   record without structural interpretation, and `TermData::to_term`
-  maps any unrecognised tag here — which is what makes the
-  `Term` $\leftrightarrow$ data conversion *total*: a derived
-  operator that is not (yet) spelled in the closed vocabulary still
-  round-trips.
+  maps any unrecognised *tag* here — which is what makes the
+  `Term` $\leftrightarrow$ data conversion total *over tagged
+  records* (a `TermData` without a `__tag__` field is a decode
+  error, not a term): a derived operator that is not (yet) spelled
+  in the closed vocabulary still round-trips.
 
 `Opaque` deserves emphasis because it is the escape hatch that keeps
 the set closed in practice: an operator the surface calculus derives
@@ -248,8 +256,11 @@ of @sec-morphisms possible without new combinators:
 
 `Term::globular_dim` computes the declared dimension structurally —
 the `dim` slot when it is a literal, else the greatest dimension of
-the parts — and `Term::desugar` recursively expands any residual
-derived forms into the core set before interpretation.
+the parts.  `Term::desugar` is the designated expansion point for
+residual derived forms: today it is a recursive identity traversal
+that rebuilds the same constructors and rewrites nothing — actual
+desugaring happens upstream, in `AstShapeDef`/`transforms` merge
+data (@sec-language).
 
 # Values {#sec-values}
 
@@ -301,9 +312,11 @@ presentation-only, and an optional single-parent `Sym` chain.
 Equality is identity (`handle` equality) — two syms with equal names
 are never equal — while the JSON encoding is explicit data that
 round-trips the handle, so a deserialized sym compares equal to the
-live sym it came from.  `Sym` is how the kernel provides nominal
-objects (fresh type constructors, class-like identities) without
-adding a name-generation construct to the calculus.
+live sym it came from *within a process*; cross-process identity is
+unresolved (ADR-0106's stated follow-up).  `Sym` is how the kernel
+provides nominal objects (fresh type constructors, class-like
+identities) without adding a name-generation construct to the
+calculus.
 
 # Language as data {#sec-language}
 
@@ -356,8 +369,9 @@ concatenable:
   `replaces` chains are rejected, and every override is recorded in
   an auditable `override_chain`.  Two fragments targeting the same
   identity key with no `replaces` declared is a *collision* — an
-  error, not a silent winner.  (`CapabilityDecl` is union/idempotent;
-  `AstShapeDef` keeps the first declaration.)
+  error, not a silent winner — except for the four union types
+  (`CapabilityDecl`, `TokenKindDef`, `LexerRuleDef`, `AstShapeDef`),
+  whose merge is idempotent and keeps the existing declaration.
 - **Dependencies.**  `requires` is validated against the post-merge
   id set (`MissingRequires`).
 - **Atomicity.**  `merge` operates on a clone and swaps in only on
@@ -418,20 +432,24 @@ Sanada Arrow Calculus** — three ideas layered on the same `Term`:
 
 ## Grade rows
 
-A grade row is a multiset of grade terms on the arrow type:
+A grade row is a *multiset* of grade terms on the arrow type:
 
 ```text
 f : A ~[(Op, Query)]~> B
 g : A ~[(Op, Clock, FFI)]~> B
 ```
 
-`Op` is the marker grade — "this arrow is an operation request" — and
-the remaining names are algebra grades: the operation is interpreted
-by the innermost handler matching *any* of them.  A pure arrow has an
-empty row; an `Op` adds grades; installing a handler removes one.
-The row is a set, so `A ~[(Query)]~> B` sits under
-`A ~[(Query, Clock)]~> B` — the usual effect-row subtyping of
-Bauer–Pretnar [@bauer2014effect], restated in arrow terms.
+A single `Op` contributes exactly one grade — its `dim` slot names
+the one dimension the request is declared at — and a composite
+arrow's row is the multiset of its constituent `Op`s' dims.  `Op` is
+the marker grade — "this arrow is an operation request" — and the
+remaining names are algebra grades.  Handlers, in turn, declare the
+*set* of grades they cover, and a request is interpreted by the
+innermost handler covering the request's grade.  A pure arrow has an
+empty row; an `Op` adds a grade; installing a handler removes one.
+Quotienting the multiset to a set gives the usual effect-row
+subtyping of Bauer–Pretnar [@bauer2014effect], restated in arrow
+terms: `A ~[(Query)]~> B` sits under `A ~[(Query, Clock)]~> B`.
 
 The grade row is not decoration on top of the calculus: it *is* the
 `dim` slot (@sec-slots).  The unified slot is the kernel's answer to
@@ -453,11 +471,14 @@ declaration, a `Term` is a term in the free arrow category over the
 signature, and a model is a `Model` — the trait in `hnl-engine` whose
 `run(term, incoming, ctx)` interprets terms and whose
 `rewrite(source, target, witness, ...)` interprets rewrites.
-Dispatch is by grade, not by operation name: an engine seeing
-`Op{name: "add"}` consults the signature for the operation's grade,
-checks the carrier's declared grades, and routes to the handler for
-that grade — so the same operation works on every sort that carries
-it.
+Dispatch is two-keyed: the *handler* is selected by grade coverage —
+the innermost handler whose declared `grades` set covers the op's
+dimension label — and the *implementation* is then selected by
+operation name inside that handler's `impls` map.  An engine seeing
+`Op{name: "add"}` resolves the op's grade, checks the carrier's
+declared grades, routes to the innermost covering handler, and looks
+up `"add"` in its impls — so the same operation works on every sort
+that carries it.
 
 ## Handlers as elimination
 
@@ -470,10 +491,12 @@ elimination of the modal grade: bracketing a region with a handler
 removes the corresponding effect from the row and restores the
 previous interpretation on exit.  Runtime, `Handle` pushes its
 implementation onto the `ModelCtx` handler stack and `Op` dispatch
-searches it innermost-last before falling back to the value's own
-grades; `Language::handlers_by_grade` is the compile-time index into
-the same table, kept as data so a language's ambient handlers travel
-with the language.
+searches it innermost-last, then falls back to the incoming value's
+own `impls` field (a tagged value may embed per-dimension op
+implementations), then to the language-level handler table;
+`Language::handlers_by_grade` is the compile-time index into that
+table, kept as data so a language's ambient handlers travel with the
+language.
 
 Because handlers are values, effect algebras are *packages*, not
 kernel concepts: a resumable request algebra, a mutation algebra, a
@@ -513,10 +536,17 @@ therefore data (@sec-slots).  The *axis* $k$ in $\mathbin{>\!\!>\!\!>}_k$
 $>>>[0]$ pairs cells across composition of their boundary morphisms,
 $>>>[1]$ stacks them along the morphism direction, and the boundary
 law is globular — $\mathrm{tgt}_k(a) = \mathrm{src}_k(b)$, enforced
-wherever `>>>[k]` executes.  `Term::globular_dim` gates $k < n$: the
-value model currently carries a single cell shape at dimension 2, so
-axes 0 and 1 execute meaningfully and $k \geq 2$ is a dimension error
-for ordinary operands — an implementation boundary, stated honestly,
+for $k \geq 1$; axis-0 composition is unchecked because object
+boundaries are not part of the value model (`comp_at`,
+`crates/handl-value/src/lib.rs`).  `Term::globular_dim` gates
+$k < n$, and `cell_comp_axis` computes the *effective* dimension as
+$\max(\text{declared}, \mathrm{cell\_dim}(a), \mathrm{cell\_dim}(b))$:
+`__dim__` $n$-cell records, `Cell2`, and `dim_arrow` values carry
+their own height, so `>>>[k]` pastes at any axis $k < n$ — a
+`Cell{__dim__: 3}` value pastes at axis 2.  The cap applies only to
+degenerate operands: plain values lifted through a
+declared-dimension-2 scheme are 2-cells, so $k \geq 2$ is a
+dimension error there — an implementation boundary, stated honestly,
 not a metatheorem.
 
 The resulting structure is a *weak globular* presentation: higher
@@ -612,11 +642,11 @@ others — and the independence and classification results are
 mechanized in Lean 4 (the free-arrow generator argument: e.g. no
 generator can produce `Sum`/`Prod` output from the wrong primitives;
 `loop` is independent in a total setting).  The sixth combinator,
-`app`, is not redundant either: it is precisely the strength that
-makes `ArrowApply` $\cong$ `Monad`
-[@lindley2011idioms] — the freer-arrow insight that explicit
-higher-order application recovers the structure opaque continuations
-lose [@kiselyov2015freer; @vandomelen2025freer].
+`app`, is not redundant either: it is precisely the closedness —
+the exponential structure — that makes `ArrowApply` $\cong$ `Monad`
+[@hughes2000arrows; @lindley2010arrow] — the freer-arrow insight
+that explicit higher-order application recovers the structure opaque
+continuations lose [@kiselyov2015freer; @vandomelen2025freer].
 
 ## How features enter without new combinators
 
@@ -696,8 +726,8 @@ The kernel is `handl-lang/kernel`, a cargo workspace:
 | `handl-language` | the `Language` schema, `FragmentSet` merge, the `Ast` arena, `staged` dispatch signatures, `law_inference`, `quantified_laws`, `dynamic_handlers`, `instantiate`, `capabilities`, `token_classes`, `verdict`, `version` — plus the `Term`/`ArrSource`/`RewriteWitness` re-export from `hnl-engine` |
 | `handl-value` | `TaggedValue`, `Sym`, `TensorValue`, `ForeignResource`, JSON (`serde_json::Value`) conversions |
 | `handl-ext` | the extension ABI (`ExtensionManifest`, `ExtRequest`, `ExtResponse`, `export!`, discovery/loading) |
-| `defining-handl` | self-hosting infrastructure: a `Language` value describing the language subset, plus the self-hosting corpus |
-| floor-library crates (`bytes`, `cmp`, `combinators`, `error`, `mood`, `obj`, `ops`, `prim`, `prim-handl`, `type`) | substrate packages providing the base op/grade tables |
+| `handl-defining-handl` | self-hosting infrastructure: a `Language` value describing the language subset, plus the self-hosting corpus |
+| `handl-lib-*` floor-library crates (`handl-lib-bytes`, `handl-lib-cmp`, `handl-lib-combinators`, `handl-lib-error`, `handl-lib-mood`, `handl-lib-obj`, `handl-lib-ops`, `handl-lib-prim`, `handl-lib-prim-handl`, `handl-lib-type`) | substrate packages providing the base op/grade tables; they are kernel-workspace crates but depend on `handl-platform` and `handl-plugin-lib-handl` from `handl-lang/host` |
 | `hnl-engine` (dep, `handl-lang/engine`) | `Term`, `TermData`, `Model`, `ModelData`, `ModelCtx`, `CompositeModel`, `AstView`/`LanguageView` |
 
 : Kernel workspace map. {#tbl-crates}
@@ -713,10 +743,25 @@ documented in the crate's own honesty note.
 Documented approximations (implementation debt, not design gaps),
 condensed from the working draft [@handl2026kernelpoc]:
 
-- The value model carries one cell shape at dimension 2, so `>>>[k]`
-  executes for $k \in \{0, 1\}$; generalising past 2-cells is open.
-- Only literal axes and dimensions resolve; a non-literal axis falls
-  back with a warning rather than evaluating a computed boundary.
+- `>>>[k]` pastes at any axis $k < n$: `cell_dim` recognises
+  `__dim__` $n$-cell records (any $n$), `Cell2`, and `dim_arrow`
+  values, and `cell_comp_axis` computes the effective dimension as
+  $\max(\text{declared}, \mathrm{cell\_dim}(a), \mathrm{cell\_dim}(b))$
+  (`crates/handl-value/src/lib.rs`).  Only degenerate operands are
+  capped: plain values lifted through a declared-dimension-2 scheme
+  are 2-cells, so $k \geq 2$ is a dimension error there.
+- The axis-0 boundary check is exempted: `comp_at` enforces
+  $\mathrm{tgt}_k(a) = \mathrm{src}_k(b)$ for $k \geq 1$ only;
+  0-boundaries (objects) are not part of the value model, so
+  $\circ_0$ is unchecked horizontal composition.
+- The axis slot is an expression position, not a literal-only slot:
+  the tree-walk engine (`hnl-engine-exec-tree-walk`) evaluates a
+  non-literal axis term against the incoming value and errors if the
+  result is not a natural number; the bytecode engine
+  (`hnl-engine-exec-bytecode`) rejects a dynamic axis on 1-cell
+  operands at compile time, because it could resolve to `>>>` —
+  sequential composition — which is not expressible as value-level
+  composition.
 - `cell_boundary`-style projection assumes globularity (the globe
   condition is assumed, not verified).
 - Quantified-law checking is substitution-tested, not complete
@@ -766,8 +811,9 @@ its laws, are themselves an algebraic object is Lindenbaum–Tarski's;
 Lawvere's functorial semantics made "theory as data, model as
 functor" precise [@lawvere1963functorial].  Equality saturation
 [@tate2009; @willsey2021egg] is the adjacent machinery for which
-laws-as-data is load-bearing — the org's `eqsat` substrate consumes
-exactly this kernel [@eqsat2026substrate].  The higher-categorical
+laws-as-data is load-bearing — the org's `eqsat` substrate realises
+the same cells-as-data pattern in stdlib-only Python, importing none
+of these crates [@eqsat2026substrate].  The higher-categorical
 backdrop for the dimension story is standard
 [@leinster2002ncat]; the Futamura reading of language-as-data is
 Futamura's [@futamura1999partial].
