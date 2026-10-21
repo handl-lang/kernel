@@ -1,0 +1,23 @@
+-- This module serves as the root of the `ArrowMinimalityLib` library.
+-- Import modules here that should be built as part of the library.
+import ArrowMinimalityLib.Basic
+import ArrowMinimalityLib.ProofGraphs
+import ArrowMinimalityLib.IteratedLoop
+import ArrowMinimalityLib.Translation
+import ArrowMinimalityLib.DependentProofGraphs
+import ArrowMinimalityLib.RefinementProofGraphs
+import ArrowMinimalityLib.ProofAdvantage
+import ArrowMinimalityLib.CutElimCongruence
+import ArrowMinimalityLib.ProofRelevant
+import ArrowMinimalityLib.FanoutUnencodable
+import ArrowMinimalityLib.RefinementCharacterization
+import ArrowMinimalityLib.InvariantDomain
+import ArrowMinimalityLib.StructuralInference
+import ArrowMinimalityLib.LoopInvariantDiscovery
+import ArrowMinimalityLib.AlgorithmicCompleteness
+import ArrowMinimalityLib.AlgorithmicCompletenessOmega
+import ArrowMinimalityLib.DecidableFragment
+import ArrowMinimalityLib.Termination
+import ArrowMinimalityLib.TraitInference
+import ArrowMinimalityLib.EquationalLawInference
+import ArrowMinimalityLib.EffectHandlers

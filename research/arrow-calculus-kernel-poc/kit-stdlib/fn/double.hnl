@@ -1,0 +1,2 @@
+-- double: multiply the input by two.
+double = x ~> x * 2

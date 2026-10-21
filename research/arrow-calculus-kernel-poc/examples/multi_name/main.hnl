@@ -1,0 +1,4 @@
+-- multi_name: import several names from one record module.
+import sort, map, filter from "collection"
+
+main = map >>> filter >>> sort

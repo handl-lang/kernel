@@ -1,0 +1,5 @@
+-- collection: a multi-name record module re-exporting from data/ and fn/.
+export sort from "data/sort"
+export map from "fn/map"
+export filter from "fn/filter"
+export reduce from "fn/reduce"

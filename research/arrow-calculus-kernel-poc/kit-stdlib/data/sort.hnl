@@ -1,0 +1,5 @@
+-- Insertion sort: loop insert composed with first(id).
+import insert from "data/insert"
+import id from "data/atoms"
+
+sort = loop(insert >>> first(id))

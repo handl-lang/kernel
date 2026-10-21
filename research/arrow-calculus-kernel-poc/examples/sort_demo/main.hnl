@@ -1,0 +1,4 @@
+-- sort_demo: import sort from the collection record module and apply it.
+import sort from "collection"
+
+main = sort([3, 1, 2])

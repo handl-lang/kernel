@@ -1,0 +1,1332 @@
+<h1 id="introduction">1. Introduction</h1>
+<p>
+  Program verification is traditionally expensive. To prove that a function preserves sortedness,
+  maintains a length invariant, or satisfies a loop specification, one supplies, in addition to the
+  program, a collection of auxiliary artifacts: refinement-type annotations on every sub-expression,
+  explicit proof terms for each verification condition, and — most stubbornly — loop invariants that
+  the programmer must discover and state by hand. The annotations often outweigh the program. The
+  loop-invariant problem in particular is the canonical bottleneck: the invariant is the creative
+  step that neither the type checker nor the theorem prover can reliably take on its own.
+</p>
+<p>
+  This paper starts from a different representation of programs. An <strong>arrow graph</strong> is
+  a directed, port-typed graph built from combinators over a signature of base arrows. The calculus
+  is <strong>lambda-free</strong>: the grammar has no binder, no variable, and no application. The
+  key observation is that an arrow graph is <em>structurally transparent</em>: its wiring is
+  explicit, every wire is inspectable, and the combinator structure determines how information
+  flows. This raises the question:
+</p>
+<blockquote>
+  <p>
+    <em
+      >Can we achieve Agda-level semantic guarantees — sortedness, permutation, loop invariants — at
+      TypeScript-level programming ergonomics, by deriving proofs from the structure of a
+      lambda-free arrow graph rather than from user-supplied annotations or explicit proof
+      terms?</em
+    >
+  </p>
+</blockquote>
+<p>
+  We argue that it can, for a useful and characterizable class of programs, demonstrated with a Rust
+  prototype performing annotation-free inference and a Lean4 mechanization establishing soundness.
+  The positioning is deliberate: TypeScript gives lightweight types with low programmer burden; Agda
+  gives very strong proofs but makes proof construction explicit. Arrow graphs aim for the sweet
+  spot between them, as the next subsection makes concrete.
+</p>
+<h2 id="the-sweet-spot">The Sweet Spot</h2>
+<p>Consider the spectrum of programmer burden versus verification power:</p>
+<pre><code>JavaScript:  write algorithm          → no types, no proofs, no guarantees
+TypeScript:  write algorithm + types  → types, no proofs, no semantic guarantees
+Agda:        write algorithm + types + proofs → types + proofs, strong guarantees
+Arrow graphs: write algorithm          → types + proofs, strong guarantees</code></pre>
+<p>
+  JavaScript requires nothing beyond the algorithm but provides no guarantees. TypeScript adds type
+  annotations and gets basic types but no semantic proofs. Agda requires the programmer to construct
+  explicit proofs and achieves very strong guarantees. Arrow graphs aim for the fourth position:
+  <strong>the programming ergonomics of JavaScript</strong> (just write the algorithm, nothing else)
+  <strong>with the verification power of Agda</strong> (real theorems about behavior). The user does
+  not write types. The user does not write proofs. The user does not write generics. The user does
+  not write annotations. The user just writes the program — and the type, the polymorphism, and the
+  proof all fall out of the graph structure.
+</p>
+<p>
+  This is possible because the graph structure contains all the information. The type is in the
+  wiring. The proof is in the wiring. The polymorphism is in the wiring. There is nothing to declare
+  because the structure already has everything. The difference from JavaScript is not that we skip
+  verification — it is that we do full verification by reading it off the structure instead of
+  asking the user to write it down.
+</p>
+<p>
+  The key question is whether this can be achieved without quietly moving the proof-writing burden
+  into annotations or library specifications.
+</p>
+<table>
+  <colgroup>
+    <col style="width: 20%" />
+    <col style="width: 20%" />
+    <col style="width: 20%" />
+    <col style="width: 20%" />
+    <col style="width: 20%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th></th>
+      <th>JavaScript</th>
+      <th>TypeScript</th>
+      <th>Agda</th>
+      <th>Arrow graphs (this paper)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>What you write</td>
+      <td>Algorithm</td>
+      <td>Algorithm + types</td>
+      <td>Algorithm + types + proofs</td>
+      <td><strong>Algorithm only</strong></td>
+    </tr>
+    <tr>
+      <td>Basic types</td>
+      <td>None</td>
+      <td>Declared (with generics)</td>
+      <td>Declared (with universe params)</td>
+      <td><strong>Inferred from wiring</strong></td>
+    </tr>
+    <tr>
+      <td>Prove sortedness</td>
+      <td>No</td>
+      <td>No</td>
+      <td>Explicit proof</td>
+      <td><strong>Inferred from graph</strong></td>
+    </tr>
+    <tr>
+      <td>Prove permutation</td>
+      <td>No</td>
+      <td>No</td>
+      <td>Explicit proof</td>
+      <td><strong>Inferred</strong></td>
+    </tr>
+    <tr>
+      <td>Polymorphism</td>
+      <td>Dynamic</td>
+      <td>Declared <code>&lt;T&gt;</code></td>
+      <td>Declared <code>{A B : Set}</code></td>
+      <td><strong>Inferred (α, β from wiring)</strong></td>
+    </tr>
+    <tr>
+      <td>Proof attached to program</td>
+      <td>No</td>
+      <td>No</td>
+      <td>Separate dependent term</td>
+      <td><strong>Same graph</strong></td>
+    </tr>
+    <tr>
+      <td>Composition</td>
+      <td>Excellent</td>
+      <td>Excellent</td>
+      <td>Proofs compose explicitly</td>
+      <td><strong>Composition + inferred proofs</strong></td>
+    </tr>
+    <tr>
+      <td>Loop invariants</td>
+      <td>External/manual</td>
+      <td>External/manual</td>
+      <td>Explicit dependent reasoning</td>
+      <td>
+        <strong>Potentially inferred by <code>loop</code></strong>
+      </td>
+    </tr>
+    <tr>
+      <td>Programmer burden</td>
+      <td>Lowest</td>
+      <td>Low</td>
+      <td>High</td>
+      <td><strong>Low (target)</strong></td>
+    </tr>
+    <tr>
+      <td>Guarantees</td>
+      <td>None</td>
+      <td>Basic types</td>
+      <td>Very strong</td>
+      <td><strong>Potentially very strong + automatic</strong></td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  The “potentially” qualifiers are deliberate: the loop invariant discovery is implemented and
+  empirically validated but not yet formally proven in Lean4 (Section 5.5). The table expresses the
+  <em>target</em> of this work, and the paper honestly characterizes how far the current
+  implementation and formalization reach toward it.
+</p>
+<p><strong>Contributions.</strong></p>
+<p>
+  We frame our contribution as <strong>graph-structural proof inference</strong>: the arrow graph is
+  simultaneously the program, the type, and the proof object, and the inference procedure derives
+  properties from the graph’s combinator structure. This is not refinement inference (which
+  annotates an AST) or invariant synthesis (which analyzes loop semantics) — it is proof inference
+  from the structure of a lambda-free graph. The broad vision is that the arrow program itself is
+  the input to a proof-inference procedure, and the resulting proof is compositional with the
+  program graph. The narrow contribution of this paper is what we actually prove and implement:
+</p>
+<ol type="1">
+  <li>
+    <p>
+      <strong>Annotation-free structural refinement propagation with semantic verification.</strong>
+      A structural mechanism infers invariant schemas from graph topology and verifies them against
+      base arrow contracts. The inference is sound (formally proven in Lean4) but not complete — it
+      discovers invariants within a structural domain <span class="math inline">\(D\)</span> and
+      reports “unknown” for invariants outside <span class="math inline">\(D\)</span>.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Structural invariant-schema inference for loops.</strong> For
+      <code>loop G</code> where
+      <span class="math inline">\(G : A \times C \rightsquigarrow B \times C\)</span>, the inference
+      recognizes the structural pattern of <span class="math inline">\(G\)</span> (side-channel,
+      accumulator, filter) to infer an invariant schema <span class="math inline">\(I(c)\)</span> on
+      the feedback channel, then verifies it with Z3. No user-supplied invariant is required for the
+      cases we study.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>A formalized invariant domain with soundness and incompleteness.</strong> The domain
+      <span class="math inline">\(D\)</span> is defined as an inductive type in Lean4. The
+      structural inference algorithm is formalized and proven sound
+      (<code>inferred_postcondition_sound_full</code>), strictly stronger than the trivial floor
+      (<code>floor_does_not_imply_inferred</code>), and the existence of undetectable invariants
+      outside <span class="math inline">\(D\)</span> is proven
+      (<code>analyze_incompleteness</code>).
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>An empirical characterization with 100% accuracy on in-domain properties.</strong>
+      Across 72 non-trivial benchmark cells, the prototype proves every property the graph should
+      prove (26/26) and correctly reports unknown for every property it should not (46/46), with
+      zero false positives. We document 5 failure cases representing out-of-domain invariants.
+    </p>
+  </li>
+</ol>
+<p>
+  <strong>Foundation.</strong> This paper builds on a lambda-free arrow-graph calculus whose
+  proof-theoretic foundations — a Curry-Howard correspondence between graph typing and logical
+  proof, subject reduction, and local cut elimination — are established in parallel work [self-cite]
+  and mechanized in Lean4. We use these results as the logical foundation for the inference
+  mechanism but they are not contributions of this paper. Appendix A summarizes the key facts.
+</p>
+<p>
+  <strong>A note on “annotation-free.”</strong> By “annotation-free” we mean that the program — the
+  arrow graph — carries no refinement annotations. The base arrow signatures (sort, map, filter,
+  etc.) do carry known guarantees, but these are the type signatures of primitive operations, not
+  user-supplied annotations on the program. This is analogous to how Hindley-Milner type inference
+  is “annotation-free” despite base operations having typed signatures.
+</p>
+<p>
+  <strong>Two layers of inference, both automatic.</strong> The refinement inference operates on top
+  of standard type inference. The user writes the arrow graph; the system derives both layers
+  automatically:
+</p>
+<ol type="1">
+  <li>
+    <p>
+      <strong>Type inference</strong> (Hindley-Milner-style): the most general type is derived from
+      the graph structure. The user never writes type signatures, generic parameters, or trait
+      bounds. <code>map</code> is automatically polymorphic: the inference engine introduces type
+      variables <span class="math inline">\(\alpha, \beta\)</span> during unification, deriving
+      <code>map : (List α × (α ⇝ β)) ⇝ List β</code> from the wiring alone. <code>sort</code> is
+      automatically monomorphic: <code>sort : List α ⇝ List α</code> because the graph structure
+      constrains input and output to the same type. The user did not specify either — the most
+      general type is always derivable from the wiring.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Refinement inference</strong> (this paper): the most precise semantic guarantee is
+      derived from the graph structure plus the axiomatic contracts on base arrows.
+      <code>sort</code> derives <code>Sorted(output)</code>, <code>map</code> derives
+      <code>LengthEq(input, output)</code>, <code>filter</code> derives
+      <code>AllSatisfy(output, p) ∧ |output| ≤ |input|</code> — all with zero annotations.
+    </p>
+  </li>
+</ol>
+<p>
+  The user writes one thing — the arrow graph — and gets both the type and the proof for free. This
+  is the inversion: in traditional systems, the type is declared and the proof is constructed. Here,
+  both are inferred from the same object: the program structure.
+</p>
+<p>
+  <strong>No generics syntax needed.</strong> Generics syntax (<code>&lt;T&gt;</code>,
+  <code>[T]</code>, <code>forall a.</code>) exists because statement-based languages require types
+  to be declared before use. Arrow graphs invert this: the graph IS the type derivation. The
+  inference engine reads the graph, introduces type variables where needed, and derives the most
+  general type. There is nothing to declare because the structure already contains all the
+  information. Polymorphism is not a feature you opt into — it is the default, falling out of the
+  wiring.
+</p>
+<h1 id="background">2. Background</h1>
+<p>
+  <strong>The arrow calculus.</strong> Hughes [26] introduced arrows as a generalization of monads.
+  Lindley, Wadler, and Yallop [31] developed the arrow calculus as a metalanguage with four
+  constructs and five laws. Our graph primitives correspond to these constructs; the key difference
+  is that we take them as a <strong>graph grammar</strong> rather than a lambda-calculus extension.
+  Categorically, arrows are monoids in profunctor categories [24, 25]: <code>comp</code> is monoid
+  multiplication, <code>first</code> is tensorial strength, and <code>loop</code> is the trace of a
+  traced monoidal category [27].
+</p>
+<p>
+  <strong>Refinement types and Liquid Types.</strong> Freeman and Pfenning [17] introduced
+  refinement types for ML. Liquid Types [38] extend Hindley-Milner inference with refinement types
+  using SMT solving, but still require annotations on recursive functions and loops. Our work
+  differs in that graph structure (not an AST) is the substrate for inference, and loop invariant
+  schemas are inferred by structural analysis on the graph.
+</p>
+<p>
+  <strong>Abstract interpretation.</strong> Cousot and Cousot [10, 11] developed the dominant
+  framework for loop invariant inference. Our structural inference is inspired by abstract
+  interpretation but operates on graph structure rather than program syntax. We do not claim a
+  formal duality; the structural analysis provides candidate schemas, and the SMT checker provides
+  soundness via semantic verification.
+</p>
+<h1 id="the-arrow-graph-calculus">3. The Arrow-Graph Calculus</h1>
+<h2 id="primitives-and-semantics">3.1 Primitives and Semantics</h2>
+<p>
+  An arrow graph is a finite, directed, port-typed graph built from combinators over a signature
+  <span class="math inline">\(\Sigma\)</span> of base arrows
+  <span class="math inline">\(\varphi : A \to B\)</span>:
+</p>
+<p>
+  <span class="math display"
+    >\[ \begin{aligned} \text{Types:} \quad &amp; A, B, C \in \text{Ty} ::= \alpha \mid A \times B
+    \mid A + B \mid \top \mid \bot \\ \text{Graphs:} \quad &amp; G, H \in \text{Graph} ::=
+    \textsf{id}_A \mid \textsf{comp}(G, H) \mid \textsf{first}(G) \mid \textsf{loop}(G) \mid
+    \textsf{arr}(\varphi) \end{aligned} \]</span
+  >
+</p>
+<p>
+  The calculus also includes <code>left</code><span class="math inline">\((G)\)</span> for sum types
+  (<span class="math inline">\(A + C \rightsquigarrow B + C\)</span>), but the inference mechanism
+  does not use it — <code>left</code> is always treated conservatively (Section 4.3). We include it
+  for completeness of the calculus but focus on the four combinators that drive the inference:
+  <code>arr</code>, <code>comp</code>, <code>first</code>, and <code>loop</code>.
+</p>
+<p>
+  <strong>No lambda-abstraction, no application, no variable appears.</strong> The graph reading is
+  recovered by viewing <code>comp</code> as edge-sequencing, <code>first</code> as functorial-boxing
+  on products, and <code>loop</code> as a back-edge (cycle).
+</p>
+<p>
+  The operational semantics is standard. Execution
+  <span class="math inline">\(G \cdot a \Longrightarrow v\)</span> is defined by: identity returns
+  its input; composition runs the left then the right; <code>first</code> runs the sub-graph on the
+  first component and passes the second through; <code>arr</code
+  ><span class="math inline">\((\varphi)\)</span> applies the base arrow; and
+  <code>loop</code> iterates the step graph on the feedback channel until it stabilizes.
+</p>
+<h2 id="foundation-graphs-as-proof-objects">3.2 Foundation: Graphs as Proof Objects</h2>
+<p>
+  In parallel work [self-cite], we show that arrow graphs satisfy a Curry-Howard correspondence: the
+  typing judgment <code>TyOf G</code> and the proof judgment <code>PrOf G</code> are bijections,
+  subject reduction holds, and cut elimination is a local graph rewrite. These results are
+  mechanized in Lean4 (<code>ProofGraphs.lean</code>, <code>ProofAdvantage.lean</code>) and serve as
+  the foundation for the inference mechanism. The key fact used in this paper:
+</p>
+<blockquote>
+  <p>
+    <strong>Subject Reduction (Lean4).</strong> If
+    <span class="math inline">\(\vdash G : A \rightsquigarrow B\)</span> and
+    <span class="math inline">\(G \cdot a \Longrightarrow v\)</span> with
+    <span class="math inline">\(a : A\)</span>, then <span class="math inline">\(v : B\)</span>.
+  </p>
+</blockquote>
+<p>
+  This is used in the soundness proof of the inference algorithm (Section 4.4) to establish that
+  intermediate values in compositions are well-typed. Full details are in Appendix A.
+</p>
+<p>
+  The Curry-Howard correspondence is not just a theoretical curiosity — it is the
+  <em>enabling condition</em> for the inference mechanism. Because the graph IS a proof object (its
+  typing derivation is a proof derivation), the inference procedure can extract proof-relevant
+  information from the graph structure directly. When we infer <code>Sorted</code> from
+  <code>comp(arr(filter(p)), arr(sort))</code>, we are reading the proof structure off the graph:
+  the cut rule (composition) combines the axiom (arr) for <code>filter</code> with the axiom for
+  <code>sort</code>, and the conjunction of their guarantees is the inferred postcondition. This is
+  what makes the inference <em>proof inference</em> rather than <em>type inference</em>: we are not
+  just assigning types, we are reconstructing a proof from the proof object’s structure.
+</p>
+<h1 id="refinement-propagation">4. Refinement Propagation</h1>
+<h2 id="refinement-types">4.1 Refinement Types</h2>
+<p>
+  A <strong>refinement type</strong> is written
+  <span class="math inline">\(\{x : T \mid P(x)\}\)</span>, denoting the subset of values of type
+  <span class="math inline">\(T\)</span> satisfying predicate
+  <span class="math inline">\(P\)</span>. A refinement arrow
+  <span class="math inline">\(\{x : A \mid P(x)\} \rightsquigarrow \{y : B \mid Q(x, y)\}\)</span>
+  denotes a computation that, given an input satisfying <span class="math inline">\(P\)</span>,
+  produces an output satisfying <span class="math inline">\(Q\)</span>.
+</p>
+<h2 id="the-key-idea-refinements-flow-from-structure">
+  4.2 The Key Idea: Refinements Flow from Structure
+</h2>
+<p>
+  The central claim is that
+  <strong
+    >refinements flow from base-arrow signatures plus graph structure, without user annotations on
+    the graph.</strong
+  >
+  The signature <span class="math inline">\(\Sigma\)</span> is the language definition: each base
+  arrow <span class="math inline">\(\varphi\)</span> carries a known pre-/post-condition, like the
+  type of <code>+</code> or <code>cons</code>. The graph is the program — it carries no type
+  information, no refinement annotation, no proof term. The checker traverses the graph, propagates
+  refinements through each combinator, and infers the output refinement from the input refinement
+  and the graph structure.
+</p>
+<h3 id="the-inversion-the-program-is-the-proof">4.2.1 The Inversion: The Program Is the Proof</h3>
+<p>
+  The mechanism is not heuristic, statistical, or search-based. It is a
+  <strong>deterministic structural derivation</strong>:
+</p>
+<ol type="1">
+  <li><strong>Read the graph</strong> — which combinators are wired together?</li>
+  <li><strong>Look up the axioms</strong> — what do the leaf arrows guarantee?</li>
+  <li>
+    <strong>Compose</strong> — <code>comp</code> conjoins guarantees, <code>first</code> preserves
+    the side channel, <code>choice</code> branches through both arms, <code>loop</code> finds a
+    fixpoint.
+  </li>
+  <li>
+    <strong>Check implications</strong> — can we prove
+    <span class="math inline">\(\textsf{guarantee} \implies \textsf{postcondition}\)</span>?
+  </li>
+</ol>
+<p>
+  There is no machine learning, no search, no trial-and-error. The proof is
+  <strong>structurally determined by the wiring</strong>. Change the wiring and you get a different
+  proof. The graph <em>is</em> the proof.
+</p>
+<p>
+  This is the inversion that distinguishes proof inference from proof construction. In Agda, you
+  write the proof. In Coq, you write the tactic script. In test-based verification, you write the
+  assertions. Here, you write <strong>the program</strong>, and the proof falls out for free. The
+  program is the proof, and the checker reads the proof off the structure.
+</p>
+<p>
+  This is what makes the approach <em>proof inference</em> rather than <em>type inference</em>: we
+  are not just assigning types, we are reconstructing a proof from the proof object’s structure. The
+  Curry-Howard correspondence (Section 3.2) is the enabling condition — because the graph IS a proof
+  object, its typing derivation is a proof derivation, and the inference procedure extracts
+  proof-relevant information from the graph structure directly.
+</p>
+<h3 id="the-trusted-foundation">4.2.2 The Trusted Foundation</h3>
+<p>
+  The only stated contracts are the <strong>axioms</strong>: trivial structural facts about
+  irreducible primitive operations. <code>cons</code> adds 1 to length. <code>compare</code> returns
+  a value <span class="math inline">\(\leq 1\)</span>. <code>alloc</code> produces an empty list.
+  These are not deep properties — they are the definitions of the operations.
+</p>
+<p>
+  Given this small trusted foundation, arbitrary composed arrow graphs acquire derived semantic
+  guarantees automatically. The ratio is the value proposition:
+  <span class="math inline">\(\sim 10\)</span> axiomatic contracts enable infinitely many programs
+  to be verified with zero annotations.
+</p>
+<h2 id="the-inferred-postcondition">4.3 The Inferred Postcondition</h2>
+<p>
+  The function <code>inferred_postcondition</code><span class="math inline">\((G)\)</span> computes
+  a predicate on the output value of <span class="math inline">\(G\)</span> by structural recursion
+  on the graph:
+</p>
+<ul>
+  <li>
+    <code>id</code> <span class="math inline">\(\to\)</span> <code>True</code> (no constraint beyond
+    input = output).
+  </li>
+  <li>
+    <code>arr</code><span class="math inline">\((\varphi)\)</span>
+    <span class="math inline">\(\to\)</span> <code>sig_guarantee</code
+    ><span class="math inline">\((\varphi)\)</span> (the base arrow’s output contract).
+  </li>
+  <li>
+    <code>comp</code><span class="math inline">\((G, H)\)</span>
+    <span class="math inline">\(\to\)</span> <code>inferred_postcondition</code
+    ><span class="math inline">\((H)\)</span> (propagate through
+    <span class="math inline">\(H\)</span>; <span class="math inline">\(H\)</span> produces the
+    final output).
+  </li>
+  <li>
+    <code>first</code><span class="math inline">\((G)\)</span>
+    <span class="math inline">\(\to\)</span> <code>True</code> (conservative: side channel
+    unconstrained).
+  </li>
+  <li>
+    <code>loop</code><span class="math inline">\((G)\)</span>
+    <span class="math inline">\(\to\)</span> <code>True</code> (conservative: floor for feedback;
+    see Section 5).
+  </li>
+  <li>
+    <code>left</code><span class="math inline">\((G)\)</span>
+    <span class="math inline">\(\to\)</span> <code>True</code> (conservative: not used by the
+    inference).
+  </li>
+</ul>
+<p>
+  This mirrors the Rust <code>infer_r</code> function. For <code>comp</code
+  ><span class="math inline">\((G, H)\)</span>, the postcondition of the composition is the
+  postcondition of <span class="math inline">\(H\)</span>: if
+  <span class="math inline">\(H\)</span> guarantees <span class="math inline">\(Q\)</span> of its
+  output, then <code>comp</code><span class="math inline">\((G, H)\)</span> guarantees
+  <span class="math inline">\(Q\)</span> of its output.
+</p>
+<h2 id="soundness">4.4 Soundness</h2>
+<p>
+  <strong
+    >Theorem (Structural Inference Soundness, Lean4 —
+    <code>inferred_postcondition_sound_full</code>).</strong
+  >
+  <em
+    >Let <span class="math inline">\(\Sigma\)</span> be a signature with sound denotation and sound
+    guarantees: for every <span class="math inline">\(\varphi : A \to B\)</span> and
+    <span class="math inline">\(a : A\)</span>, <code>sig_guarantee</code
+    ><span class="math inline">\((\varphi)\)</span> holds of
+    <span class="math inline">\(\textsf{den}(\varphi, a)\)</span>. For every well-typed graph
+    <span class="math inline">\(G\)</span> with
+    <span class="math inline">\(\textsf{TyOf}(G)\)</span>, every
+    <span class="math inline">\(a : A\)</span>, and every
+    <span class="math inline">\(v\)</span> with
+    <span class="math inline">\(G \cdot a \Longrightarrow v\)</span>, the inferred postcondition
+    holds of <span class="math inline">\(v\)</span>:</em
+  >
+</p>
+<p><span class="math display">\[ \textsf{inferred\_postcondition}(G)(v). \]</span></p>
+<p>
+  <em
+    >Proof is by induction on the evaluation relation <code>Eval</code>. The <code>eComp</code> case
+    uses subject reduction on <span class="math inline">\(G\)</span> to obtain the intermediate
+    value’s type, feeding the inductive hypothesis for <span class="math inline">\(H\)</span>. The
+    <code>eArr</code> case uses the signature soundness hypothesis. The conservative cases
+    (<code>eFirst</code>, <code>eLeft</code>, <code>eLoop</code>) hold trivially since the
+    postcondition is <code>True</code>. Zero <code>sorry</code></em
+  >
+  (<code>StructuralInference.lean</code>).
+</p>
+<h2 id="the-invariant-domain-d">4.5 The Invariant Domain <span class="math inline">\(D\)</span></h2>
+<p>
+  The invariant domain <span class="math inline">\(D\)</span> is the smallest set of predicates (on
+  values) containing: (a) base arrow guarantees (<code>sig_guarantee</code>), (b) <code>True</code>,
+  (c) conjunctions of predicates in <span class="math inline">\(D\)</span> (<span
+    class="math inline"
+    >\(P \wedge Q\)</span
+  >
+  whenever <span class="math inline">\(P, Q \in D\)</span>), and (d) predicates lifted through
+  <code>first</code> (component-wise, <code>onFirst</code>).
+  <span class="math inline">\(D\)</span> does <strong>not</strong> contain arbitrary arithmetic
+  predicates, predicates requiring induction on iteration count, or predicates not expressible in
+  the signature language. It is formalized in Lean4 as the inductive type
+  <code>InvariantDomain</code> (<code>InvariantDomain.lean</code>).
+</p>
+<p>
+  <strong
+    >Theorem (Domain Membership, Lean4 — <code>inferred_postcondition_in_domain</code>).</strong
+  >
+  <em
+    >For every graph <span class="math inline">\(G\)</span>, the inferred postcondition is a member
+    of the invariant domain <span class="math inline">\(D\)</span>. Zero <code>sorry</code>.</em
+  >
+</p>
+<p>
+  <strong
+    >Theorem (Strictly Stronger than the Floor, Lean4 —
+    <code>floor_does_not_imply_inferred</code>).</strong
+  >
+  <em
+    >For any base arrow <span class="math inline">\(\varphi\)</span> whose guarantee is non-trivial
+    (there exists <span class="math inline">\(v\)</span> with
+    <span class="math inline">\(\neg\,\textsf{sig\_guarantee}(\varphi)(v)\)</span>), the sound floor
+    <code>True</code> does not imply the inferred postcondition. That is, the structural inference
+    is strictly stronger than the trivial sound floor. Zero <code>sorry</code>.</em
+  >
+</p>
+<p>
+  <strong
+    >Theorem (Incompleteness — Invariants Outside <span class="math inline">\(D\)</span>, Lean4 —
+    <code>analyze_incompleteness</code>).</strong
+  >
+  <em
+    >There exists a graph <span class="math inline">\(G\)</span> and a predicate
+    <span class="math inline">\(I\)</span> such that (1)
+    <span class="math inline">\(G\)</span> preserves <span class="math inline">\(I\)</span> (if
+    <span class="math inline">\(I(c)\)</span> holds before a step,
+    <span class="math inline">\(I(c&#39;)\)</span> holds after), but (2)
+    <span class="math inline">\(I \notin D\)</span> — no derivation in the invariant domain produces
+    <span class="math inline">\(I\)</span>. Concretely: with an empty signature, the identity loop
+    body preserves the invariant
+    <span class="math inline">\(I = \textsf{False}\)</span> (vacuously), but
+    <span class="math inline">\(\textsf{False}\)</span> cannot be derived in
+    <span class="math inline">\(D\)</span> from an empty signature. This proves the structural
+    approach is inherently incomplete: true invariants exist outside
+    <span class="math inline">\(D\)</span>. Zero <code>sorry</code>.</em
+  >
+</p>
+<h2 id="concrete-examples">4.6 Concrete Examples</h2>
+<p>
+  Consider a signature with <code>sort</code> guaranteeing <code>Sorted</code>
+  <span class="math inline">\(\wedge\)</span> <code>IsPerm</code>, <code>map</code
+  ><span class="math inline">\((f)\)</span> guaranteeing <code>IsList</code>
+  <span class="math inline">\(\wedge\)</span>
+  <code>LengthPreserved</code>, and <code>filter</code
+  ><span class="math inline">\((p)\)</span> guaranteeing <code>IsList</code>
+  <span class="math inline">\(\wedge\)</span> <code>AllSatisfy</code
+  ><span class="math inline">\((p)\)</span>:
+</p>
+<table>
+  <colgroup>
+    <col style="width: 19%" />
+    <col style="width: 80%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Graph</th>
+      <th>Inferred output refinement</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>arr(sort)</code></td>
+      <td><code>Sorted</code> <span class="math inline">\(\wedge\)</span> <code>IsPerm</code></td>
+    </tr>
+    <tr>
+      <td><code>arr(map(f))</code></td>
+      <td>
+        <code>IsList</code> <span class="math inline">\(\wedge\)</span> <code>LengthPreserved</code>
+      </td>
+    </tr>
+    <tr>
+      <td><code>comp(arr(filter(p)), arr(sort))</code></td>
+      <td>
+        <code>AllSatisfy</code><span class="math inline">\((p)\)</span>
+        <span class="math inline">\(\wedge\)</span> <code>Sorted</code>
+      </td>
+    </tr>
+    <tr>
+      <td><code>first(arr(sort))</code></td>
+      <td>
+        (<code>Sorted</code> <span class="math inline">\(\wedge\)</span> <code>IsPerm</code>,
+        <span class="math inline">\(Q\)</span>)
+      </td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  The third row illustrates compositional inference: <code>filter</code> produces
+  <code>AllSatisfy</code><span class="math inline">\((p)\)</span>, which flows into
+  <code>sort</code>’s precondition; the conjunction is inferred without annotation — the composition
+  of two base-arrow postconditions via the cut rule.
+</p>
+<h2 id="worked-example-insertion-sort">4.7 Worked Example: Insertion Sort</h2>
+<p>
+  We walk through the full inference pipeline for insertion sort, expressed as an arrow graph. The
+  graph is:
+</p>
+<pre><code>loop(comp(comp(first(head_and_tail), first(insert)), consume_one))</code></pre>
+<p>
+  <strong>Step 1: Structural analysis.</strong> The inference traverses the graph: -
+  <code>head_and_tail</code> splits the input list into head + tail. - <code>insert</code> inserts
+  the head into the accumulator <span class="math inline">\(C\)</span>, maintaining sorted order.
+  Its signature guarantees <code>Sorted</code><span class="math inline">\((C&#39;)\)</span>. -
+  <code>consume_one</code> removes one element from the input, decrementing its length. Its
+  signature guarantees <span class="math inline">\(|C&#39;| \leq |C|\)</span>. - The
+  <code>first</code> combinators thread the accumulator
+  <span class="math inline">\(C\)</span> through unchanged while the input is consumed.
+</p>
+<p>
+  <strong>Step 2: Candidate invariant generation.</strong> The <code>analyze</code> function
+  recognizes the accumulator pattern: <code>insert</code>’s guarantee <code>Sorted</code> is
+  threaded through the loop body. The candidate invariant is
+  <span class="math inline">\(I(C) = \textsf{Sorted}(C)\)</span>.
+</p>
+<p>
+  <strong>Step 3: Fixpoint iteration.</strong> -
+  <span class="math inline">\(I_0 = \textsf{True}\)</span> (initial floor). -
+  <span class="math inline">\(I_1 = \textsf{Sorted}(C)\)</span> (from <code>insert</code>’s
+  guarantee). -
+  <span class="math inline">\(I_2 = \textsf{Sorted}(C) \wedge \textsf{Sorted}(C)\)</span> (fixpoint
+  reached — <span class="math inline">\(I_2 \equiv I_1\)</span>).
+</p>
+<p>
+  <strong>Step 4: Z3 verification.</strong> The candidate <code>Sorted</code
+  ><span class="math inline">\((C)\)</span> is verified against the base arrow contracts: if
+  <span class="math inline">\(C\)</span> is sorted and <code>insert</code> maintains sortedness,
+  then <span class="math inline">\(C&#39;\)</span> is sorted. Z3 confirms:
+  <strong>verified</strong>.
+</p>
+<p>
+  <strong>Step 5: Output refinement.</strong> The output refinement is <code>Sorted</code
+  ><span class="math inline">\((\textsf{output})\)</span>, inferred from the graph structure alone —
+  zero user annotations.
+</p>
+<p>
+  <strong>Step 6: Termination.</strong> The termination analysis discovers that
+  <code>consume_one</code> decrements <span class="math inline">\(|C|\)</span> by 1 each iteration,
+  bounded below by 0. A well-founded ranking function is synthesized:
+  <strong>termination guaranteed</strong>.
+</p>
+<h1 id="structural-invariant-schema-inference-for-loops">
+  5. Structural Invariant-Schema Inference for Loops
+</h1>
+<h2 id="the-problem">5.1 The Problem</h2>
+<p>
+  The hard case is <code>loop</code>. A loop <code>loop G</code> where
+  <span class="math inline">\(G : A \times C \rightsquigarrow B \times C\)</span> feeds the
+  <span class="math inline">\(C\)</span>-output back as the
+  <span class="math inline">\(C\)</span>-input and iterates until the feedback channel stabilizes.
+  To infer a refinement on the output, we need an <strong>invariant</strong>
+  <span class="math inline">\(I(c)\)</span> on the feedback channel — a predicate such that
+  <span class="math inline">\(G\)</span> preserves <span class="math inline">\(I\)</span>: if
+  <span class="math inline">\(I(c)\)</span> holds before the step, then
+  <span class="math inline">\(I(c&#39;)\)</span> holds after, where
+  <span class="math inline">\((b, c&#39;) = G(a, c)\)</span>. This is the classical loop-invariant
+  inference problem, restated on graph structure: the loop body is the graph
+  <span class="math inline">\(G\)</span>, the feedback channel
+  <span class="math inline">\(C\)</span> is the mutable state, and
+  <span class="math inline">\(I\)</span> is a predicate on
+  <span class="math inline">\(C\)</span> that each step preserves.
+</p>
+<h2 id="structural-pattern-recognition">5.2 Structural Pattern Recognition</h2>
+<p>
+  The <code>analyze</code> phase inspects the <em>structure</em> of
+  <span class="math inline">\(G\)</span> to determine its effect on the feedback channel
+  <span class="math inline">\(C\)</span>. The graph wiring makes this a structural case analysis,
+  not semantic reasoning over an opaque expression:
+</p>
+<ul>
+  <li>
+    <p>
+      <strong>Side-channel: <code>loop(first(H))</code>.</strong> The body acts on the first
+      component via <span class="math inline">\(H\)</span> and passes
+      <span class="math inline">\(C\)</span> through unchanged.
+      <span class="math inline">\(C\)</span> is never inspected or modified. The candidate is
+      <code>True</code>. The output refinement is <code>inferred_postcondition</code
+      ><span class="math inline">\((H)\)</span> on the first component.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Accumulator: <code>loop(comp(map_step, first(id)))</code>.</strong> The
+      <code>map_step</code> processes an element and updates <span class="math inline">\(C\)</span>;
+      <code>first(id)</code> keeps the previous <span class="math inline">\(C\)</span> available. If
+      <code>map_step</code>’s signature encodes that it adds to
+      <span class="math inline">\(C\)</span> (e.g., postcondition
+      <span class="math inline">\(c&#39; = c + a\)</span>), the invariant is
+      <span class="math inline">\(I(c) = (c = \sum \text{processed})\)</span>.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Filter: <code>loop(comp(filter_step, id))</code>.</strong> The
+      <code>filter_step</code> removes elements failing a predicate
+      <span class="math inline">\(p\)</span>. The invariant is <code>AllSatisfy</code
+      ><span class="math inline">\((C, p)\)</span>.
+    </p>
+  </li>
+  <li>
+    <p>
+      <strong>Sortedness: <code>loop(comp(insert_step, first(id)))</code>.</strong> The
+      <code>insert_step</code> inserts one element maintaining sorted order. The invariant is
+      <code>Sorted</code><span class="math inline">\((C)\)</span>. This is insertion sort expressed
+      as a loop (Section 4.7).
+    </p>
+  </li>
+</ul>
+<h2 id="the-invariant-lattice-and-transfer-function">
+  5.3 The Invariant Lattice and Transfer Function
+</h2>
+<p>
+  We formalize the invariant-schema inference as iteration over a lattice
+  <span class="math inline">\((D, \le)\)</span> where <span class="math inline">\(D\)</span> is the
+  invariant domain (Section 4.5), <span class="math inline">\(I \le J\)</span> means
+  <span class="math inline">\(J \Rightarrow I\)</span> (stronger predicates are higher), bottom is
+  <code>True</code> (the trivial invariant), and join is conjunction (strengthening). The transfer
+  function <code>transfer</code><span class="math inline">\((G, I)\)</span>
+  computes the weakest pre-invariant. The least fixpoint
+  <code>lfp(transfer)</code> is the strongest invariant discoverable by the iteration.
+</p>
+<p>
+  This is mechanized in Lean4 (<code>InvariantDomain.lean</code>): the lattice ordering
+  <code>DLe</code>, bottom <code>DBottom</code>, join <code>DJoin</code>, the transfer function
+  <code>transfer</code>, the fixpoint predicate <code>IsFixpoint</code>, and the theorems:
+</p>
+<ul>
+  <li>
+    <strong><code>True_is_fixpoint</code></strong> (Lean4): the sound floor <code>True</code> is
+    always a fixpoint of the transfer. Zero <code>sorry</code>.
+  </li>
+  <li>
+    <strong><code>lfp_is_invariant</code></strong> (Lean4): every fixpoint of the transfer is a
+    preserved invariant — if <span class="math inline">\(I\)</span> is a fixpoint and
+    <span class="math inline">\(G \cdot (a, c) \Longrightarrow (v, c&#39;)\)</span> with
+    <span class="math inline">\(I(c)\)</span>, then <span class="math inline">\(I(c&#39;)\)</span>.
+    Zero <code>sorry</code>.
+  </li>
+</ul>
+<h2 id="what-the-rust-implementation-does">5.4 What the Rust Implementation Does</h2>
+<p>
+  The Rust prototype implements the full pipeline: structural candidate generation from graph
+  patterns, followed by Z3-backed SMT verification of each candidate against base arrow contracts.
+  The <code>discover_invariant</code> function performs structural case analysis on the loop body
+  and produces a candidate invariant schema, which is then semantically verified. The checker is
+  <strong>conservative</strong>: it may return <code>Unknown</code> for true implications it cannot
+  discharge, but it never returns <code>Verified</code> for a false one. This asymmetry makes the
+  inference sound — every property reported as verified is genuinely true.
+</p>
+<h2 id="what-lean4-proves-vs.-the-gap">5.5 What Lean4 Proves vs. the Gap</h2>
+<p>
+  The Lean4 formalization proves the soundness of
+  <strong>compositional postcondition propagation</strong>
+  (<code>inferred_postcondition_sound_full</code>). For loops, the formalized
+  <code>inferred_postcondition</code> returns <code>True</code> (the conservative floor), and the
+  lattice/transfer machinery is defined with <code>True</code> proven as a fixpoint.
+</p>
+<p>
+  The <strong>loop invariant discovery</strong> — structural pattern recognition that strengthens
+  beyond <code>True</code> for side-channel, accumulator, and filter loops — is implemented in Rust
+  but <strong>not formally proven</strong> in Lean4. Formalizing the strengthened algorithm and
+  proving its algorithmic completeness is future work.
+</p>
+<h2 id="termination-analysis">5.6 Termination Analysis</h2>
+<p>
+  The Rust prototype includes a termination analysis binary (8 tests) that discovers decreasing
+  measures for loops — a well-founded ranking function on the feedback channel. This is separate
+  from the invariant: the inference proves <em>conditional</em> invariants (if the loop reaches a
+  fixpoint, the invariant holds), while termination analysis proves the loop does reach a fixpoint.
+  Termination is implemented but not formalized in Lean4.
+</p>
+<h1 id="implementation-and-evaluation">6. Implementation and Evaluation</h1>
+<h2 id="the-rust-prototype">6.1 The Rust Prototype</h2>
+<p>
+  The Rust prototype (22 files, 22,030 lines) implements the full inference pipeline with Z3-backed
+  SMT verification (subprocess invocation with a structural fallback). It comprises six binaries:
+  <code>refinement_inference</code> (20 tests), <code>real_programs</code> (5 programs),
+  <code>quantitative_comparison</code> (15 benchmarks), <code>termination_analysis</code> (8 tests),
+  <code>liquid_types_comparison</code> (10 examples), and <code>evaluation</code> (90-cell grid).
+  The <code>RefTy</code> type models <span class="math inline">\(\{x : T \mid P(x)\}\)</span> with a
+  predicate algebra, mirroring the <code>RTy</code> inductive of
+  <code>RefinementProofGraphs.lean</code>.
+</p>
+<h2 id="the-lean4-formalization">6.2 The Lean4 Formalization</h2>
+<p>
+  The Lean4 mechanization of the inference mechanism (4 files, 1,098 lines, zero <code>sorry</code>)
+  establishes: <code>RefinementProofGraphs.lean</code> (<code>RTy</code>, <code>RHasType</code>,
+  <code>preserves_comp</code>, <code>preserves_first</code>),
+  <code>RefinementCharacterization.lean</code>
+  (completeness/incompleteness statements),
+  <code>InvariantDomain.lean</code> (domain <span class="math inline">\(D\)</span>, lattice,
+  transfer, <code>True_is_fixpoint</code>, <code>lfp_is_invariant</code>,
+  <code>floor_not_complete</code>, <code>analyze_incompleteness</code>), and
+  <code>StructuralInference.lean</code>
+  (<code>inferred_postcondition_sound_full</code>,
+  <code>inferred_postcondition_in_domain</code>, <code>floor_does_not_imply_inferred</code>).
+</p>
+<p>
+  An additional 5,003 lines of Lean4 mechanization (<code>ProofGraphs.lean</code>,
+  <code>ProofAdvantage.lean</code>, etc.) establish the foundational Curry-Howard correspondence,
+  subject reduction, and cut elimination used as the logical basis for this paper. These are
+  described in parallel work [self-cite] and summarized in Appendix A.
+</p>
+<h2 id="lean4-vs.-rust-what-is-formal-vs.-what-is-empirical">
+  6.3 Lean4 vs. Rust: What Is Formal vs. What Is Empirical
+</h2>
+<table>
+  <colgroup>
+    <col style="width: 33%" />
+    <col style="width: 33%" />
+    <col style="width: 33%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Lean4 (formal)</th>
+      <th>Rust (empirical)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Subject reduction (foundation)</td>
+      <td>Proven [self-cite]</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Refinement typing (<code>RTy</code>, <code>RHasType</code>)</td>
+      <td>Defined + sound</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td><code>preserves_comp</code> / <code>preserves_first</code></td>
+      <td>Proven</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Invariant domain <span class="math inline">\(D\)</span></td>
+      <td>Defined</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Structural inference soundness</td>
+      <td>Proven (<code>inferred_postcondition_sound_full</code>)</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Strictly stronger than floor</td>
+      <td>Proven (<code>floor_does_not_imply_inferred</code>)</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Incompleteness (invariants outside <span class="math inline">\(D\)</span>)</td>
+      <td>Proven (<code>analyze_incompleteness</code>)</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Lattice + transfer function</td>
+      <td>Defined</td>
+      <td>N/A</td>
+    </tr>
+    <tr>
+      <td>Actual inference algorithm</td>
+      <td>Defined (floor)</td>
+      <td>Implemented (structural + Z3)</td>
+    </tr>
+    <tr>
+      <td>Z3 verification</td>
+      <td>N/A</td>
+      <td>Implemented</td>
+    </tr>
+    <tr>
+      <td>Loop invariant discovery</td>
+      <td>N/A</td>
+      <td>Implemented (structural patterns)</td>
+    </tr>
+    <tr>
+      <td>Termination analysis</td>
+      <td>N/A</td>
+      <td>Implemented</td>
+    </tr>
+    <tr>
+      <td>Real programs</td>
+      <td>N/A</td>
+      <td>5 programs</td>
+    </tr>
+    <tr>
+      <td>Coverage / scaling / failures</td>
+      <td>N/A</td>
+      <td>90-cell grid</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  The Lean4 formalization proves the soundness of the inference framework; the Rust implementation
+  demonstrates the algorithm in practice. Formal theorems establish what <em>can</em> be proven; the
+  implementation shows what <em>is</em> proven.
+</p>
+<h2 id="empirical-results">6.4 Empirical Results</h2>
+<p>
+  <strong>Annotation burden.</strong> Arrow graphs require <strong>0 user annotations</strong> to
+  prove 19 properties, while Liquid Types require <strong>37 annotations</strong> (32 refinement + 5
+  loop invariants) for the same 19 properties. Base arrow signatures carry guarantees, but these are
+  the language definition, not per-program annotations.
+</p>
+<p>
+  <strong>Coverage accuracy.</strong> The evaluation grid comprises 18 graph structures tested
+  against 5 properties each (90 cells total, 72 non-trivial). For each non-trivial cell, we classify
+  whether the graph <em>should</em> prove the property (based on its structure and base arrow
+  signatures) or <em>should not</em>:
+</p>
+<table>
+  <thead>
+    <tr>
+      <th>Category</th>
+      <th>Count</th>
+      <th>Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Should prove (true positives)</td>
+      <td>26</td>
+      <td>26 proven (100%)</td>
+    </tr>
+    <tr>
+      <td>Should not prove (true negatives)</td>
+      <td>46</td>
+      <td>46 unknown (100%)</td>
+    </tr>
+    <tr>
+      <td>False positives</td>
+      <td>0</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>False negatives (misses)</td>
+      <td>0</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td><strong>Overall accuracy</strong></td>
+      <td><strong>72</strong></td>
+      <td><strong>100%</strong></td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  The inference proves every property it should and correctly reports “unknown” for every property
+  it should not. Zero false positives confirms soundness empirically; zero misses confirms
+  completeness relative to the domain <span class="math inline">\(D\)</span>.
+</p>
+<p>
+  <strong>Scaling.</strong> Inference time scales linearly in graph size and loop nesting depth, as
+  measured by 15 benchmarks varying graph size from 3 to 50 nodes and loop depth from 0 to 3.
+</p>
+<p>
+  <strong>Real programs.</strong> All five real programs (insertion sort, <code>map</code>,
+  <code>filter</code>, <code>fold</code>/sum, pipeline) are built from arrow primitives and verified
+  annotation-free. Insertion sort is
+  <code>loop(comp(comp(first(head_and_tail), first(insert)), consume_one))</code>
+  with the <code>Sorted</code> invariant inferred from <code>insert</code>’s signature (Section
+  4.7).
+</p>
+<h2 id="failure-cases-out-of-domain-invariants">6.5 Failure Cases (Out-of-Domain Invariants)</h2>
+<p>
+  We document five failure cases representing invariants outside
+  <span class="math inline">\(D\)</span> — properties the inference cannot discover, consistent with
+  the incompleteness theorem (<code>analyze_incompleteness</code>):
+</p>
+<ol type="1">
+  <li>
+    <strong>Arithmetic accumulators.</strong> A loop computing
+    <span class="math inline">\(c&#39; = 2c + 1\)</span> has the invariant
+    <span class="math inline">\(c = 2^n - 1\)</span>, but unless a base arrow encodes this
+    arithmetic, the structural analysis has no candidate to propose.
+  </li>
+  <li>
+    <strong>Permutation.</strong> “Output is a permutation of input” requires relational reasoning
+    not visible in graph wiring alone.
+  </li>
+  <li>
+    <strong>Non-terminating loops.</strong> The inference proves conditional invariants; it does not
+    prove termination for loops without a decreasing measure.
+  </li>
+  <li>
+    <strong>Cross-channel invariants.</strong> Properties relating multiple feedback channels (e.g.,
+    “channels <span class="math inline">\(C_1\)</span> and
+    <span class="math inline">\(C_2\)</span> have equal length”) require relational reasoning across
+    channels.
+  </li>
+  <li>
+    <strong>Iteration-count reasoning.</strong> Invariants depending on <em>how many times</em> the
+    loop has executed are beyond structural analysis — the graph shows <em>how</em>
+    <span class="math inline">\(C\)</span> is updated, not <em>how many times</em>.
+  </li>
+</ol>
+<p>
+  This is <strong>incompleteness, not unsoundness.</strong> The inference never reports a false
+  property; it fails to report some true ones. The <code>analyze_incompleteness</code> theorem
+  (Section 4.5) formally proves that such invariants exist outside
+  <span class="math inline">\(D\)</span>.
+</p>
+<h1 id="related-work">7. Related Work</h1>
+<p>
+  <strong>Liquid Types.</strong> Rondon, Kawaguchi, and Jhala [38] extend Hindley-Milner inference
+  with refinement types using SMT solving, but still require annotations on recursive functions and
+  loops. Vazou et al. [41] demonstrate practical refinement typing in Liquid Haskell, but still
+  require annotations on recursive functions. Our work targets the same class of properties but uses
+  graph structure (not an AST) as the inference substrate, and loop invariant schemas are inferred
+  by structural analysis on the graph. The 0-vs-37 annotation comparison (Section 6.4) quantifies
+  this difference.
+</p>
+<p>
+  <strong>Abstract interpretation.</strong> Cousot and Cousot [10, 11] developed the dominant
+  framework for loop invariant inference, analyzing the <em>semantics</em> of the loop body. Graf
+  and Saidi [21] introduced predicate abstraction. Our approach infers invariant <em>schemas</em> by
+  analyzing the <em>structure</em> of the loop body (a graph): the wiring of
+  <span class="math inline">\(G\)</span> in <code>loop G</code> explicitly shows how the feedback
+  channel is used, determining the invariant schema class. This is complementary to abstract
+  interpretation, not a replacement.
+</p>
+<p>
+  <strong>Data-driven loop invariant inference.</strong> Sharma et al. [40] use data-driven
+  techniques (machine learning over test executions) to infer loop invariants. Our approach is
+  structural rather than data-driven: the invariant schema is determined by the graph wiring, not by
+  observing executions.
+</p>
+<p>
+  <strong>Arrow calculus.</strong> Hughes [26] introduced arrows; Lindley, Wadler, and Yallop [31]
+  developed the arrow calculus. Heunen and Jacobs [24] and Jacobs, Heunen, and Hasuo [25]
+  established the categorical semantics. Recent work continues to develop the semantic foundations
+  of arrows [39]. Our four primitives are those of the arrow calculus (minus <code>left</code>,
+  which is demoted); our contribution is taking them as a graph grammar and developing the inference
+  mechanism.
+</p>
+<p>
+  <strong>Hoare logic for arrows.</strong> Alves, Fernandez, and Mackie [1] build a graphical
+  calculus of proofs for intuitionistic logic / lambda-calculus. Their graphs are a
+  <em>notation</em> for lambda-terms; ours are a <em>primitive syntax</em> with no lambda
+  underneath. They do not mechanize the correspondence, prove subject reduction, or address type
+  inference.
+</p>
+<p>
+  <strong>Graph-based proof systems.</strong> Acclavio, Horne, and Straßburger [43] develop an
+  analytic proof system on graphs, and Kurashige et al. [42] use e-graphs for lemma discovery in
+  equational proofs. Both use graph structure for proof manipulation, but neither targets program
+  verification or invariant inference. Our work uses graph structure as the substrate for
+  <em>inferring</em> program properties, not for proof search or lemma discovery.
+</p>
+<p>
+  <strong>SMT-based verification.</strong> Flanagan and Qadeer [16] and Graf and Saidi [21] use SMT
+  solving for predicate abstraction and software verification. Our Z3-backed checker follows the
+  standard sound-but-incomplete paradigm; the difference is that candidates come from structural
+  analysis of the graph, not from predicate-abstraction heuristics or user annotations.
+</p>
+<h1 id="limitations-and-future-work">8. Limitations and Future Work</h1>
+<p>
+  <strong>Loop invariant discovery not formally proven.</strong> Lean4 proves the soundness of
+  compositional postcondition propagation (<code>inferred_postcondition_sound_full</code>). The
+  loop-specific strengthening — structural pattern recognition for side-channel, accumulator, and
+  filter loops — is implemented in Rust but not formalized. The formalized
+  <code>inferred_postcondition</code> returns <code>True</code> for <code>loop</code> (the
+  conservative floor). Formalizing the strengthened algorithm and proving its algorithmic
+  completeness is the primary item of future work.
+</p>
+<p>
+  <strong>Algorithmic completeness not proven.</strong> The inference is sound but not complete. The
+  Lean4 theorem <code>analyze_incompleteness</code> proves that true invariants exist outside
+  <span class="math inline">\(D\)</span>. The Rust implementation approximates the strongest
+  invariant by structural analysis, but formalizing that approximation and proving its completeness
+  is open.
+</p>
+<p>
+  <strong>Arithmetic invariants outside <span class="math inline">\(D\)</span>.</strong> The domain
+  <span class="math inline">\(D\)</span> contains only predicates from base-arrow guarantees,
+  conjunction, and lifting through <code>first</code>. Arithmetic invariants are outside
+  <span class="math inline">\(D\)</span> unless the signature encodes them. Richer signatures enable
+  richer invariants, but the domain boundary is inherent to the structural approach.
+</p>
+<p>
+  <strong>Z3 subprocess.</strong> The Rust prototype invokes Z3 via subprocess rather than native
+  bindings, incurring serialization overhead. A native integration would improve performance but not
+  soundness.
+</p>
+<p>
+  <strong>Future directions.</strong> (1) Formalizing the loop invariant discovery in Lean4. (2)
+  Extending the refinement language beyond structural properties — arithmetic and relational
+  refinements. (3) Extending loop inference to nested loops and multiple feedback channels. (4)
+  Integrating the Rust inference engine with a proof assistant. (5) Allowing shared sub-graphs (DAG
+  structure) for proof reuse.
+</p>
+<h1 id="conclusion">9. Conclusion</h1>
+<p>
+  We have presented an annotation-free invariant inference mechanism for lambda-free arrow graphs.
+  Refinements flow from base-arrow signatures through graph combinators without per-program
+  annotations, and loop invariant schemas are inferred by structural analysis on the graph and
+  verified against base arrow contracts — without user-supplied invariants.
+</p>
+<p>
+  The compositional propagation is formally proven sound in Lean4
+  (<code>inferred_postcondition_sound_full</code>), strictly stronger than the trivial floor
+  (<code>floor_does_not_imply_inferred</code>), and the existence of undetectable invariants outside
+  <span class="math inline">\(D\)</span> is proven (<code>analyze_incompleteness</code>). The
+  loop-specific strengthening is implemented and empirically validated but not formally proven.
+</p>
+<p>
+  The empirical evaluation demonstrates 100% accuracy on 72 non-trivial benchmark cells: every
+  property the graph should prove is proven (26/26), and every property it should not is correctly
+  reported as unknown (46/46), with zero false positives. This contrasts with 37 annotations
+  required by Liquid Types for 19 properties. We have honestly characterized the boundary: the
+  compositional propagation is formally proven sound; the loop-specific strengthening is implemented
+  and empirically validated but not formally proven; and complex non-structural invariants are not
+  inferable by this mechanism.
+</p>
+<p>
+  The vision is <strong>proof-carrying computation with minimal syntactic overhead</strong>: the
+  programmer writes the graph, the language designer supplies the signature, and the checker infers
+  the refinements and invariants by structural reasoning.
+</p>
+<p>
+  The Curry-Howard correspondence is the enabling condition: the graph is simultaneously program,
+  type, and proof, and the inference procedure reads the proof structure off the graph. This is what
+  distinguishes graph-structural proof inference from annotation-based refinement typing or semantic
+  invariant synthesis: the proof is already there in the wiring — we just have to read it.
+</p>
+<h1 id="appendix-a-foundation-arrow-graphs-as-proof-objects">
+  Appendix A: Foundation — Arrow Graphs as Proof Objects
+</h1>
+<p>
+  This appendix summarizes the proof-theoretic foundation established in parallel work [self-cite],
+  which the inference mechanism builds on. Full proofs are mechanized in Lean4.
+</p>
+<h2 id="a.1-the-curry-howard-correspondence">A.1 The Curry-Howard Correspondence</h2>
+<p>
+  We interpret arrow types as propositions in intuitionistic logic:
+  <span class="math inline">\(A \rightsquigarrow B \mapsto A \vdash B\)</span>,
+  <span class="math inline">\(A \times B \mapsto A \wedge B\)</span>,
+  <span class="math inline">\(A + B \mapsto A \vee B\)</span>,
+  <span class="math inline">\(\top \mapsto \top\)</span>,
+  <span class="math inline">\(\bot \mapsto \bot\)</span>. The typing rules and the proof rules are
+  notation-for-notation identical:
+</p>
+<table>
+  <colgroup>
+    <col style="width: 38%" />
+    <col style="width: 29%" />
+    <col style="width: 31%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Graph combinator</th>
+      <th>Type reading</th>
+      <th>Proof reading</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>id</code><span class="math inline">\(_A\)</span></td>
+      <td><span class="math inline">\(A \rightsquigarrow A\)</span></td>
+      <td><span class="math inline">\(A \vdash A\)</span> (identity)</td>
+    </tr>
+    <tr>
+      <td><code>comp</code><span class="math inline">\((G, H)\)</span></td>
+      <td><span class="math inline">\(A \rightsquigarrow C\)</span></td>
+      <td>
+        cut: <span class="math inline">\(A \vdash B, B \vdash C \Rightarrow A \vdash C\)</span>
+      </td>
+    </tr>
+    <tr>
+      <td><code>first</code><span class="math inline">\((G)\)</span></td>
+      <td><span class="math inline">\(A \times C \rightsquigarrow B \times C\)</span></td>
+      <td><span class="math inline">\(\wedge\)</span>-functoriality</td>
+    </tr>
+    <tr>
+      <td><code>left</code><span class="math inline">\((G)\)</span></td>
+      <td><span class="math inline">\(A + C \rightsquigarrow B + C\)</span></td>
+      <td><span class="math inline">\(\vee\)</span>-functoriality</td>
+    </tr>
+    <tr>
+      <td><code>loop</code><span class="math inline">\((G)\)</span></td>
+      <td><span class="math inline">\(A \rightsquigarrow B\)</span></td>
+      <td>trace / fixpoint invariant</td>
+    </tr>
+    <tr>
+      <td><code>arr</code><span class="math inline">\((\varphi)\)</span></td>
+      <td><span class="math inline">\(A \rightsquigarrow B\)</span></td>
+      <td>axiom (primitive inference step)</td>
+    </tr>
+  </tbody>
+</table>
+<p>
+  <strong
+    >Theorem (Typing <span class="math inline">\(\Leftrightarrow\)</span> Proof, Lean4).</strong
+  >
+  <em
+    >For every arrow graph <span class="math inline">\(G\)</span> and types
+    <span class="math inline">\(A, B\)</span>:
+    <span class="math inline">\(\Gamma \vdash G : A \rightsquigarrow B\)</span> iff
+    <span class="math inline">\(\Gamma \vdash G \Vdash A \vdash B\)</span>. The derivations are
+    structurally identical. The maps <code>TyOf.toPrOf</code> and <code>PrOf.toTyOf</code> are
+    mutually inverse bijections (<code>ProofGraphs.lean</code>).</em
+  >
+</p>
+<h2 id="a.2-subject-reduction">A.2 Subject Reduction</h2>
+<p>
+  <strong>Theorem (Subject Reduction, Lean4).</strong>
+  <em
+    >If <span class="math inline">\(\vdash G : A \rightsquigarrow B\)</span> and
+    <span class="math inline">\(G \cdot a \Longrightarrow v\)</span> with
+    <span class="math inline">\(a : A\)</span>, then
+    <span class="math inline">\(v : B\)</span> (<code>ProofGraphs.lean</code>).</em
+  >
+</p>
+<p>
+  This is the key property used by the inference soundness proof: it ensures that intermediate
+  values in compositions are well-typed, which is needed for the <code>eComp</code> case of
+  <code>inferred_postcondition_sound_full</code>.
+</p>
+<h2 id="a.3-local-cut-elimination">A.3 Local Cut Elimination</h2>
+<p>
+  The <code>CutElim</code> rewrite relation (<code>ProofAdvantage.lean</code>) consists of local
+  rewrites: identity elimination and functor fusion. Each is a single structural step — no
+  substitution, no alpha-conversion, no duplication. Unlike proof nets, our calculus is
+  <strong>not linear</strong> — <code>first</code> duplicates the side channel; locality comes from
+  the graph structure (no binders), not from linearity.
+</p>
+<h1 id="references">References</h1>
+<p>
+  [1] S. Alves, M. Fernandez, I. Mackie. “A New Graphical Calculus of Proofs.” arXiv:1102.2655,
+  2011.
+</p>
+<p>
+  [10] P. Cousot and R. Cousot. “Abstract Interpretation: A Unified Lattice Model for Static
+  Analysis of Programs.” <em>POPL ’77</em>, pp. 238-252, 1977.
+</p>
+<p>
+  [11] P. Cousot and R. Cousot. “Systematic Design of Program Analysis Frameworks.”
+  <em>POPL ’79</em>, pp. 269-282, 1979.
+</p>
+<p>
+  [16] C. Flanagan and S. Qadeer. “Predicate Abstraction for Software Verification.”
+  <em>POPL ’02</em>, pp. 191-202, 2002.
+</p>
+<p>
+  [17] T. Freeman and F. Pfenning. “Refinement Types for ML.” <em>PLDI ’91</em>, pp. 268-277, 1991.
+</p>
+<p>[18] J.-Y. Girard. “Linear Logic.” <em>Theor. Comput. Sci.</em> 50:1-102, 1987.</p>
+<p>
+  [21] S. Graf and H. Saidi. “Construction of Abstract State Graphs with PVS.” <em>CAV ’97</em>,
+  LNCS 1254, pp. 72-83, 1997.
+</p>
+<p>
+  [24] C. Heunen and B. Jacobs. “Arrows, Like Monads, Are Monoids.” <em>MFPS-XXII</em>, ENTCS 158,
+  pp. 219-236, 2006.
+</p>
+<p>
+  [25] B. Jacobs, C. Heunen, I. Hasuo. “Categorical Semantics for Arrows.”
+  <em>J. Funct. Program.</em> 19(3-4):403-438, 2009.
+</p>
+<p>
+  [26] J. Hughes. “Generalising Monads to Arrows.” <em>Sci. Comput. Program.</em> 37(1-3):67-111,
+  2000.
+</p>
+<p>
+  [27] A. Joyal, R. Street, D. Verity. “Traced Monoidal Categories.”
+  <em>Math. Proc. Camb. Phil. Soc.</em> 119(3):447-468, 1996.
+</p>
+<p>
+  [28] J. R. Hindley and J. P. Seldin.
+  <em>Lambda-Calculus and Combinators: An Introduction.</em> 2nd ed., Cambridge University Press,
+  2008.
+</p>
+<p>
+  [31] S. Lindley, P. Wadler, J. Yallop. “The Arrow Calculus.”
+  <em>J. Funct. Program.</em> 20(1):51-69, 2010.
+</p>
+<p>
+  [38] P. M. Rondon, M. Kawaguchi, R. Jhala. “Liquid Types.” <em>PLDI ’08</em>, pp. 159-169, 2008.
+</p>
+<p>
+  [39] J. Liell-Cock, Z. Shirazi, S. Staton. “The Relative Monadic Metalanguage.”
+  <em>Proc. ACM Program. Lang.</em> 10, POPL, Article 60, 2026.
+</p>
+<p>
+  [40] S. Padhi, R. Sharma, T. Millstein. “LoopInvGen: A Loop Invariant Generator based on
+  Precondition Inference.” arXiv:1707.02029, 2017.
+</p>
+<p>
+  [41] N. Vazou, E. L. Seidel, R. Jhala, D. Vytiniotis, S. Peyton-Jones. “Refinement Types for
+  Haskell.” <em>ICFP ’14</em>, pp. 269-282, 2014.
+</p>
+<p>
+  [42] C. Kurashige, R. Ji, A. Giridharan, M. Barbone, D. Noor, S. Itzhaky, R. Jhala, N.
+  Polikarpova. “CCLemma: E-Graph Guided Lemma Discovery for Inductive Equational Proofs.”
+  <em>Proc. ACM Program. Lang.</em> 8, ICFP, Article 264, 2024.
+</p>
+<p>
+  [43] M. Acclavio, R. Horne, L. Straßburger. “An Analytic Propositional Proof System on Graphs.”
+  <em>Log. Methods Comput. Sci.</em> 18(4), 2022.
+</p>

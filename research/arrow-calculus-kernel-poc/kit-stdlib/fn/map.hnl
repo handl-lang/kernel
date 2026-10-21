@@ -1,0 +1,2 @@
+-- map: apply f across a list (delegates to the list.map primitive).
+map = f ~> arr("list.map")

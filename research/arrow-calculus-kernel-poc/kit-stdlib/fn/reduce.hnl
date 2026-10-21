@@ -1,0 +1,2 @@
+-- reduce: fold a list with f starting from init.
+reduce = [f, init] ~> arr("list.reduce")

@@ -1,0 +1,8 @@
+-- pipeline: compose map, filter, and sort into a single arrow.
+import map from "fn/map"
+import filter from "fn/filter"
+import sort from "data/sort"
+import double from "fn/double"
+import is_even from "fn/is_even"
+
+main = map(double) >>> filter(is_even) >>> sort

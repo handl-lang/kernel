@@ -1,0 +1,5 @@
+-- Insertion step: compare then choose cons.
+import compare from "data/atoms"
+import cons from "data/atoms"
+
+insert = loop(compare >>> choice(cons))

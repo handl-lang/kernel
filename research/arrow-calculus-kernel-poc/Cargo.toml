@@ -1,0 +1,172 @@
+[workspace]
+
+[package]
+name = "arrow-calculus-poc"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "main"
+path = "src/main.rs"
+
+[[bin]]
+name = "recursion"
+path = "src/recursion_tests.rs"
+
+[[bin]]
+name = "higher_order"
+path = "src/higher_order_tests.rs"
+
+[[bin]]
+name = "polymorphic"
+path = "src/polymorphic_tests.rs"
+
+[[bin]]
+name = "type_inference"
+path = "src/type_inference_tests.rs"
+
+[[bin]]
+name = "effects_handlers"
+path = "src/effects_handlers_tests.rs"
+
+[[bin]]
+name = "language_protocol"
+path = "src/language_protocol_tests.rs"
+
+[[bin]]
+name = "effect_typing"
+path = "src/effect_typing_tests.rs"
+
+[[bin]]
+name = "structural_preservation"
+path = "src/structural_preservation_tests.rs"
+
+[[bin]]
+name = "arrow_apply"
+path = "src/arrow_apply_tests.rs"
+
+[[bin]]
+name = "profunctor_structural"
+path = "src/profunctor_structural_tests.rs"
+
+[[bin]]
+name = "challenge13"
+path = "src/challenge13_tests.rs"
+
+[[bin]]
+name = "proof_graph"
+path = "src/proof_graph_tests.rs"
+
+[[bin]]
+name = "poly_proof_graph"
+path = "src/poly_proof_graph_tests.rs"
+
+[[bin]]
+name = "refinement_inference"
+path = "src/refinement_inference_tests.rs"
+
+[[bin]]
+name = "liquid_types_comparison"
+path = "src/liquid_types_comparison_tests.rs"
+
+[[bin]]
+name = "termination_analysis"
+path = "src/termination_analysis_tests.rs"
+
+[[bin]]
+name = "real_programs"
+path = "src/real_programs_tests.rs"
+
+[[bin]]
+name = "quantitative_comparison"
+path = "src/quantitative_comparison_tests.rs"
+
+[[bin]]
+name = "evaluation"
+path = "src/evaluation_tests.rs"
+
+[[bin]]
+name = "trait_inference"
+path = "src/trait_catalog.rs"
+
+[[bin]]
+name = "trait_inference_sqlite"
+path = "src/trait_catalog_sqlite.rs"
+
+[[bin]]
+name = "decoupled_traits"
+path = "src/decoupled_traits.rs"
+
+[[bin]]
+name = "law_inference"
+path = "src/law_inference.rs"
+
+[[bin]]
+name = "bundled_effects"
+path = "src/bundled_effects.rs"
+
+[[bin]]
+name = "decoupled_pipeline"
+path = "src/decoupled_pipeline.rs"
+
+[[bin]]
+name = "v0_1_surface"
+path = "src/v0_1_surface.rs"
+
+[[bin]]
+name = "v0_1_surface_tests"
+path = "src/v0_1_surface_tests.rs"
+
+[[bin]]
+name = "modules"
+path = "src/modules.rs"
+
+[[bin]]
+name = "examples_check"
+path = "src/examples_check.rs"
+
+[[bin]]
+name = "cascade_check"
+path = "src/cascade_check.rs"
+
+[[bin]]
+name = "quantified_laws"
+path = "src/quantified_laws.rs"
+
+[[bin]]
+name = "contract_inference_tests"
+path = "src/contract_inference_tests.rs"
+
+[[bin]]
+name = "dynamic_handlers"
+path = "src/dynamic_handlers.rs"
+
+[[bin]]
+name = "handle_elimination_tests"
+path = "src/handle_elimination_tests.rs"
+
+[[bin]]
+name = "type_level_effects"
+path = "src/type_level_effects.rs"
+
+[features]
+# Enable native Z3 (Rust crate) for the refinement-inference binary.
+# When disabled (the default), the binary falls back to the Python-subprocess
+# approach (pyz3), which requires no native build tooling.
+native-z3 = ["dep:z3"]
+
+[dependencies]
+# Optional native Z3 SMT solver bindings. Only pulled in by the `native-z3`
+# feature. `static-link-z3` compiles Z3 from source via cmake; the default
+# build uses the pyz3 subprocess fallback instead.
+z3 = { version = "0.12", features = ["static-link-z3"], optional = true }
+
+# Serialization for the SQLite catalog backend (ADR-0075 section 4).
+# `CatalogEntry` (and its `Ty`/`PolyGraph`/`LawEquation` fields) round-trip
+# through JSON blobs stored in SQLite TEXT columns.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# SQLite catalog storage backend (ADR-0075 section 4). `bundled` compiles
+# SQLite from C source so the build needs no system libsqlite3.
+rusqlite = { version = "0.31", features = ["bundled"] }
