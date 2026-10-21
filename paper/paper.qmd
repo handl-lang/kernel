@@ -1,0 +1,817 @@
+---
+title: "The handl kernel:\\newline a closed arrow calculus for composable languages"
+subtitle: "Draft — proposed, not accepted"
+author:
+  - name: "handl project"
+    affiliation: "handl-lang / kernel"
+date: "2026-10-21"
+abstract: |
+  A language toolchain that must understand every construct
+  everywhere — parser, evaluator, typechecker, rewriter, serialiser —
+  collapses under its own surface area.  We describe the handl
+  kernel, the layer of the handl platform that is deliberately not a
+  language: a closed six-combinator arrow calculus (`arr`, `>>>`,
+  `first`, `choice`, `loop`, `app`) realised as the `Term` datatype,
+  a canonical tagged `Value` representation in which arrows are
+  self-contained serializable data, and the `Language` schema —
+  a pure-data description of tokens, grammar, AST shapes, eval
+  schemes, type rules, and transforms that generic engines dispatch
+  on.  Effects enter through the Graded Modal Sanada Arrow Calculus:
+  a grade row on the arrow type is the modality, an operation
+  request is a graded `Op`, and a handler is an ordinary arrow value
+  whose installation eliminates the grade.  The same dimension slot
+  that carries a named grade carries a numeric dimension, so
+  programs are 1-morphisms, laws and rewrites are 2-morphisms, and
+  `>>>[k]` pastes cells along the k-th globular boundary — one
+  mechanism from computation to law.  The kernel is closed:
+  features enter by desugaring, normalisation, or handler
+  interpretation, never by new combinators; what is not in the
+  kernel — syntax, modules, rule languages, closures, engines, host
+  composition — is named explicitly.
+format:
+  pdf:
+    documentclass: article
+    geometry: margin=2.4cm
+    fontsize: 11pt
+    number-sections: true
+    colorlinks: true
+    linkcolor: black
+    urlcolor: blue
+    citecolor: black
+bibliography: references.bib
+---
+
+::: {.callout-important}
+**Status.**  This is a working draft — *proposed, not accepted*.  It
+has not had human revision or external review.  It is the kernel
+paper: it owns the calculus narrative once so the platform and
+domain papers can cite it instead of repeating it.  Every claim
+about the implementation names the crate, module, or file that
+carries it; the repository is `handl-lang/kernel`.
+:::
+
+# Introduction
+
+A programming language is usually specified as a list of features,
+and every consumer of the language — the parser, each interpreter,
+the typechecker, the serialiser, the pretty-printer, every analysis —
+must know all of them.  The coupling is multiplicative: each new
+construct is a new obligation on every consumer, and each consumer is
+a new place for two implementations of the same construct to
+disagree.
+
+The handl platform inverts that pressure twice, at two different
+levels, and the inversion is the subject of this paper:
+
+1. **The calculus is closed.**  Everything that executes is a `Term`
+   in a six-combinator arrow calculus — Hughes' arrows
+   [@hughes2000arrows] in the Lindley–Wadler–Yallop formulation
+   [@lindley2010arrow], extended with operations and handlers in
+   Sanada's style [@sanada2024arrows].  New language features do not
+   add new combinators; they are expressed as combinations,
+   desugarings, or normalisations of the existing set.
+
+2. **A language is data.**  The tokens, grammar, AST shapes, eval
+   schemes, type rules, and transforms that define a language are
+   ordinary serializable values — fragment tables merged into a
+   `Language` object — not code compiled into an engine.  Adding a
+   language construct is a data change; adding a calculus combinator
+   is an engine edit; the two almost never happen together.
+
+Together these give a graded algebraic theory in the sense of
+Plotkin–Power [@plotkin2003algebraic], Katsumata
+[@katsumata2014parametric], and Kura [@kura2020graded]: a `Language`
+is a signature, a `Term` is a term in the free arrow category over
+that signature, and an execution engine is a *model* of the theory —
+the Lindenbaum–Tarski reading in which syntax is data and semantics
+is a choice of interpretation.  Because arrows rather than functions
+are primitive, the model layer is plural by construction: tree-walk,
+bytecode, and native-code engines interpret the same `Term`s, and
+the type-and-law machinery interprets them again, differently.
+
+This paper is deliberately scoped to the kernel.  It does not
+describe the surface language (still unreleased), the engine
+implementations (one repository per operation, `handl-lang/engine*`),
+or the platform layer that composes languages, kits, and plugins
+(`handl-lang/host`, whose own account belongs to the platform paper).
+It describes the shared foundation those layers consume:
+
+- @sec-calculus — the `Term` kernel: six combinators, the `Op`/`Handle`
+  effect pair, and the honest accounting of the remaining auxiliary
+  constructors;
+- @sec-values — the `Value`/`TaggedValue` representation, including
+  arrows as serializable data and nominal identity;
+- @sec-language — the `Language` schema and its merge semantics;
+- @sec-gmsac — the Graded Modal Sanada Arrow Calculus: grades as
+  modality, operations as requests, handlers as elimination;
+- @sec-morphisms — the dimension/axis structure: programs, laws, and
+  higher transformations as n-morphisms of one mechanism;
+- @sec-closed — why the set is closed, and the criterion for growth;
+- @sec-not — what is deliberately not in the kernel.
+
+The design claim is narrow: *a small closed calculus plus a data
+schema is sufficient to host a family of languages without any engine
+knowing any one of them.*  The evidence is the repository itself —
+the schema, the calculus, and the law machinery are running code, and
+the remaining gaps are enumerated as approximations in
+@sec-status, not elided.
+
+# The `Term` kernel {#sec-calculus}
+
+`Term` is the arrow-calculus kernel.  It is defined once, in
+`hnl-engine` (`handl-lang/engine`), and re-exported by
+`handl-language` (`crates/handl-language/src/term.rs`): a `Term` is
+an engine-agnostic description of *what* to evaluate, not *how*.
+Engines interpret terms; the term itself is pure data — a
+serde-serializable enum, versioned by `SchemeVersion` (canonical:
+`"v2"`).
+
+## The six combinators
+
+| Combinator | `Term` variant | Constructs |
+|---|---|---|
+| `arr` | `Arr { dim, value }` | lift a pure value/function into an arrow |
+| `>>>` (`seq`) | `Seq { axis, fst, snd }` | composition along axis `k` |
+| `first` | `First { inner }` | run on the first of a pair |
+| `choice` | `Choice { l, r }` | route on `Either`: left to `l`, right to `r` |
+| `loop` | `Loop { body }` | feedback (trace), not iteration |
+| `app` | `App { callee, args }` | higher-order arrow application |
+
+: The closed combinator set. {#tbl-combinators}
+
+These are the only arrow formers the kernel knows about.  With `op`
+and `handle` (@sec-gmsac) they are the classical six of Hughes'
+arrow interface: `arr`/`>>>` give a category, `first` gives product
+structure, `choice` sum routing, `loop` a trace, and `app` the
+`ArrowApply` strength that recovers monadic power — the
+correspondence `ArrowApply` $\cong$ `Monad` is the central theorem of
+the arrow-calculus literature [@lindley2011idioms].
+
+The typing rules, at the theory level, are the usual ones.  Writing
+$f : A \to B$ for a pure function and $a : A \rightsquigarrow B$ for
+an arrow:
+
+$$
+\frac{f : A \to B}{\mathrm{arr}\,f : A \rightsquigarrow B}
+\qquad
+\frac{a : A \rightsquigarrow B \quad b : B \rightsquigarrow C}
+     {a \mathbin{>\!\!>\!\!>} b : A \rightsquigarrow C}
+$$
+
+$$
+\frac{a : A \rightsquigarrow B}
+     {\mathrm{first}\;a : (A \times C) \rightsquigarrow (B \times C)}
+\qquad
+\frac{a : A \rightsquigarrow C \quad b : B \rightsquigarrow C}
+     {\mathrm{choice}\;a\;b : (A + B) \rightsquigarrow C}
+$$
+
+$$
+\frac{a : (A \times C) \rightsquigarrow (B \times C)}
+     {\mathrm{loop}\;a : A \rightsquigarrow B}
+\qquad
+\mathrm{app} : (A \rightsquigarrow B) \times A \rightsquigarrow B
+$$
+
+Every surface construct in every language on the platform lowers to
+combinations of these six — by an eval scheme declared in `Language`
+data (@sec-language), not by a case in an engine.
+
+## The effect pair: `Op` and `Handle`
+
+Two further constructors carry the effect layer (Sanada's `op` and
+`handle` [@sanada2024arrows]; @sec-gmsac develops the calculus):
+
+- `Op { dim, name, args, source, lit }` — a named, graded operation
+  request.  `source` (`ArrSource`) marks whether the request is a
+  native pure op, a foreign host call (`Foreign(name)` — a
+  module-registry key and capability name, *not* a dimension), a
+  typecheck judgment (`Judgment`), or a dynamic host dispatch
+  (`DynamicForeign`).
+- `Handle { body, target, impl_ }` — scope `body` under a handler:
+  `handle body with target = impl_`.  The handler is an ordinary
+  arrow value, not a special construct.
+
+## Auxiliary constructors — honest accounting
+
+The `Term` enum in `hnl-engine` carries more than the eight forms
+above, and this paper does not pretend otherwise.  The remaining
+variants are data-carrying auxiliaries, not new arrow *formers* —
+they add no new way to build an arrow, they move data the formers
+need:
+
+- `Const { value }` — a pure value at term level (distinct from
+  `Arr`, which is a constant *arrow*);
+- `Iter { fuel, predicate, step, initial }` — *bounded* iteration:
+  a fuel-indexed fold used where `loop` would be unbounded;
+- `Child { role }` — project the child occupying a named role of the
+  current AST node (the data-driven counterpart of positional child
+  access; @sec-language);
+- `Src { cell }` / `Tgt { cell }` — source and target faces of a
+  2-cell (@sec-morphisms);
+- `Rewrite { source, target, witness }` — a witnessed rewrite step;
+  the `RewriteWitness` (`Named`/`Compute`/`HandlerHint`/`Cast`)
+  records *why* the step is sound;
+- `RecordProj` / `RecordWith` — record field projection and update;
+- `Tag { tag, value }` — tagged-value construction;
+- `Cobind { grade, body }` — cobinding over a grade and body;
+- `Opaque { data }` — a term in *open data form*: a tagged record
+  naming a derived operator (`Path`, `Equiv`, `Whisker`, `CellId`,
+  …) folded out of the closed vocabulary.  The kernel carries the
+  record without structural interpretation, and `TermData::to_term`
+  maps any unrecognised tag here — which is what makes the
+  `Term` $\leftrightarrow$ data conversion *total*: a derived
+  operator that is not (yet) spelled in the closed vocabulary still
+  round-trips.
+
+`Opaque` deserves emphasis because it is the escape hatch that keeps
+the set closed in practice: an operator the surface calculus derives
+(`Whisker`, `CellId`, `Univalence`) is represented as *data naming
+the derivation*, not as a new enum variant.  Consumers that do not
+understand the tag see an opaque record; the law machinery sees the
+same record the surface forms produce.
+
+## Dimension and axis slots are data {#sec-slots}
+
+Two slots on the core variants make the higher-dimensional structure
+of @sec-morphisms possible without new combinators:
+
+- `Arr` and `Op` carry `dim: Box<Term>` (default `Const 1`).  A
+  literal `Const n` is a numeric dimension ($\rightsquigarrow_n$); a
+  literal `Const "S"` is a *named* dimension — what the graded-effect
+  surface calls a grade.  One slot serves both; a grade is a named
+  dimension.  Because `dim` is itself a `Term`, dimension is data
+  inside the calculus, not a static annotation.
+- `Seq` carries `axis: Box<Term>` (default `Const 0`).  `>>>` is
+  `>>>[0]` — sequential composition of 1-cells; `>>>[k]` composes
+  along the $k$-th globular axis (@sec-morphisms).
+
+`Term::globular_dim` computes the declared dimension structurally —
+the `dim` slot when it is a literal, else the greatest dimension of
+the parts — and `Term::desugar` recursively expands any residual
+derived forms into the core set before interpretation.
+
+# Values {#sec-values}
+
+The canonical value type at the `Language`/AST boundary is
+`serde_json::Value` — the kernel invents no new value type there.
+`handl-value` (`crates/handl-value`) provides `TaggedValue`, the
+tagged representation eval engines use on hot paths, with
+`From`/`Into` conversion at the boundary.  Its variants are the
+calculus' needs and nothing more: `Null`, `Bool`, `Int(i64)`,
+`Float`, `Str`, `Bytes`, `Arr`, `Obj`; `Pair` and
+`EitherLeft`/`EitherRight` as dedicated variants (the `First`,
+`Choice`, and `Loop` payload shapes); `Arrow`; `Sym` (nominal
+identity); `Resource` (an RAII-wrapped opaque foreign handle); and
+`Tensor` (a dense row-major `f64` carrier that engines pass through
+opaquely to host functions — the `host-tensor` wire form).
+
+## Arrows are serializable data
+
+`TaggedValue::Arrow` is the one computational variant, and its
+design is a load-bearing claim of the kernel:
+
+> An arrow is **self-contained serializable data**: `{"__arrow__":
+> true, "params": [...], "body_def": ...}` — no closures, no captured
+> lexical environment, no process-local frame references.
+
+At mint time every *free* variable in the body is substituted with
+its definition-site value (`Ast::instantiate`,
+`crates/handl-language/src/instantiate.rs`), so the body is a closed
+term applicable without an environment.  The residual `binds` map
+carries what cannot be substituted — recursion-region binders and
+values that do not serialize — and `handlers` carries handlers
+attached by deep-handler attach as explicit data, reinstalled on each
+application.  Binder tracking during substitution is itself
+data-driven over `AstShapeDef` roles (@sec-language), never
+`kind ==` checks.
+
+Two consequences follow.  First, a value can travel — across engines,
+across a serialization boundary, into a cache — because nothing in it
+is a pointer into a process.  Second, higher-order values need no
+closure type: `call(f, x)` lowers to a pair quoted through `app`, and
+an inner function referencing enclosing parameters is a bound-arrow
+record — a product encoding, not an environment capture.
+
+## Nominal identity
+
+`TaggedValue::Sym` is a first-class nominal identity: a unique
+`handle` minted from a global counter, a display `name` that is
+presentation-only, and an optional single-parent `Sym` chain.
+Equality is identity (`handle` equality) — two syms with equal names
+are never equal — while the JSON encoding is explicit data that
+round-trips the handle, so a deserialized sym compares equal to the
+live sym it came from.  `Sym` is how the kernel provides nominal
+objects (fresh type constructors, class-like identities) without
+adding a name-generation construct to the calculus.
+
+# Language as data {#sec-language}
+
+The `handl-language` crate defines the schema (ADR-0044).  A
+`Language` is a struct of `FragmentSet`s plus value tables — pure
+serializable data end to end: no trait objects, no closures, no
+`Box<dyn Behavior>`.
+
+## The `Language` value
+
+| Field | Type | What it declares |
+|---|---|---|
+| `tokens` | `FragmentSet<TokenKindDef>` | the token vocabulary and its tooling categories |
+| `lexer_rules` | `FragmentSet<LexerRuleDef>` | how source text becomes tokens (`LexerPattern`s) |
+| `grammar` | `FragmentSet<GrammarRow>` | how tokens become AST — binding powers, child shapes |
+| `ast` | `FragmentSet<AstShapeDef>` | per node kind: payload schema, named child roles, arity, desugar |
+| `eval` | `FragmentSet<EvalSchemeDef>` | how each node kind becomes a `Term` |
+| `types` | `FragmentSet<TypeRuleDef>` | per node kind: `synth`/`check` `Term`s |
+| `transforms` | `FragmentSet<TransformDef>` | `(pass, node_kind, priority)`-keyed rewrite/desugar rules |
+| `caps` | `FragmentSet<CapabilityDecl>` | capability declarations |
+| `options` | `FragmentSet<OptionSchema>` | option schemas |
+| `lints`, `lsp` | `FragmentSet<…>` | lint rules; LSP surface definitions |
+| `ops`, `handlers`, `handlers_by_grade` | `BTreeMap<String, Value>` | evaluated op declarations; handler values; the grade index |
+| `laws`, `rewrites` | `BTreeMap<String, Value>` | declared laws and rewrite rules `source ~> target` |
+| `globals` | `BTreeMap<String, Value>` | ambient global bindings seeded into engine scope |
+| `scheme_version` | `SchemeVersion` | which `Term` combinator version the language targets (`"v2"`) |
+
+: The `Language` schema (`crates/handl-language/src/language.rs`). {#tbl-language}
+
+Two fragment rows deserve detail.  `EvalSchemeDef` is
+`{id, node_kind, scheme: Term, replaces, requires}` — the eval
+fragment *is* a table of `Term`s, so "how a construct executes" is a
+data row an engine instantiates directly, with zero Rust arms per
+construct.
+`AstShapeDef` carries `children: Option<Vec<ChildRoleSpec>>` — named
+roles (`role`, `variadic`, `optional`) — plus `literal_children`,
+`pattern_role`, and an optional `desugar` rule that merge lowers into
+the `transforms` set (a `TransformDef` under pass `"desugar"`), so a
+shape and its desugaring cannot drift apart.
+
+## Merge semantics
+
+Composition is `Language::merge`, applied in kit-defined order.  The
+policy (`FragmentSet`, `crates/handl-language/src/fragment_set.rs`)
+is what makes "language as data" composable rather than merely
+concatenable:
+
+- **Override vs collision.**  A fragment declaring `replaces: [id]`
+  is an explicit override: the replaced ids must be present, cyclic
+  `replaces` chains are rejected, and every override is recorded in
+  an auditable `override_chain`.  Two fragments targeting the same
+  identity key with no `replaces` declared is a *collision* — an
+  error, not a silent winner.  (`CapabilityDecl` is union/idempotent;
+  `AstShapeDef` keeps the first declaration.)
+- **Dependencies.**  `requires` is validated against the post-merge
+  id set (`MissingRequires`).
+- **Atomicity.**  `merge` operates on a clone and swaps in only on
+  full success — a failed fragment commits no partial state.
+- **Consistency.**  `AstShapeDef::desugar` rules are lowered into
+  `transforms` at merge time; when a shape merge drops or replaces a
+  declaration its synthesized `transform.desugar.*` rule is dropped
+  with it, keeping the two sets in sync by construction.
+
+Because a `Language` is a value, assembling one is ordinary
+programming: the canonical eval-path fragment set is published as
+YAML data in `kit-prelude-lang`, and `defining-handl`
+(`crates/defining-handl`) goes further — it produces a `Language`
+value describing a subset of the host language itself and evaluates
+it under itself across the eval engines (the Futamura-projection
+sanity check [@futamura1999partial]).
+
+## Engines dispatch on data
+
+The companion rule, enforced across the platform (and stated as a
+rule of the kernel's own rule files):
+
+> Dispatch on node kind via `Language` data — never a hardcoded
+> `match` on kind strings.
+
+Concretely: child positions are resolved by **named role** —
+`lang.child_role_index(node.kind, "target")` for shape-level checks,
+`lang.child_role_index_for(node, role)` for arity-dependent shapes
+with `optional` roles, `role_name_at` for the inverse, and
+`literal_child` for the literal-vs-computed distinction (ADR-0081).
+Pattern-position behavior dispatches on `AstShapeDef::pattern_role`.
+A language that spells `set`/`params`/`body` instead of
+`assign`/`args`/`value` runs on untouched engines — AST layout
+knowledge lives in the data, not in shape checks inside primitives.
+What is allowed to be fixed in Rust is only the calculus vocabulary
+itself: the combinator set, primitive forms, and value shapes.
+
+The staged contract (`staged.rs`) makes the discipline precise:
+`lex(lang, src)`, `parse(lang, toks)`, `eval(lang, ast)`, and
+`run = eval ∘ parse ∘ lex` are typed signatures consuming only the
+previous stage's output plus the `Language` spec — the crate ships
+them unbound (`LangError::NotImplemented`) because engines are *not*
+kernel; they are the `handl-lang/engine*` layer that binds against
+these signatures.
+
+# Grades and handlers: the GMSAC {#sec-gmsac}
+
+The kernel's canonical execution calculus is the **Graded Modal
+Sanada Arrow Calculus** — three ideas layered on the same `Term`:
+
+1. **Arrows** — the closed set of @sec-calculus
+   [@hughes2000arrows; @lindley2010arrow].
+2. **Grades** — a row of algebraic capabilities annotating an arrow
+   type, read as a *modality* on where the arrow may be interpreted.
+3. **Sanada's handlers** — an operation request with an explicit
+   continuation and a scoped interpretation of requests
+   [@sanada2024arrows].
+
+## Grade rows
+
+A grade row is a multiset of grade terms on the arrow type:
+
+```text
+f : A ~[(Op, Query)]~> B
+g : A ~[(Op, Clock, FFI)]~> B
+```
+
+`Op` is the marker grade — "this arrow is an operation request" — and
+the remaining names are algebra grades: the operation is interpreted
+by the innermost handler matching *any* of them.  A pure arrow has an
+empty row; an `Op` adds grades; installing a handler removes one.
+The row is a set, so `A ~[(Query)]~> B` sits under
+`A ~[(Query, Clock)]~> B` — the usual effect-row subtyping of
+Bauer–Pretnar [@bauer2014effect], restated in arrow terms.
+
+The grade row is not decoration on top of the calculus: it *is* the
+`dim` slot (@sec-slots).  The unified slot is the kernel's answer to
+a question the earlier draft separated — "where do the grade bracket
+and the dimension bracket live?" — they are one bracket.  A grade is
+a named dimension; handler routing is dimension-typed;
+`Term::dim_label` resolves the literal `Const "S"`/`Arr "S"`
+positions to a routing label, and numeric literals are unnamed
+dimensions.  `ArrSource::Foreign` stays strictly the host-function
+boundary — a registry key, never a dimension.
+
+In the graded-algebraic-theory reading (Katsumata's parametric effect
+monads [@katsumata2014parametric], Kura's graded algebraic theories
+[@kura2020graded], Sanada's category-graded theories
+[@sanada2023cateff], and the category-graded monad unification of
+Orchard–Wadler–Eades [@orchard2020unifying]): sorts are value
+families, grades are capabilities, an operation is a graded arrow
+declaration, a `Term` is a term in the free arrow category over the
+signature, and a model is a `Model` — the trait in `hnl-engine` whose
+`run(term, incoming, ctx)` interprets terms and whose
+`rewrite(source, target, witness, ...)` interprets rewrites.
+Dispatch is by grade, not by operation name: an engine seeing
+`Op{name: "add"}` consults the signature for the operation's grade,
+checks the carrier's declared grades, and routes to the handler for
+that grade — so the same operation works on every sort that carries
+it.
+
+## Handlers as elimination
+
+`Term::Op` and `Term::Handle` give the calculus deep, rebindable
+effects.  An `Op` is a request carrying a name, arguments, and its
+grade row; a `Handle` scopes a body under a handler.  The handler is
+an ordinary arrow value returning a record of operation
+implementations — not a special form — and installing it is the
+elimination of the modal grade: bracketing a region with a handler
+removes the corresponding effect from the row and restores the
+previous interpretation on exit.  Runtime, `Handle` pushes its
+implementation onto the `ModelCtx` handler stack and `Op` dispatch
+searches it innermost-last before falling back to the value's own
+grades; `Language::handlers_by_grade` is the compile-time index into
+the same table, kept as data so a language's ambient handlers travel
+with the language.
+
+Because handlers are values, effect algebras are *packages*, not
+kernel concepts: a resumable request algebra, a mutation algebra, a
+fire-and-forget event algebra all lower to `Op`/`Handle` — the
+runtime knows only the calculus and never pattern-matches on the
+algebra's names.  User-space algebras are exactly Plotkin–Power
+operations with Plotkin–Pretnar handlers
+[@plotkin2003algebraic; @plotkin2013handling], carried on arrows per
+Sanada rather than on monadic computations, and the capability view —
+effects as what the context *provides* — is the Effekt line
+[@brachthaeuser2020effects].
+
+# Morphisms all the way up {#sec-morphisms}
+
+The kernel takes one further step past "arrows compute": *everything*
+is a morphism, and the same mechanism recurs up the dimensions.
+This section is the theory level — the calculus structure, not a
+surface syntax.
+
+## Dimensions and axes
+
+Writing $M[n]\langle A, B\rangle$ for the family of $n$-morphisms
+between parallel $(n{-}1)$-morphisms, dimension 1 is programs and
+dimension 2 is transformations between them:
+
+```text
+f, g : A ~[1]~> B            -- programs (1-morphisms between objects)
+α    : f ~[2]~> g            -- a law / rewrite (2-morphism between 1-morphisms)
+ω    : α ~[3]~> β            -- a transformation of laws (3-morphism)
+```
+
+Two independent indices organise the calculus.  The *dimension* $n$
+in $\rightsquigarrow_n$ names what kind of cell is being built — in
+`Term`, the `dim` slot of `Arr`/`Op`, which is itself a `Term` and
+therefore data (@sec-slots).  The *axis* $k$ in $\mathbin{>\!\!>\!\!>}_k$
+(`Seq{axis, fst, snd}`) names along which boundary cells paste:
+$>>>[0]$ pairs cells across composition of their boundary morphisms,
+$>>>[1]$ stacks them along the morphism direction, and the boundary
+law is globular — $\mathrm{tgt}_k(a) = \mathrm{src}_k(b)$, enforced
+wherever `>>>[k]` executes.  `Term::globular_dim` gates $k < n$: the
+value model currently carries a single cell shape at dimension 2, so
+axes 0 and 1 execute meaningfully and $k \geq 2$ is a dimension error
+for ordinary operands — an implementation boundary, stated honestly,
+not a metatheorem.
+
+The resulting structure is a *weak globular* presentation: higher
+laws are genuine higher cells (proof-relevant), not strict
+equalities, with the strict fragment kept as a fast path (below).
+Cubical Kan structure is deliberately deferred — it would arrive as
+a cube-diagram fragment over the same `Term`s, not a rewrite of the
+directed calculus.  For the $n$-categorical background see Leinster's
+survey [@leinster2002ncat].
+
+## Laws are 2-morphisms — and therefore data
+
+The structural laws of the calculus are not declarations in a
+separate rule language; they are 2-morphisms:
+
+```text
+rightUnit : (f >>> id) ~[2]~> f
+assoc     : ((f >>> g) >>> h) ~[2]~> (f >>> (g >>> h))
+```
+
+An inhabitant of $M[2]$ is simultaneously a rewrite rule, a proof,
+and a program transformation; the intended reading is supplied by the
+consumer — an eval engine, the law machinery, or a rewrite engine —
+not by a syntactic distinction in the calculus.  `Src`/`Tgt` project
+the boundary faces of a cell; `Rewrite{source, target, witness}`
+carries a witnessed step; and derived cell operators (`CellId`,
+`Whisker`, horizontal/vertical cell composition) fold to `Opaque`
+tagged records when they are not spelled by a `Seq{axis}` scheme.
+`Language::laws` and `Language::rewrites` are the value tables these
+live in — again, data.
+
+Two modules in `handl-language` are the law machinery over this IR:
+
+- `law_inference` — normalizes `Term` graphs to a fixpoint under the
+  CutElim-derived rewrites (`Seq(id,G) ⇒ G`, `Seq(G,id) ⇒ G`,
+  `Seq(First G, First H) ⇒ First(Seq G H)`, `First id ⇒ id`) and
+  decides law equality by comparing normal forms — `law_equal`, with
+  `infer_laws` matching a scheme against a catalog of structural law
+  patterns.  Its scope is honestly bounded: inference works only for
+  the CutElim-proven structural fragment (the `First` functor laws);
+  semantic laws require explicit axioms, and the module documents
+  that boundary rather than blurring it.
+- `quantified_laws` — explicit `forall f g. lhs = rhs` quantified law
+  syntax over `Term`s, checked by instantiation under a
+  representative substitution set: a heuristic strong for
+  schema-level laws, not a completeness proof — the mechanized proof
+  lives in the research prototype's Lean development
+  [@handl2026kernelpoc].
+
+`dynamic_handlers` completes the trio: runtime verification of
+handler implementations against declared laws
+(`verify_at_runtime`, `VerifiedImplStore`, `dynamic_dispatch`) — the
+correspondence between unhandled operations and effect rows
+[@bauer2014effect] checked where it can be checked, at runtime.
+
+This is the sense in which the kernel subsumes what other systems
+keep as four subsystems — a program IR, a rule language, a proof
+syntax, and a metaprogramming facility: here they are $M[1]$,
+$M[2]$, $M[2]$, and $M[{\geq}3]$ of one mechanism.  The same point is
+what makes the kernel a natural substrate for the org's
+equality-saturation and discovery work — laws and rewrites are values
+in the same calculus the engines execute, so a rule bank is data and
+a derivation is a replayable witness [@tate2009; @willsey2021egg;
+@eqsat2026substrate].
+
+# Why the set is closed {#sec-closed}
+
+The six combinators (plus `Op`/`Handle`) are the *only* arrow formers
+the kernel knows, and the closure is a design choice, not an
+oversight.
+
+## The cost of an open kernel
+
+An open kernel — one where each feature introduces a combinator —
+accumulates special cases: every combinator must be understood by
+every consumer of `Term` — each interpreter, the typechecker, the law
+machinery, the serialiser, the pretty-printer, every handler that
+interprets a program.  Each new combinator multiplies the surface
+those consumers must cover, and each is a new place for them to
+disagree.  The closed kernel pays the cost of a new feature once, at
+the boundary where it is translated into the calculus — not in every
+consumer downstream.
+
+## Minimality evidence
+
+Closure is only defensible if the set is also *minimal* — otherwise a
+dropped combinator is a latent hole, not a design.  The research
+prototype that precedes this kernel
+[@handl2026kernelpoc] investigated exactly that: at the arrow-graph
+level the primitive set is *independent* — none of `arr` /
+composition / `first` / sum routing / `loop` is derivable from the
+others — and the independence and classification results are
+mechanized in Lean 4 (the free-arrow generator argument: e.g. no
+generator can produce `Sum`/`Prod` output from the wrong primitives;
+`loop` is independent in a total setting).  The sixth combinator,
+`app`, is not redundant either: it is precisely the strength that
+makes `ArrowApply` $\cong$ `Monad`
+[@lindley2011idioms] — the freer-arrow insight that explicit
+higher-order application recovers the structure opaque continuations
+lose [@kiselyov2015freer; @vandomelen2025freer].
+
+## How features enter without new combinators
+
+A new construct enters at one of three boundaries, none of which
+touches the kernel:
+
+1. **Desugaring** — the grammar/`ast` fragments declare a shape whose
+   `desugar` rule or `eval` scheme lowers the construct to existing
+   `Term`s before the kernel ever sees it.  Cheapest; the kernel is
+   unaware.
+2. **Normalisation** — a transform pass eliminates the construct's
+   encoding between lowering and interpretation.  The module system
+   is the worked example in the platform: imports and exports are
+   encoded as ordinary `Op`s and then inlined away, so the kernel
+   never learns that modules existed.
+3. **Handler interpretation** — the construct is an `Op` whose
+   meaning a handler supplies.  The kernel carries the request
+   opaquely; a `Model` that does not understand it refuses to
+   interpret it — which is *correct*, because interpretation is a
+   model-level fact.
+
+And when even a *scheme* is the wrong level — a derived operator like
+`Whisker` or `Path` — `Opaque` carries it as data naming the
+derivation (@sec-calculus).
+
+## When the set should grow
+
+Closed is not frozen.  A seventh combinator is justified only when a
+feature cannot be expressed as a combination of the existing set
+without losing a property every consumer relies on — that the graph
+is finite, that feedback is well-founded, that terms serialize.  Such
+cases are rare and belong to an ADR.  The default answer is no: find
+a combination, a desugaring, or a normalisation.
+
+# What the kernel is not {#sec-not}
+
+The kernel's power is what it excludes.  Explicitly:
+
+- **Not a language.**  There is no user syntax anywhere in the
+  kernel: tokens, grammar, and AST shapes are `Language` data.
+  (`Term` constructors are the calculus vocabulary, not a syntax.)
+- **Not an engine.**  `lex`/`parse`/`eval` exist only as staged
+  signatures returning `NotImplemented`; every interpreter lives in
+  the `handl-lang/engine*` repos and binds the `Model`/`ModelData`
+  traits.
+- **No modules, imports, or files.**  These are source-level concerns
+  normalised away before the kernel; `ArrSource::Foreign` is a
+  registry *key*, not a module system.
+- **No rules language.**  Laws and rewrites are `Term`s at dimension
+  2 stored in `Language::laws`/`rewrites` — not a parallel DSL.
+- **No closures or environments.**  Arrow values are self-contained
+  serializable data (@sec-values); `instantiate` eliminates free
+  variables at mint.
+- **No concrete effect algebras.**  Query/command/event-style
+  algebras are package data lowering to `Op`/`Handle`; the kernel
+  dispatches on grade rows only.
+- **No concrete type system.**  `types` is a fragment set of
+  `synth`/`check` `Term`s; what counts as a type is a `Model` choice.
+- **No host composition.**  `Plugin`/`Host`/`Operation`/`Behavior`/
+  `RuleAcceptor`/`Contribution`, kits, manifests, and option
+  resolution are the platform layer (`handl-lang/host`), cited here
+  only as the consumer.
+- **No extension protocol details.**  `handl-ext` provides the shared
+  ABI — JSON over a C boundary: `handl_ext_manifest`,
+  `handl_ext_dispatch`, `handl_ext_free` — so hosts and extensions
+  evolve independently; who loads what is a platform concern.
+- **No serialization of authority.**  A `Resource`/`Foreign` value
+  crosses the boundary opaquely; capability tracking is platform
+  policy, not kernel semantics.
+
+# Implementation status {#sec-status}
+
+The kernel is `handl-lang/kernel`, a cargo workspace:
+
+| Crate | Contents |
+|---|---|
+| `handl-language` | the `Language` schema, `FragmentSet` merge, the `Ast` arena, `staged` dispatch signatures, `law_inference`, `quantified_laws`, `dynamic_handlers`, `instantiate`, `capabilities`, `token_classes`, `verdict`, `version` — plus the `Term`/`ArrSource`/`RewriteWitness` re-export from `hnl-engine` |
+| `handl-value` | `TaggedValue`, `Sym`, `TensorValue`, `ForeignResource`, JSON (`serde_json::Value`) conversions |
+| `handl-ext` | the extension ABI (`ExtensionManifest`, `ExtRequest`, `ExtResponse`, `export!`, discovery/loading) |
+| `defining-handl` | self-hosting infrastructure: a `Language` value describing the language subset, plus the self-hosting corpus |
+| floor-library crates (`bytes`, `cmp`, `combinators`, `error`, `mood`, `obj`, `ops`, `prim`, `prim-handl`, `type`) | substrate packages providing the base op/grade tables |
+| `hnl-engine` (dep, `handl-lang/engine`) | `Term`, `TermData`, `Model`, `ModelData`, `ModelCtx`, `CompositeModel`, `AstView`/`LanguageView` |
+
+: Kernel workspace map. {#tbl-crates}
+
+What is *proven* by the tree: a `Language` value can describe a
+language and be evaluated under itself — `defining-handl`'s corpus
+runs across the platform's eval engines, and the Futamura-projection
+path (compiling the language-as-data interpreter) is exercised
+[@futamura1999partial].  What is deferred — full self-hosting of the
+entire surface language, and a standalone-binary bootstrap — is
+documented in the crate's own honesty note.
+
+Documented approximations (implementation debt, not design gaps),
+condensed from the working draft [@handl2026kernelpoc]:
+
+- The value model carries one cell shape at dimension 2, so `>>>[k]`
+  executes for $k \in \{0, 1\}$; generalising past 2-cells is open.
+- Only literal axes and dimensions resolve; a non-literal axis falls
+  back with a warning rather than evaluating a computed boundary.
+- `cell_boundary`-style projection assumes globularity (the globe
+  condition is assumed, not verified).
+- Quantified-law checking is substitution-tested, not complete
+  (@sec-morphisms).
+- A composite of dependent operands flattens to a plain function
+  type at composition — dependent-aware unification exists but a
+  composed body cannot carry its closure across `>>>`.
+
+# Related work
+
+**Arrows.**  Hughes introduced arrows as a generalisation of monads
+[@hughes2000arrows]; Lindley, Wadler, and Yallop gave the arrow
+calculus its minimal form and the idiom/arrow/monad correspondence
+[@lindley2010arrow; @lindley2011idioms].  Our `Term` is that calculus
+realised as *data* — serializable, dispatched on, rewritten — rather
+than as a language's type class.
+
+**Effects on arrows.**  Lindley first extended algebraic effects and
+handlers to idioms and arrows [@lindley2014algebraic]; Sanada gave
+the arrow calculus operations and handlers with operational and
+denotational semantics [@sanada2024arrows] and the category-graded
+theory behind the grade-as-morphism reading [@sanada2023cateff].
+The generic algebraic-effects line — Plotkin–Power operations
+[@plotkin2003algebraic], Plotkin–Pretnar handlers
+[@plotkin2013handling], the Bauer–Pretnar effect system
+[@bauer2014effect], and capability-style effect polymorphism
+[@brachthaeuser2020effects] — is the row-and-handler semantics the
+GMSAC restates on arrows; Moggi's monadic metalanguage
+[@moggi1991notions] is the ancestor everything here descends from.
+
+**Grades and indexing.**  Katsumata's parametric effect monads
+[@katsumata2014parametric], Atkey's parameterised notions of
+computation [@atkey2009parameterised], Kura's graded algebraic
+theories [@kura2020graded], and the category-graded unification
+[@orchard2020unifying] cover the "grade is data about the
+computation" axis; the kernel's `dim`-as-`Term` pushes it one step
+further — the index itself is a term of the calculus.
+
+**Explicit vs opaque effects.**  Kiselyov's freer monads
+[@kiselyov2015freer] made continuations inspectable data; freer
+arrows [@vandomelen2025freer] confirm that the explicit input
+parameter is what keeps fanout and choice *semantically* expressible —
+the analysis the `Op`-as-request design relies on.
+
+**Language as data.**  The claim that a theory's terms, taken modulo
+its laws, are themselves an algebraic object is Lindenbaum–Tarski's;
+Lawvere's functorial semantics made "theory as data, model as
+functor" precise [@lawvere1963functorial].  Equality saturation
+[@tate2009; @willsey2021egg] is the adjacent machinery for which
+laws-as-data is load-bearing — the org's `eqsat` substrate consumes
+exactly this kernel [@eqsat2026substrate].  The higher-categorical
+backdrop for the dimension story is standard
+[@leinster2002ncat]; the Futamura reading of language-as-data is
+Futamura's [@futamura1999partial].
+
+**Within the org.**  The research prototype (`host/research/arrow-
+calculus-kernel-poc`) carried the mechanized minimality results and
+the working paper draft this paper tightens [@handl2026kernelpoc];
+the architecture decisions live in the host repo's ADR series —
+ADR-0044 (language as data), ADR-0052/0104b (the `Term` kernel),
+ADR-0076/0098 (handlers and grades), ADR-0081 (AST roles),
+ADR-0103/0106/0119–0120 (opaque data forms, the object/arrow world,
+the unified dimension slot) [@handl2026adrs].
+
+# Limitations and open questions
+
+- **Metatheory is ahead of the machine where the machine is honest
+  about it.**  Whether $M[n]$ as implemented is a family of
+  categories, which coherence laws hold between axes, and which
+  dimension expressions are statically normalizable are open;
+  interchange and higher unitor/associator structure are not yet
+  inhabited cells.
+- **The globular boundary is enforced, not verified.**  Globularity
+  is assumed where cells are built (@sec-status); the value model
+  caps pasting at dimension 2.
+- **Law inference is a strict fast path.**  It covers the
+  CutElim-proven structural fragment only; general law equality is
+  not decidable here, and quantified-law checking is a heuristic.
+- **Dependence is structural, not yet eliminative.**  Families
+  indexed by higher cells and dependent elimination (refining a
+  scrutinee's index per match arm) need an equality type the kernel
+  deliberately does not carry.
+- **The operational semantics' dimensional lift is partial.**  `Op`/
+  `Handle` ride the unified dimension slot, but how Sanada's
+  semantics lift through arbitrary dimensions is open.
+- **Self-hosting is mechanism, not completion** — a subset corpus,
+  not the whole surface language (@sec-status).
+
+The claim that survives these limitations is the one this paper set
+out to check: computation and reasoning about computation — programs,
+laws, handlers, and the languages that produce all three — are
+expressible in *one* closed calculus, whose consumers are models and
+whose languages are data.
+
+# References {.unnumbered}
+
+::: {#refs}
+:::
