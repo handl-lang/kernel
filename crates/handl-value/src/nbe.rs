@@ -330,11 +330,26 @@ impl Sym {
 
     /// Seeded nominal with an explicit parent — the deterministic
     /// counterpart of `fresh_with_parent`.
+    ///
+    /// If the seed was already minted *parentless* (a bare `seeded`
+    /// call that ran before the declaration's parent was known), the
+    /// memo entry is upgraded to a same-handle sym carrying the parent
+    /// — identity is the handle, so existing values still compare
+    /// equal. A sym that already has a parent is never re-parented.
     pub fn seeded_with_parent(seed: &str, parent: &Sym) -> Rc<Sym> {
         SEEDED_SYMS.with(|m| {
             let mut map = m.borrow_mut();
             if let Some(s) = map.get(seed) {
-                return s.clone();
+                if s.parent().is_some() {
+                    return s.clone();
+                }
+                let upgraded = Rc::new(Sym::from_parts(
+                    s.handle(),
+                    s.name().to_string(),
+                    Some(Rc::new(parent.clone())),
+                ));
+                map.insert(seed.to_string(), upgraded.clone());
+                return upgraded;
             }
             let mut h = DefaultHasher::new();
             seed.hash(&mut h);
@@ -386,6 +401,22 @@ mod tests {
         assert!(int.is_descendant_of(&number));
         assert!(int.has_ancestor(&number));
         assert!(!number.is_descendant_of(&int));
+    }
+
+    #[test]
+    fn seeded_parent_upgrades_parentless_mint() {
+        // A bare `seeded` mint before the declaration is known does not
+        // lock the nominal into parentlessness: `seeded_with_parent`
+        // upgrades the memo entry (same handle — `==` still holds).
+        let bare = Sym::seeded("type.decimal");
+        let dec = Sym::seeded_with_parent("type.decimal", &Sym::seeded("type.number"));
+        assert!(dec.is_descendant_of(&Sym::seeded("type.number")));
+        assert_eq!(*bare, *dec);
+        assert!(!Rc::ptr_eq(&bare, &dec));
+        // A second parent declaration does not re-parent.
+        let other = Sym::seeded_with_parent("type.decimal", &Sym::seeded("type.other"));
+        assert!(Rc::ptr_eq(&dec, &other));
+        assert!(!dec.is_descendant_of(&Sym::seeded("type.other")));
     }
 
     #[test]
