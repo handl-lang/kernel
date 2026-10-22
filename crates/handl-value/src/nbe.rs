@@ -19,6 +19,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use rustc_hash::FxHashMap;
+use serde_json::Value;
 
 use crate::{Sym, TaggedValue};
 
@@ -285,11 +286,11 @@ impl MetaStore {
 // Deterministic sym seeding (ADR-0154 §1)
 // ---------------------------------------------------------------------------
 
-/// Registry of seeded syms — a declared former minted by qualified
-/// name resolves to one identity per process, and its *handle* is a
-/// content hash of the seed, so the same declaration yields the same
-/// nominal across module loads, compilation artifacts, and process
-/// boundaries (the ADR-0106 follow-up: cross-process `sym` identity).
+// Registry of seeded syms — a declared former minted by qualified
+// name resolves to one identity per process, and its *handle* is a
+// content hash of the seed, so the same declaration yields the same
+// nominal across module loads, compilation artifacts, and process
+// boundaries (the ADR-0106 follow-up: cross-process `sym` identity).
 thread_local! {
     static SEEDED_SYMS: RefCell<FxHashMap<String, Rc<Sym>>> =
         RefCell::new(FxHashMap::default());
@@ -577,5 +578,103 @@ mod conv_tests {
         let m2 = store.fresh_constrained(MetaConstraint::DescendantOf(Sym::seeded("type.Number")));
         assert!(!conv(&mut store, 0, &Val::Flex { meta: m2, spine: Spine::default() },
                      &Val::Nominal(Sym::seeded("type.Str"))));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quote — reify a `Val` back to `TaggedValue` boundary data.
+//
+// `quote` maps the semantic domain onto the same tagged encoding the
+// engines already serialize (`{"__neutral__"}` for open terms,
+// `{"__former__"}`/`{"__sym__"}` for formers/nominals, `{"__meta__"}`
+// for unsolved metas). `Term`/AST-shaped reification lives in the
+// checker — `handl-value` stays dependency-free (it cannot see
+// `handl-language`).
+// ---------------------------------------------------------------------------
+
+/// Reify `val` at ambient level `lvl` (needed to print rigid levels as
+/// indices — smalltt convention: quote converts level → index).
+/// `names`, when provided, supplies display names for binders in
+/// outermost-first order (diagnostics only; identity is the level).
+pub fn quote(store: &MetaStore, lvl: Lvl, val: &Val) -> TaggedValue {
+    fn qv(store: &MetaStore, lvl: Lvl, val: &Val) -> Value {
+        let q = |v: &Val| qv(store, lvl, v);
+        match store.force_head(val) {
+            Val::Rigid { lvl: l, spine } => serde_json::json!({
+                "__neutral__": {
+                    "head": "rigid",
+                    "index": lvl.saturating_sub(l + 1),
+                    "spine": spine.0.iter().map(q).collect::<Vec<_>>(),
+                }
+            }),
+            Val::Flex { meta, spine } => serde_json::json!({
+                "__neutral__": {
+                    "head": "meta",
+                    "id": meta,
+                    "spine": spine.0.iter().map(q).collect::<Vec<_>>(),
+                }
+            }),
+            Val::Former { head, args } => serde_json::json!({
+                "__former__": {
+                    "sym": Value::from(TaggedValue::Sym(head.clone())),
+                    "args": args.iter().map(q).collect::<Vec<_>>(),
+                }
+            }),
+            Val::Nominal(s) => Value::from(TaggedValue::Sym(s.clone())),
+            Val::Universe(i) => serde_json::json!({"__type__": i}),
+            Val::Const(v) => Value::from(v.clone()),
+            Val::Arrow(a) => {
+                let binds: serde_json::Map<String, Value> = a
+                    .binds
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), q(v)))
+                    .collect();
+                serde_json::json!({
+                    "__arrow__": {
+                        "params": a.params.iter().collect::<Vec<_>>(),
+                        "binds": binds,
+                    }
+                })
+            }
+            Val::Unfold { name, spine, .. } => serde_json::json!({
+                "__neutral__": {
+                    "head": "unfold",
+                    "name": name.as_ref(),
+                    "spine": spine.0.iter().map(q).collect::<Vec<_>>(),
+                }
+            }),
+        }
+    }
+    TaggedValue::from(qv(store, lvl, val))
+}
+
+#[cfg(test)]
+mod quote_tests {
+    use super::*;
+
+    #[test]
+    fn quote_former_and_neutral() {
+        let store = MetaStore::default();
+        let v = Val::Former {
+            head: Sym::seeded("vec.Vec"),
+            args: vec![
+                Val::Rigid { lvl: 0, spine: Spine::default() },
+                Val::Nominal(Sym::seeded("type.Int")),
+            ],
+        };
+        let q = quote(&store, 1, &v);
+        let j = Value::from(q);
+        assert_eq!(j["__former__"]["sym"]["__sym__"]["name"], "Vec");
+        assert_eq!(j["__former__"]["args"][0]["__neutral__"]["index"], 0);
+    }
+
+    #[test]
+    fn quote_solved_meta_shows_solution() {
+        let mut store = MetaStore::default();
+        let m = store.fresh();
+        store.solve(m, Val::Universe(0));
+        let v = Val::Flex { meta: m, spine: Spine::default() };
+        let j = Value::from(quote(&store, 0, &v));
+        assert_eq!(j["__type__"], 0);
     }
 }
