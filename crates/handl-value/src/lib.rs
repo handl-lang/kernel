@@ -24,6 +24,8 @@
 //!   opaquely through host functions — the `{"__tensor__": {"shape",
 //!   "data", "dtype": "f64"}}` wire form `host-tensor` uses.
 
+pub mod nbe;
+
 use std::ffi::c_void;
 use std::fmt;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -298,6 +300,17 @@ impl Sym {
     /// The nominal parent, or `None` for a root sym.
     pub fn parent(&self) -> Option<&Sym> {
         self.parent.as_deref()
+    }
+
+    /// Construct a sym from explicit parts — used by `seeded` in `nbe`
+    /// for deterministic handles (hash of the qualified name) and by
+    /// deserialization. Fresh minting goes through `fresh*`.
+    pub fn from_parts(handle: u64, name: String, parent: Option<Rc<Sym>>) -> Sym {
+        Sym {
+            handle,
+            name: Rc::from(name),
+            parent,
+        }
     }
 
     /// Strict descendant check: `true` iff `other` appears in this sym's

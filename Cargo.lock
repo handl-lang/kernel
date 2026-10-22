@@ -394,6 +394,7 @@ dependencies = [
  "handl-language",
  "handl-lib-type-handl",
  "handl-platform",
+ "handl-plugin-ext-lint",
  "handl-plugin-lib-handl",
  "handl-plugin-lib-stdlib",
  "handl-plugin-module",
@@ -418,10 +419,8 @@ name = "handl-kit-data-prelude"
 version = "0.1.0"
 dependencies = [
  "handl-kit-data",
+ "handl-kit-prelude-lang",
  "handl-language",
- "handl-plugin-ext-diag",
- "handl-runtime",
- "hnl-engine-transform",
  "serde_json",
  "serde_yaml",
 ]
@@ -468,6 +467,7 @@ dependencies = [
  "handl-lib-comb",
  "handl-platform",
  "handl-plugin-ext-diag",
+ "handl-plugin-ext-lint",
  "handl-plugin-lib-char-native",
  "handl-plugin-lib-handl",
  "handl-plugin-lib-stdlib",
@@ -485,6 +485,18 @@ dependencies = [
  "hnl-engine-typecheck-handl",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "handl-kit-prelude-lang"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/kit-prelude-lang?branch=main#898745330b32c9b9df11eaa2a3922b0f564c67d1"
+dependencies = [
+ "handl-language",
+ "handl-plugin-ext-diag",
+ "hnl-engine-transform",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -867,6 +879,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "handl-plugin-ext-fmt"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/host?branch=main#15758e8f46d7a05e2ca60dcc74220b1f6147fd53"
+dependencies = [
+ "handl-language",
+ "handl-platform",
+ "handl-plugin-ext-diag",
+ "hnl-engine-fmt",
+ "hnl-engine-lex-pattern",
+ "hnl-engine-parse",
+ "hnl-engine-parse-pratt",
+ "serde_json",
+]
+
+[[package]]
+name = "handl-plugin-ext-lint"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/host?branch=main#15758e8f46d7a05e2ca60dcc74220b1f6147fd53"
+dependencies = [
+ "handl-language",
+ "handl-platform",
+ "handl-plugin-ext-diag",
+ "handl-plugin-ext-fmt",
+ "handl-plugin-lib-handl",
+ "hnl-engine-lint",
+ "hnl-engine-typecheck",
+ "serde_json",
+]
+
+[[package]]
 name = "handl-plugin-ffi"
 version = "0.1.0"
 dependencies = [
@@ -910,7 +952,6 @@ dependencies = [
  "hnl-engine-exec-bytecode",
  "hnl-engine-exec-tree-walk",
  "hnl-engine-lex-pattern",
- "hnl-engine-lint",
  "hnl-engine-parse-pratt",
  "hnl-engine-transform",
  "serde_json",
@@ -1261,6 +1302,15 @@ dependencies = [
  "hnl-engine",
  "hnl-engine-exec",
  "rustc-hash",
+ "serde_json",
+]
+
+[[package]]
+name = "hnl-engine-fmt"
+version = "0.1.0"
+source = "git+https://github.com/handl-lang/engine-fmt?branch=main#7585b3a11205fc39635bbdda6a998c2094e90a3a"
+dependencies = [
+ "handl-language",
  "serde_json",
 ]
 
