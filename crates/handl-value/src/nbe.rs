@@ -424,6 +424,32 @@ impl Sym {
         })
     }
 
+    /// The current memoized seeded sym with `handle`, if any — the
+    /// upgraded (link-carrying) version of a sym minted before its
+    /// links were declared. A captured `Sym` is immutable, so a stale
+    /// `Int` minted bare keeps `parent = None` even after
+    /// `seeded_with_links` upgrades the memo; readers that walk links
+    /// re-resolve through here first (identity is the handle, so the
+    /// substitution is semantics-preserving).
+    pub fn seeded_by_handle(handle: u64) -> Option<Rc<Sym>> {
+        if handle & SEEDED_BIT == 0 {
+            return None;
+        }
+        SEEDED_SYMS.with(|m| {
+            m.borrow()
+                .values()
+                .find(|s| s.handle() == handle)
+                .cloned()
+        })
+    }
+
+    /// This sym re-resolved through the seeded memo (see
+    /// [`Sym::seeded_by_handle`]): fresh/unmemoized syms return
+    /// unchanged.
+    pub fn resealed(self: &Rc<Sym>) -> Rc<Sym> {
+        Sym::seeded_by_handle(self.handle()).unwrap_or_else(|| self.clone())
+    }
+
     /// Whether this is a seeded (declared) nominal — handle has the
     /// high bit set.
     pub fn is_seeded(&self) -> bool {
