@@ -1850,54 +1850,11 @@ fn literal_type_seed(v: &TaggedValue) -> &'static str {
     }
 }
 
-/// The `type.*` seed a legacy `__tag__` string bridges to
-/// (ADR-0106 migration note, extended by ADR-0154): a datum whose
-/// `__tag__` is a builtin type tag has the seeded nominal as its type.
-/// Unknown tags bridge to `None` — they keep the plain-object read.
-fn legacy_type_seed(tag: &str) -> Option<&'static str> {
-    Some(match tag {
-        "int" => "type.Int",
-        "nat" => "type.Nat",
-        "float" => "type.Float",
-        "number" => "type.Number",
-        "str" | "string" => "type.Str",
-        "bool" => "type.Bool",
-        "null" => "type.Null",
-        "obj" | "object" => "type.Obj",
-        "array" => "type.Array",
-        "bytes" => "type.Bytes",
-        "arrow" | "function" => "type.Arrow",
-        "resource" => "type.Resource",
-        "unit" => "type.Unit",
-        "value" | "any" => "type.Value",
-        "type" => "type.Type",
-        "grade" => "type.Grade",
-        _ => return None,
-    })
-}
-
-/// The standard nominal roles a legacy `__tag__` datum satisfies —
-/// nearest first. Kept for the name-based bridge: pre-seeding nominals
-/// are anonymous or hand-minted, so `instanceof` over them matched the
-/// queried nominal's *presentation name* against this table.
-/// `legacy_type_seed` + the real `parent` walk subsumes it for seeded
-/// nominals; this table stays only for name-matched (unseeded) nominals
-/// until `__tag__` deletion lands.
-fn legacy_tag_roles(tag: &str) -> Option<&'static [&'static str]> {
-    match tag {
-        "int" => Some(&["Int", "Number"]),
-        "float" => Some(&["Float", "Number"]),
-        "nat" => Some(&["Nat", "Int", "Number"]),
-        "number" => Some(&["Number"]),
-        _ => None,
-    }
-}
-
 /// Resolve a `type`-link-shaped value to its nominal head sym: a `Sym`
 /// is its own head; `{"__former__": <sym>, …}` resolves to the former
 /// sym; `{"__type__": i}` (a universe encoding) resolves to the `Type`
-/// nominal; a `{"__tag__": t}` bridge resolves by tag. Anything else has
-/// no nominal head.
+/// nominal. Anything else has no nominal head. (The legacy `__tag__`
+/// bridge was deleted — tag-minted data is a plain object.)
 pub fn nominal_head(v: &TaggedValue) -> Option<Rc<Sym>> {
     match v {
         TaggedValue::Sym(s) => Some(s.clone()),
@@ -1913,9 +1870,6 @@ pub fn nominal_head(v: &TaggedValue) -> Option<Rc<Sym>> {
             if m.contains_key("__type__") {
                 return Some(Sym::seeded("type.Type"));
             }
-            if let Some(TaggedValue::Str(t)) = m.get("__tag__") {
-                return legacy_type_seed(t).map(Sym::seeded);
-            }
             None
         }
         _ => None,
@@ -1927,23 +1881,18 @@ pub fn nominal_head(v: &TaggedValue) -> Option<Rc<Sym>> {
 /// - a `Sym` yields its `ty` link (`Int.ty = Type`);
 /// - an object with a `"type"` field yields that field (ctor values
 ///   carry `{"type": F(i⃗)}`);
-/// - a `__tag__` datum yields the seeded nominal its tag bridges to;
 /// - a scalar literal yields its default kind nominal (`1 → type.Nat`,
 ///   `-1 → type.Int`, `1.5 → type.Float`, …);
 /// - any other value (plain object, pair/either, tensor, arrow) yields
 ///   its coarse kind nominal (`type.Obj`/`type.Arrow`/…).
-/// `None` only for a nominal with no `ty` link.
+/// `None` only for a nominal with no `ty` link. (The legacy `__tag__`
+/// bridge was deleted — a tagged datum is a plain `type.Obj` member.)
 pub fn type_link(v: &TaggedValue) -> Option<TaggedValue> {
     match v {
         TaggedValue::Sym(s) => s.ty().map(|t| TaggedValue::Sym(Rc::new(t.clone()))),
         TaggedValue::Obj(m) => {
             if let Some(t) = m.get("type") {
                 return Some(t.clone());
-            }
-            if let Some(TaggedValue::Str(tag)) = m.get("__tag__") {
-                if let Some(seed) = legacy_type_seed(tag) {
-                    return Some(TaggedValue::Sym(Sym::seeded(seed)));
-                }
             }
             // A plain object literal is a member of `type.Obj` — the
             // scalar fallback, same as `Arr`/`Bytes` above.
@@ -1965,12 +1914,10 @@ pub fn type_link(v: &TaggedValue) -> Option<TaggedValue> {
 /// - A nominal *value* reads both its own `parent` chain (the `<:` read
 ///   — `instanceof(Float, Number)`) and its `ty` link (the membership
 ///   read — `instanceof(Int, Type)`).
-/// - A `__tag__` datum bridges two ways: the seeded nominal's real
-///   parent walk, *and* — for unseeded hand-minted nominals — the legacy
-///   name match (`nominal.name` ∈ the datum's roles). Both stay until
-///   `__tag__` deletion lands.
 /// - Scalars resolve through the literal defaults (`1 instanceof Nat`,
 ///   `1.5 instanceof Float`).
+/// (The legacy `__tag__` datum bridge was deleted — a tagged datum is a
+/// plain object member of `type.Obj`.)
 pub fn instance_of(value: &TaggedValue, nominal: &TaggedValue) -> bool {
     ensure_builtin_type_nominals();
     let Some(n) = nominal_head(nominal) else {
@@ -1984,29 +1931,10 @@ pub fn instance_of(value: &TaggedValue, nominal: &TaggedValue) -> bool {
             let s = s.resealed();
             s.has_ancestor(&n) || s.ty().is_some_and(|t| t.resealed().has_ancestor(&n))
         }
-        TaggedValue::Obj(m) => {
-            // `type` link first, `__tag__` bridge second (0154 §2 read
-            // order): a `"type"` field is authoritative; a bare
-            // `__tag__` datum falls back to the tag bridges.
-            if !m.contains_key("type") {
-                if let Some(tag) = m.get("__tag__").and_then(|t| t.as_str()) {
-                    // Bridge: the datum's type is the seeded nominal for
-                    // its tag (real parent walk) — or, for hand-minted
-                    // nominals, the presentation-name role match.
-                    let seeded = legacy_type_seed(tag)
-                        .is_some_and(|seed| Sym::seeded(seed).has_ancestor(&n));
-                    let named = legacy_tag_roles(tag).is_some_and(|roles| {
-                        let own = n.name().to_ascii_lowercase();
-                        !own.is_empty() && roles.iter().any(|r| r.to_ascii_lowercase() == own)
-                    });
-                    return seeded || named;
-                }
-            }
-            match type_link(value).as_ref().and_then(nominal_head) {
-                Some(head) => head.has_ancestor(&n),
-                None => false,
-            }
-        }
+        TaggedValue::Obj(_m) => match type_link(value).as_ref().and_then(nominal_head) {
+            Some(head) => head.has_ancestor(&n),
+            None => false,
+        },
         _ => match type_link(value).as_ref().and_then(nominal_head) {
             Some(head) => head.has_ancestor(&n),
             None => false,
@@ -3114,13 +3042,14 @@ mod cell_tests {
             "type": tagged_to_value(&fapp)
         }));
         assert_eq!(type_link(&ctor), Some(fapp));
-        // A legacy `__tag__` datum bridges to its seeded nominal.
+        // A `__tag__` datum no longer bridges — it is a plain object,
+        // a member of `type.Obj`.
         let datum = TaggedValue::from(serde_json::json!({
             "__tag__": "int", "__registry__": "type", "kind": "primitive"
         }));
         assert_eq!(
             type_link(&datum),
-            Some(TaggedValue::Sym(Sym::seeded("type.Int")))
+            Some(TaggedValue::Sym(Sym::seeded("type.Obj")))
         );
         // A nominal value yields its `ty` link.
         let int_sym = TaggedValue::Sym(Sym::seeded("type.Int"));
@@ -3173,26 +3102,23 @@ mod cell_tests {
     }
 
     #[test]
-    fn instance_of_legacy_tag_bridge() {
+    fn instance_of_tag_datum_is_plain_object() {
+        // Post-deletion: a `__tag__` datum has no nominal bridge — it is
+        // a plain object, a member of `type.Obj` and nothing else.
         ensure_builtin_type_nominals();
         let datum = |t: &str| {
             TaggedValue::from(serde_json::json!({
                 "__tag__": t, "__registry__": "type", "kind": "primitive"
             }))
         };
-        // Seeded walk: tag → seeded nominal → `parent` chain.
-        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
-        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Number"))));
-        assert!(instance_of(&datum("nat"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
-        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Float"))));
-        // Name bridge: an unseeded nominal named like a std type still
-        // matches by presentation name (legacy semantics).
+        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Obj"))));
+        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
+        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Number"))));
+        // An unseeded nominal named like a std type no longer matches.
         let named = TaggedValue::Sym(Rc::new(Sym::fresh_with_parent(
             "Int",
             &Sym::fresh("Number"),
         )));
-        assert!(instance_of(&datum("int"), &named));
-        // Unknown tags stay false (no roles, no seed).
-        assert!(!instance_of(&datum("custom"), &named));
+        assert!(!instance_of(&datum("int"), &named));
     }
 }
