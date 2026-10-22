@@ -438,3 +438,144 @@ mod tests {
         assert!(!store.occurs(9, &outer));
     }
 }
+
+// ---------------------------------------------------------------------------
+// Conversion — `conv` (0154 §2/§3: nominal identity for heads, structural
+// for bodies; metas solve, rigid levels compare)
+// ---------------------------------------------------------------------------
+
+/// Conversion check `a ≡ b` at ambient level `lvl` (the number of
+/// binders in scope — needed to compare open terms). Solves unsolved
+/// metas as a side effect; a failed `conv` may leave the store
+/// partially solved — callers snapshot `MetaStore::mark`/`truncate`.
+pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
+    let a = store.force_head(a).clone();
+    let b = store.force_head(b).clone();
+    match (a, b) {
+        // A solved-or-unsolved meta on the left: try to solve it to b
+        // (occurs check first — ?m ≠ spine containing ?m).
+        (Val::Flex { meta, .. }, other) | (other, Val::Flex { meta, .. }) => {
+            !store.occurs(meta, &other) && store.solve(meta, other)
+        }
+        (Val::Rigid { lvl: l1, spine: s1 }, Val::Rigid { lvl: l2, spine: s2 }) => {
+            l1 == l2 && conv_spine(store, lvl, &s1, &s2)
+        }
+        // Nominal heads compare by sym identity; index arguments by
+        // structural conversion (0152 §1 / 0154 §3).
+        (
+            Val::Former { head: h1, args: a1 },
+            Val::Former { head: h2, args: a2 },
+        ) => {
+            h1 == h2
+                && a1.len() == a2.len()
+                && a1.iter().zip(a2.iter()).all(|(x, y)| conv(store, lvl, x, y))
+        }
+        (Val::Nominal(s1), Val::Nominal(s2)) => s1 == s2,
+        (Val::Universe(i), Val::Universe(j)) => i == j,
+        (Val::Const(v1), Val::Const(v2)) => v1 == v2,
+        // Arrows are data: params + residual binds compare structurally;
+        // body_def compares by its tagged encoding (alpha-equivalence of
+        // bodies is an engine concern — two identical definitions are
+        // equal here, which is what transport/match need).
+        (Val::Arrow(x), Val::Arrow(y)) => {
+            x.params == y.params
+                && x.body_def == y.body_def
+                && x.binds.len() == y.binds.len()
+                && x.binds.iter().all(|(k, v)| {
+                    y.binds.get(k).is_some_and(|w| conv(store, lvl, v, w))
+                })
+        }
+        // Unfold: same top-level name is the fast path (Kovács); on a
+        // name mismatch force both sides and retry — a failed name
+        // compare must not poison the store.
+        (Val::Unfold { name: n1, .. }, Val::Unfold { name: n2, .. }) if n1 == n2 => true,
+        (u @ Val::Unfold { .. }, other) | (other, u @ Val::Unfold { .. }) => {
+            if let Val::Unfold { value, .. } = u {
+                if let Some(v) = value.get() {
+                    return conv(store, lvl, v, &other);
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn conv_spine(store: &mut MetaStore, lvl: Lvl, s1: &Spine, s2: &Spine) -> bool {
+    s1.0.len() == s2.0.len()
+        && s1.0.iter().zip(s2.0.iter()).all(|(x, y)| conv(store, lvl, x, y))
+}
+
+impl MetaStore {
+    /// Snapshot mark — for backtracking a failed `conv`/`unify`.
+    pub fn mark(&self) -> usize {
+        self.metas.len()
+    }
+
+    /// Restore the store to `mark` — drops all metas allocated since
+    /// (solutions to older metas are unaffected, which is the NbE
+    /// convention: meta solving is monotone).
+    pub fn truncate(&mut self, mark: usize) {
+        self.metas.truncate(mark);
+    }
+}
+
+#[cfg(test)]
+mod conv_tests {
+    use super::*;
+
+    #[test]
+    fn former_conv_nominal_head_structural_args() {
+        let mut store = MetaStore::default();
+        let vec = Sym::seeded("vec.Vec");
+        let int = Sym::seeded("type.Int");
+        let two_a = Val::Former {
+            head: vec.clone(),
+            args: vec![Val::Const(TaggedValue::Int(2)), Val::Nominal(int.clone())],
+        };
+        let two_b = Val::Former {
+            head: vec.clone(),
+            args: vec![Val::Const(TaggedValue::Int(2)), Val::Nominal(int)],
+        };
+        assert!(conv(&mut store, 0, &two_a, &two_b));
+        let three = Val::Former {
+            head: vec,
+            args: vec![Val::Const(TaggedValue::Int(3)), Val::Nominal(Sym::seeded("type.Int"))],
+        };
+        assert!(!conv(&mut store, 0, &two_a, &three));
+    }
+
+    #[test]
+    fn flex_solves_to_rigid() {
+        let mut store = MetaStore::default();
+        let m = store.fresh();
+        let r = Val::Rigid { lvl: 0, spine: Spine::default() };
+        assert!(conv(&mut store, 1, &Val::Flex { meta: m, spine: Spine::default() }, &r));
+        assert!(store.solution(m).is_some());
+    }
+
+    #[test]
+    fn flex_occurs_rejects_cycle() {
+        let mut store = MetaStore::default();
+        let m = store.fresh();
+        let cyclic = Val::Former {
+            head: Sym::seeded("type.Int"),
+            args: vec![Val::Flex { meta: m, spine: Spine::default() }],
+        };
+        assert!(!conv(&mut store, 0, &Val::Flex { meta: m, spine: Spine::default() }, &cyclic));
+        assert!(store.solution(m).is_none());
+    }
+
+    #[test]
+    fn literal_meta_solves_numeric() {
+        let mut store = MetaStore::default();
+        let num = Sym::seeded("type.Number");
+        let int = Sym::seeded_with_parent("type.Int", &num);
+        let m = store.fresh_constrained(MetaConstraint::DescendantOf(num));
+        assert!(conv(&mut store, 0, &Val::Flex { meta: m, spine: Spine::default() }, &Val::Nominal(int)));
+        // A non-numeric type cannot solve the literal meta.
+        let m2 = store.fresh_constrained(MetaConstraint::DescendantOf(Sym::seeded("type.Number")));
+        assert!(!conv(&mut store, 0, &Val::Flex { meta: m2, spine: Spine::default() },
+                     &Val::Nominal(Sym::seeded("type.Str"))));
+    }
+}
