@@ -249,10 +249,25 @@ static SYM_NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
 /// # Serializability
 ///
 /// The JSON encoding is `{"__sym__": {"handle": <n>, "name": "...",
-/// "parent": <nested sym or null>}}` — explicit data with no closures and
-/// no hidden state. Round-tripping preserves the handle, so a deserialized
-/// sym compares equal to the live sym it was serialized from (within a
-/// process; cross-process identity is a follow-up ADR per ADR-0106).
+/// "parent": <nested sym or null>, "type": <nested sym or null>}}` —
+/// explicit data with no closures and no hidden state. Round-tripping
+/// preserves the handle, so a deserialized sym compares equal to the live
+/// sym it was serialized from (within a process; cross-process identity is
+/// a follow-up ADR per ADR-0106).
+///
+/// # The two links (ADR-0154 §2)
+///
+/// Membership and subtyping are two links, not one chain:
+///
+/// - `parent` is the **subtyping** link: `T <: U` walks `parent`
+///   (`Nat <: Int <: Number`). Read by `has_ancestor`/`is_descendant_of`.
+/// - `ty` is the **membership** link: a value *that is itself a type*
+///   carries `ty` → the nominal of its type (`Int.ty = Type`, i.e.
+///   `Int : Type`). Ordinary member values carry their `type` link as an
+///   object field instead (the `{"type": …}` field of ctor values) — it
+///   lives on `Sym` only for nominals, which have no other carrier.
+///
+/// Neither link is part of identity: `PartialEq`/`Hash` compare handles.
 #[derive(Clone, Debug)]
 pub struct Sym {
     /// The unique nominal handle (identity). Minted from
@@ -261,7 +276,12 @@ pub struct Sym {
     /// Display name — presentation only, never part of identity.
     name: Rc<str>,
     /// Optional nominal parent (also a `Sym`). Single parent, no cycles.
+    /// The `<:` edge (ADR-0154 §2).
     parent: Option<Rc<Sym>>,
+    /// Optional `type` link (also a `Sym`) — the membership edge: what
+    /// this nominal is *a member of* when the nominal is used as a type
+    /// value (`Int.ty = Type`). `None` for non-type nominals.
+    ty: Option<Rc<Sym>>,
 }
 
 impl Sym {
@@ -273,6 +293,7 @@ impl Sym {
             handle,
             name: Rc::from(name),
             parent: None,
+            ty: None,
         }
     }
 
@@ -284,6 +305,7 @@ impl Sym {
             handle,
             name: Rc::from(name),
             parent: Some(Rc::new(parent.clone())),
+            ty: None,
         }
     }
 
@@ -302,14 +324,27 @@ impl Sym {
         self.parent.as_deref()
     }
 
+    /// The `type` link — what this nominal is a member of when used as a
+    /// type value (`Int.ty = Type`; ADR-0154 §2). `None` for non-type
+    /// nominals.
+    pub fn ty(&self) -> Option<&Sym> {
+        self.ty.as_deref()
+    }
+
     /// Construct a sym from explicit parts — used by `seeded` in `nbe`
     /// for deterministic handles (hash of the qualified name) and by
     /// deserialization. Fresh minting goes through `fresh*`.
-    pub fn from_parts(handle: u64, name: String, parent: Option<Rc<Sym>>) -> Sym {
+    pub fn from_parts(
+        handle: u64,
+        name: String,
+        parent: Option<Rc<Sym>>,
+        ty: Option<Rc<Sym>>,
+    ) -> Sym {
         Sym {
             handle,
             name: Rc::from(name),
             parent,
+            ty,
         }
     }
 
@@ -795,33 +830,52 @@ fn map_to_obj(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
     TaggedValue::Obj(Rc::new(obj_map_to_hashmap(o, ctx)))
 }
 
+/// Decode an optional nested sym link (`parent`/`type` in the `__sym__`
+/// payload): `null`/absent → `None`, a `{"__sym__": {...}}` encoding →
+/// the nested sym, anything else is malformed (`Err`).
+fn sym_link_from_json(v: Option<&Value>) -> Result<Option<Rc<Sym>>, ()> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        // The encoder nests the link target as a full {"__sym__": {...}}
+        // value; unwrap the wrapper before recursing.
+        Some(Value::Object(obj)) => {
+            let inner = obj
+                .get("__sym__")
+                .and_then(|v| v.as_object())
+                .ok_or(())?;
+            match sym_from_json(inner) {
+                Some(TaggedValue::Sym(s)) => Ok(Some(s)),
+                _ => Err(()),
+            }
+        }
+        Some(_) => Err(()),
+    }
+}
+
 /// Decode the inner payload of a `{"__sym__": {...}}` JSON object into a
 /// nominal [`TaggedValue`]. Returns `None` when the payload is malformed
-/// (missing/invalid `handle` or `name`, or a `parent` that is not itself a
-/// sym encoding or `null`), so the caller can fall back to a plain object.
+/// (missing/invalid `handle` or `name`, or a `parent`/`type` link that is
+/// not itself a sym encoding or `null`), so the caller can fall back to a
+/// plain object.
 fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
     let handle = sym_val.get("handle").and_then(|v| v.as_u64())?;
     if handle == 0 {
         return None;
     }
     let name = sym_val.get("name").and_then(|v| v.as_str())?;
-    let parent = match sym_val.get("parent") {
-        None | Some(Value::Null) => None,
-        // The encoder nests the parent as a full {"__sym__": {...}} value;
-        // unwrap the wrapper before recursing.
-        Some(Value::Object(parent_obj)) => {
-            let parent_sym = parent_obj.get("__sym__").and_then(|v| v.as_object())?;
-            match sym_from_json(parent_sym) {
-                Some(TaggedValue::Sym(p)) => Some(p),
-                _ => return None,
-            }
-        }
-        Some(_) => return None,
-    };
+    let parent = sym_link_from_json(sym_val.get("parent")).ok()?;
+    // The `type` link (ADR-0154 §2): same nested-sym encoding as
+    // `parent`; absent in pre-0154 payloads → `None`. Lenient: a `type`
+    // payload that is not a sym encoding (e.g. a `{"__former__": …}` or
+    // `{"__type__": i}` link written by another layer) is ignored rather
+    // than poisoning the whole nominal — `Sym::ty` models nominal links
+    // only.
+    let ty = sym_link_from_json(sym_val.get("type")).ok().flatten();
     let sym = Sym {
         handle,
         name: Rc::from(name),
         parent,
+        ty,
     };
     Some(TaggedValue::Sym(Rc::new(sym)))
 }
@@ -1121,11 +1175,16 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
         TaggedValue::Str(s) => Value::String((*s).to_string()),
         TaggedValue::Sym(s) => {
             // Nominal identity (ADR-0106 §2): explicit data — handle (the
-            // identity), name (presentation), and the parent chain nested
-            // inline. The nested encoding keeps the value self-contained
+            // identity), name (presentation), and the `parent` (`<:`)
+            // and `type` (membership) links nested inline (ADR-0154 §2).
+            // The nested encoding keeps the value self-contained
             // (O(depth) per sym; chains in this kernel are short).
             let parent = match s.parent() {
                 Some(p) => tagged_to_value_ctx(&TaggedValue::Sym(Rc::new(p.clone())), ctx),
+                None => Value::Null,
+            };
+            let ty = match s.ty() {
+                Some(t) => tagged_to_value_ctx(&TaggedValue::Sym(Rc::new(t.clone())), ctx),
                 None => Value::Null,
             };
             serde_json::json!({
@@ -1133,6 +1192,7 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
                     "handle": s.handle(),
                     "name": s.name(),
                     "parent": parent,
+                    "type": ty,
                 }
             })
         }
@@ -1459,7 +1519,7 @@ impl TaggedValue {
     /// canonical `{"__x__": …}` wire record as a plain object:
     /// `Tensor` → `{"__tensor__": {shape, data, dtype}}`,
     /// `Bytes` → `{"__bytes__": [n, …]}`,
-    /// `Sym` → `{"__sym__": {handle, name, parent}}`,
+    /// `Sym` → `{"__sym__": {handle, name, parent, type}}`,
     /// `Resource` → `{"__resource__": {ptr}}`. This is the same shape
     /// [`tagged_to_value`] emits for the boundary, so field access,
     /// `has_field`, and record destructuring read an opaque value
@@ -1528,16 +1588,16 @@ impl TaggedValue {
                     Rc::from("name"),
                     TaggedValue::Str(Rc::from(s.name())),
                 );
-                inner.insert(
-                    Rc::from("parent"),
-                    s.parent()
-                        .map(|p| {
-                            TaggedValue::Sym(Rc::new(p.clone()))
-                                .object_view()
-                                .unwrap_or(TaggedValue::Null)
-                        })
-                        .unwrap_or(TaggedValue::Null),
-                );
+                let link_view = |link: Option<&Sym>| {
+                    link.map(|p| {
+                        TaggedValue::Sym(Rc::new(p.clone()))
+                            .object_view()
+                            .unwrap_or(TaggedValue::Null)
+                    })
+                    .unwrap_or(TaggedValue::Null)
+                };
+                inner.insert(Rc::from("parent"), link_view(s.parent()));
+                inner.insert(Rc::from("type"), link_view(s.ty()));
                 let mut outer = FxHashMap::default();
                 outer.insert(Rc::from("__sym__"), TaggedValue::Obj(Rc::new(inner)));
                 Some(TaggedValue::Obj(Rc::new(outer)))
@@ -1673,6 +1733,275 @@ pub fn has_ancestor(v: &TaggedValue, other: &TaggedValue) -> bool {
     match (v.as_sym(), other.as_sym()) {
         (Some(a), Some(b)) => a.has_ancestor(b),
         _ => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Seeded minting + the builtin `type.*` nominal graph (ADR-0154 §1/§2)
+// ---------------------------------------------------------------------------
+
+/// Mint (or recall) the seeded nominal for `seed` — the deterministic
+/// `sym("name")` surface form of ADR-0154 §1. Idempotent; the handle is a
+/// content hash of `seed`.
+pub fn sym_seeded(seed: &str) -> TaggedValue {
+    TaggedValue::Sym(Sym::seeded(seed))
+}
+
+/// Mint (or recall) the seeded nominal for `seed` with `parent`/`ty`
+/// links taken from values (`sym("seed", parent, ty)` — `null` for an
+/// absent link). Errors when a link argument is neither a nominal nor
+/// null.
+pub fn sym_seeded_with_links(
+    seed: &str,
+    parent: &TaggedValue,
+    ty: &TaggedValue,
+) -> Result<TaggedValue, String> {
+    let link = |v: &TaggedValue, what: &str| -> Result<Option<Rc<Sym>>, String> {
+        match v {
+            TaggedValue::Sym(s) => Ok(Some(s.clone())),
+            TaggedValue::Null => Ok(None),
+            _ => Err(format!("sym: {what} is not a nominal object")),
+        }
+    };
+    let parent = link(parent, "parent")?;
+    let ty = link(ty, "type")?;
+    Ok(TaggedValue::Sym(Sym::seeded_with_links(
+        seed,
+        parent.as_deref(),
+        ty.as_deref(),
+    )))
+}
+
+/// The canonical builtin `type.*` nominal graph — data, not code
+/// (ADR-0154 §1/§2). Each row is `(seed, parent_seed, type_seed)`:
+/// `parent` is the `<:` edge, `type` the membership edge (every declared
+/// type is a member of `Type`). The `parent` graph encodes
+/// `Nat <: Int <: Number <: Value`, `Float <: Number`, and every other
+/// builtin type directly under `Value` (the top).
+///
+/// Seeds are the qualified *declared* names (`type.Int`), matching the
+/// `data.<DeclName>` former convention — identity, so every engine that
+/// mints or reads these nominals agrees on the seed spelling.
+pub const BUILTIN_TYPE_GRAPH: &[(&str, Option<&str>, Option<&str>)] = &[
+    ("type.Value", None, Some("type.Type")),
+    ("type.Type", None, Some("type.Type")),
+    ("type.Number", Some("type.Value"), Some("type.Type")),
+    ("type.Int", Some("type.Number"), Some("type.Type")),
+    ("type.Float", Some("type.Number"), Some("type.Type")),
+    ("type.Nat", Some("type.Int"), Some("type.Type")),
+    ("type.Str", Some("type.Value"), Some("type.Type")),
+    ("type.Bool", Some("type.Value"), Some("type.Type")),
+    ("type.Null", Some("type.Value"), Some("type.Type")),
+    ("type.Obj", Some("type.Value"), Some("type.Type")),
+    ("type.Array", Some("type.Value"), Some("type.Type")),
+    ("type.Bytes", Some("type.Value"), Some("type.Type")),
+    ("type.Arrow", Some("type.Value"), Some("type.Type")),
+    ("type.Resource", Some("type.Value"), Some("type.Type")),
+    ("type.Unit", Some("type.Value"), Some("type.Type")),
+    ("type.Grade", None, Some("type.Type")),
+];
+
+/// Seed the whole [`BUILTIN_TYPE_GRAPH`] — idempotent, cheap (one memo
+/// pass per call after the first). Every entry point that mints or reads
+/// a builtin `type.*` nominal calls this first so `parent`/`type` links
+/// exist regardless of mint order (`seeded_with_links` upgrades a bare
+/// memoized sym in place, preserving its handle).
+pub fn ensure_builtin_type_nominals() {
+    for &(seed, parent, ty) in BUILTIN_TYPE_GRAPH {
+        let parent = parent.map(Sym::seeded);
+        let ty = ty.map(Sym::seeded);
+        Sym::seeded_with_links(seed, parent.as_deref(), ty.as_deref());
+    }
+}
+
+/// The seeded nominal for a builtin `type.*` seed — e.g.
+/// `builtin_type("type.Int")`. The full graph is ensured first so the
+/// returned sym carries its `parent`/`type` links.
+pub fn builtin_type(seed: &str) -> TaggedValue {
+    ensure_builtin_type_nominals();
+    sym_seeded(seed)
+}
+
+/// The canonical `type.*` seed a scalar literal defaults to
+/// (ADR-0154 §5): an integer literal's constrained meta defaults to
+/// `Nat` (negative mints resolve to `Int` — `Nat`'s domain), a fraction
+/// literal to `Float`; other scalars to their kind nominal.
+fn literal_type_seed(v: &TaggedValue) -> &'static str {
+    match v {
+        TaggedValue::Int(i) if *i < 0 => "type.Int",
+        TaggedValue::Int(_) => "type.Nat",
+        TaggedValue::Float(_) => "type.Float",
+        TaggedValue::Str(_) => "type.Str",
+        TaggedValue::Bool(_) => "type.Bool",
+        TaggedValue::Null => "type.Null",
+        TaggedValue::Arr(_) => "type.Array",
+        TaggedValue::Bytes(_) => "type.Bytes",
+        TaggedValue::Arrow { .. } => "type.Arrow",
+        TaggedValue::Resource(_) => "type.Resource",
+        // Pair/Either/Tensor/plain objects all present as objects at the
+        // boundary — the coarse kind nominal until product/sum/tensor
+        // formers exist.
+        _ => "type.Obj",
+    }
+}
+
+/// The `type.*` seed a legacy `__tag__` string bridges to
+/// (ADR-0106 migration note, extended by ADR-0154): a datum whose
+/// `__tag__` is a builtin type tag has the seeded nominal as its type.
+/// Unknown tags bridge to `None` — they keep the plain-object read.
+fn legacy_type_seed(tag: &str) -> Option<&'static str> {
+    Some(match tag {
+        "int" => "type.Int",
+        "nat" => "type.Nat",
+        "float" => "type.Float",
+        "number" => "type.Number",
+        "str" | "string" => "type.Str",
+        "bool" => "type.Bool",
+        "null" => "type.Null",
+        "obj" | "object" => "type.Obj",
+        "array" => "type.Array",
+        "bytes" => "type.Bytes",
+        "arrow" | "function" => "type.Arrow",
+        "resource" => "type.Resource",
+        "unit" => "type.Unit",
+        "value" | "any" => "type.Value",
+        "type" => "type.Type",
+        "grade" => "type.Grade",
+        _ => return None,
+    })
+}
+
+/// The standard nominal roles a legacy `__tag__` datum satisfies —
+/// nearest first. Kept for the name-based bridge: pre-seeding nominals
+/// are anonymous or hand-minted, so `instanceof` over them matched the
+/// queried nominal's *presentation name* against this table.
+/// `legacy_type_seed` + the real `parent` walk subsumes it for seeded
+/// nominals; this table stays only for name-matched (unseeded) nominals
+/// until `__tag__` deletion lands.
+fn legacy_tag_roles(tag: &str) -> Option<&'static [&'static str]> {
+    match tag {
+        "int" => Some(&["Int", "Number"]),
+        "float" => Some(&["Float", "Number"]),
+        "nat" => Some(&["Nat", "Int", "Number"]),
+        "number" => Some(&["Number"]),
+        _ => None,
+    }
+}
+
+/// Resolve a `type`-link-shaped value to its nominal head sym: a `Sym`
+/// is its own head; `{"__former__": <sym>, …}` resolves to the former
+/// sym; `{"__type__": i}` (a universe encoding) resolves to the `Type`
+/// nominal; a `{"__tag__": t}` bridge resolves by tag. Anything else has
+/// no nominal head.
+pub fn nominal_head(v: &TaggedValue) -> Option<Rc<Sym>> {
+    match v {
+        TaggedValue::Sym(s) => Some(s.clone()),
+        TaggedValue::Obj(m) => {
+            if let Some(TaggedValue::Sym(s)) = m.get("__former__") {
+                return Some(s.clone());
+            }
+            if let Some(TaggedValue::Obj(f)) = m.get("__former__") {
+                if let Some(TaggedValue::Sym(s)) = f.get("sym") {
+                    return Some(s.clone());
+                }
+            }
+            if m.contains_key("__type__") {
+                return Some(Sym::seeded("type.Type"));
+            }
+            if let Some(TaggedValue::Str(t)) = m.get("__tag__") {
+                return legacy_type_seed(t).map(Sym::seeded);
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// The `type` link of a value — `x : T` read (ADR-0154 §2).
+///
+/// - a `Sym` yields its `ty` link (`Int.ty = Type`);
+/// - an object with a `"type"` field yields that field (ctor values
+///   carry `{"type": F(i⃗)}`);
+/// - a `__tag__` datum yields the seeded nominal its tag bridges to;
+/// - a scalar literal yields its default kind nominal (`1 → type.Nat`,
+///   `-1 → type.Int`, `1.5 → type.Float`, …);
+/// - any other value (plain object, pair/either, tensor, arrow) yields
+///   its coarse kind nominal (`type.Obj`/`type.Arrow`/…).
+/// `None` only for a nominal with no `ty` link.
+pub fn type_link(v: &TaggedValue) -> Option<TaggedValue> {
+    match v {
+        TaggedValue::Sym(s) => s.ty().map(|t| TaggedValue::Sym(Rc::new(t.clone()))),
+        TaggedValue::Obj(m) => {
+            if let Some(t) = m.get("type") {
+                return Some(t.clone());
+            }
+            if let Some(TaggedValue::Str(tag)) = m.get("__tag__") {
+                if let Some(seed) = legacy_type_seed(tag) {
+                    return Some(TaggedValue::Sym(Sym::seeded(seed)));
+                }
+            }
+            // A plain object literal is a member of `type.Obj` — the
+            // scalar fallback, same as `Arr`/`Bytes` above.
+            Some(TaggedValue::Sym(Sym::seeded(literal_type_seed(v))))
+        }
+        TaggedValue::Pair(_) | TaggedValue::EitherLeft(_) | TaggedValue::EitherRight(_) => {
+            Some(TaggedValue::Sym(Sym::seeded("type.Obj")))
+        }
+        _ => Some(TaggedValue::Sym(Sym::seeded(literal_type_seed(v)))),
+    }
+}
+
+/// `instanceof(value, nominal)` — ADR-0154 §2 membership + subtyping in
+/// one read: `x : T` resolves `x`'s `type`-link head, then the `<:` walk
+/// is `head.has_ancestor(nominal)` over `parent` links.
+///
+/// - `nominal` resolves to a head sym the same way ([`nominal_head`]) —
+///   a `{"__former__": s}` family object is a valid `instanceof` target.
+/// - A nominal *value* reads both its own `parent` chain (the `<:` read
+///   — `instanceof(Float, Number)`) and its `ty` link (the membership
+///   read — `instanceof(Int, Type)`).
+/// - A `__tag__` datum bridges two ways: the seeded nominal's real
+///   parent walk, *and* — for unseeded hand-minted nominals — the legacy
+///   name match (`nominal.name` ∈ the datum's roles). Both stay until
+///   `__tag__` deletion lands.
+/// - Scalars resolve through the literal defaults (`1 instanceof Nat`,
+///   `1.5 instanceof Float`).
+pub fn instance_of(value: &TaggedValue, nominal: &TaggedValue) -> bool {
+    ensure_builtin_type_nominals();
+    let Some(n) = nominal_head(nominal) else {
+        return false;
+    };
+    match value {
+        TaggedValue::Sym(s) => {
+            s.has_ancestor(&n) || s.ty().is_some_and(|t| t.has_ancestor(&n))
+        }
+        TaggedValue::Obj(m) => {
+            // `type` link first, `__tag__` bridge second (0154 §2 read
+            // order): a `"type"` field is authoritative; a bare
+            // `__tag__` datum falls back to the tag bridges.
+            if !m.contains_key("type") {
+                if let Some(tag) = m.get("__tag__").and_then(|t| t.as_str()) {
+                    // Bridge: the datum's type is the seeded nominal for
+                    // its tag (real parent walk) — or, for hand-minted
+                    // nominals, the presentation-name role match.
+                    let seeded = legacy_type_seed(tag)
+                        .is_some_and(|seed| Sym::seeded(seed).has_ancestor(&n));
+                    let named = legacy_tag_roles(tag).is_some_and(|roles| {
+                        let own = n.name().to_ascii_lowercase();
+                        !own.is_empty() && roles.iter().any(|r| r.to_ascii_lowercase() == own)
+                    });
+                    return seeded || named;
+                }
+            }
+            match type_link(value).as_ref().and_then(nominal_head) {
+                Some(head) => head.has_ancestor(&n),
+                None => false,
+            }
+        }
+        _ => match type_link(value).as_ref().and_then(nominal_head) {
+            Some(head) => head.has_ancestor(&n),
+            None => false,
+        },
     }
 }
 
@@ -2687,5 +3016,174 @@ mod cell_tests {
             .is_none());
         assert!(TaggedValue::Int(1).object_view().is_none());
         assert!(TaggedValue::Null.object_view().is_none());
+    }
+
+    #[test]
+    fn sym_ty_link_roundtrips_the_wire_encoding() {
+        // A nominal carrying both links serializes `parent` and `type`
+        // and decodes them back (ADR-0154 §2).
+        ensure_builtin_type_nominals();
+        let int = Sym::seeded("type.Int");
+        assert_eq!(int.ty().map(|t| t.name()), Some("Type"));
+        assert_eq!(int.parent().map(|p| p.name()), Some("Number"));
+
+        let wire = tagged_to_value(&TaggedValue::Sym(int.clone()));
+        let back = TaggedValue::from(wire.clone());
+        let TaggedValue::Sym(decoded) = &back else {
+            panic!("expected a Sym, got {back:?}")
+        };
+        assert_eq!(decoded, &int);
+        assert_eq!(decoded.ty().map(|t| t.name()), Some("Type"));
+        assert_eq!(decoded.parent().map(|p| p.name()), Some("Number"));
+        // The wire form carries both links.
+        assert!(wire["__sym__"]["type"]["__sym__"]["name"].is_string());
+        assert_eq!(
+            wire["__sym__"]["parent"]["__sym__"]["name"],
+            Value::from("Number")
+        );
+    }
+
+    #[test]
+    fn builtin_graph_encodes_numeric_subtyping() {
+        ensure_builtin_type_nominals();
+        let nat = Sym::seeded("type.Nat");
+        let int = Sym::seeded("type.Int");
+        let number = Sym::seeded("type.Number");
+        let float = Sym::seeded("type.Float");
+        let value = Sym::seeded("type.Value");
+        assert!(nat.is_descendant_of(&int));
+        assert!(int.is_descendant_of(&number));
+        assert!(nat.is_descendant_of(&number));
+        assert!(float.is_descendant_of(&number));
+        assert!(!int.is_descendant_of(&float));
+        // `Value` tops the graph.
+        assert!(number.is_descendant_of(&value));
+        assert!(Sym::seeded("type.Str").is_descendant_of(&value));
+        assert!(!value.is_descendant_of(&number));
+        // Seeded mints are idempotent: the graph is ensured, not re-minted.
+        assert_eq!(Sym::seeded("type.Int"), int);
+    }
+
+    #[test]
+    fn seeded_with_links_upgrades_bare_mints() {
+        // A bare `seeded` mint gains its links later (same handle).
+        let bare = Sym::seeded("type.Kilo");
+        let h = bare.handle();
+        assert!(bare.parent().is_none() && bare.ty().is_none());
+        let p = Sym::seeded("type.Scale");
+        let t = Sym::seeded("type.Type");
+        let full = Sym::seeded_with_links("type.Kilo", Some(&p), Some(&t));
+        assert_eq!(full.handle(), h);
+        assert_eq!(full.parent().map(|x| x.handle()), Some(p.handle()));
+        assert_eq!(full.ty().map(|x| x.handle()), Some(t.handle()));
+        // Links are set-once: a second declare keeps the first parents.
+        let other = Sym::seeded("type.Other");
+        let again = Sym::seeded_with_links("type.Kilo", Some(&other), None);
+        assert_eq!(again.parent().map(|x| x.handle()), Some(p.handle()));
+    }
+
+    #[test]
+    fn type_link_reads_membership() {
+        ensure_builtin_type_nominals();
+        // Literals default per ADR-0154 §5.
+        let nat = TaggedValue::Sym(Sym::seeded("type.Nat"));
+        let int = TaggedValue::Sym(Sym::seeded("type.Int"));
+        let float = TaggedValue::Sym(Sym::seeded("type.Float"));
+        assert_eq!(type_link(&TaggedValue::Int(1)), Some(nat.clone()));
+        assert_eq!(type_link(&TaggedValue::Int(-2)), Some(int));
+        assert_eq!(type_link(&TaggedValue::Float(1.5)), Some(float));
+        assert_eq!(
+            type_link(&TaggedValue::Bool(true)),
+            Some(TaggedValue::Sym(Sym::seeded("type.Bool")))
+        );
+        // A ctor-shaped object yields its `type` field.
+        let fapp = TaggedValue::from(serde_json::json!({
+            "__former__": tagged_to_value(&TaggedValue::Sym(Sym::seeded("data.Vec"))),
+            "indices": [0]
+        }));
+        let ctor = TaggedValue::from(serde_json::json!({
+            "type": tagged_to_value(&fapp)
+        }));
+        assert_eq!(type_link(&ctor), Some(fapp));
+        // A legacy `__tag__` datum bridges to its seeded nominal.
+        let datum = TaggedValue::from(serde_json::json!({
+            "__tag__": "int", "__registry__": "type", "kind": "primitive"
+        }));
+        assert_eq!(
+            type_link(&datum),
+            Some(TaggedValue::Sym(Sym::seeded("type.Int")))
+        );
+        // A nominal value yields its `ty` link.
+        let int_sym = TaggedValue::Sym(Sym::seeded("type.Int"));
+        assert_eq!(
+            type_link(&int_sym),
+            Some(TaggedValue::Sym(Sym::seeded("type.Type")))
+        );
+    }
+
+    #[test]
+    fn instance_of_reads_both_links() {
+        ensure_builtin_type_nominals();
+        let int = TaggedValue::Sym(Sym::seeded("type.Int"));
+        let nat = TaggedValue::Sym(Sym::seeded("type.Nat"));
+        let number = TaggedValue::Sym(Sym::seeded("type.Number"));
+        let float = TaggedValue::Sym(Sym::seeded("type.Float"));
+        let ty = TaggedValue::Sym(Sym::seeded("type.Type"));
+        let strs = TaggedValue::Sym(Sym::seeded("type.Str"));
+
+        // `<:` read on nominal values (parent walk).
+        assert!(instance_of(&nat, &int));
+        assert!(instance_of(&nat, &number));
+        assert!(instance_of(&float, &number));
+        assert!(!instance_of(&int, &float));
+        assert!(!instance_of(&number, &int));
+        // Membership read on type values (the `ty` link): `Int : Type`.
+        assert!(instance_of(&int, &ty));
+        assert!(!instance_of(&int, &strs));
+        // Literal defaults.
+        assert!(instance_of(&TaggedValue::Int(1), &nat));
+        assert!(instance_of(&TaggedValue::Int(1), &int));
+        assert!(instance_of(&TaggedValue::Int(1), &number));
+        assert!(!instance_of(&TaggedValue::Int(1), &float));
+        assert!(instance_of(&TaggedValue::Int(-1), &int));
+        assert!(!instance_of(&TaggedValue::Int(-1), &nat));
+        assert!(instance_of(&TaggedValue::Float(1.5), &float));
+        assert!(instance_of(&TaggedValue::Str("s".into()), &strs));
+        assert!(instance_of(&TaggedValue::Null, &TaggedValue::Sym(Sym::seeded("type.Null"))));
+        // Former application as the nominal target.
+        let vec = TaggedValue::from(serde_json::json!({
+            "__former__": tagged_to_value(&TaggedValue::Sym(Sym::seeded("data.Vec"))),
+            "indices": [2]
+        }));
+        let ctor = TaggedValue::from(serde_json::json!({
+            "__ctor__": tagged_to_value(&TaggedValue::Sym(Sym::seeded("data.Vec.VCons"))),
+            "type": tagged_to_value(&vec)
+        }));
+        assert!(instance_of(&ctor, &vec));
+        assert!(!instance_of(&ctor, &nat));
+    }
+
+    #[test]
+    fn instance_of_legacy_tag_bridge() {
+        ensure_builtin_type_nominals();
+        let datum = |t: &str| {
+            TaggedValue::from(serde_json::json!({
+                "__tag__": t, "__registry__": "type", "kind": "primitive"
+            }))
+        };
+        // Seeded walk: tag → seeded nominal → `parent` chain.
+        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
+        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Number"))));
+        assert!(instance_of(&datum("nat"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
+        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Float"))));
+        // Name bridge: an unseeded nominal named like a std type still
+        // matches by presentation name (legacy semantics).
+        let named = TaggedValue::Sym(Rc::new(Sym::fresh_with_parent(
+            "Int",
+            &Sym::fresh("Number"),
+        )));
+        assert!(instance_of(&datum("int"), &named));
+        // Unknown tags stay false (no roles, no seed).
+        assert!(!instance_of(&datum("custom"), &named));
     }
 }

@@ -322,7 +322,7 @@ impl Sym {
                 .rsplit_once('.')
                 .map(|(_, n)| n.to_string())
                 .unwrap_or_else(|| seed.to_string());
-            let sym = Rc::new(Sym::from_parts(handle, name, None));
+            let sym = Rc::new(Sym::from_parts(handle, name, None, None));
             map.insert(seed.to_string(), sym.clone());
             sym
         })
@@ -347,6 +347,7 @@ impl Sym {
                     s.handle(),
                     s.name().to_string(),
                     Some(Rc::new(parent.clone())),
+                    s.ty().cloned().map(Rc::new),
                 ));
                 map.insert(seed.to_string(), upgraded.clone());
                 return upgraded;
@@ -361,6 +362,62 @@ impl Sym {
                 h.finish() | SEEDED_BIT,
                 name,
                 Some(Rc::new(parent.clone())),
+                None,
+            ));
+            map.insert(seed.to_string(), sym.clone());
+            sym
+        })
+    }
+
+    /// Seeded nominal with both links — `parent` (the `<:` edge) and
+    /// `ty` (the `type`/membership edge, ADR-0154 §2). This is the mint
+    /// for declared *type* values: `Int := seeded_with_links(
+    /// "type.Int", Number, Type)`.
+    ///
+    /// Upgrade semantics match `seeded_with_parent`: a memoized sym
+    /// gains whichever links it is missing (same handle — mint order
+    /// cannot orphan a link); a link already set is never rewritten.
+    pub fn seeded_with_links(
+        seed: &str,
+        parent: Option<&Sym>,
+        ty: Option<&Sym>,
+    ) -> Rc<Sym> {
+        SEEDED_SYMS.with(|m| {
+            let mut map = m.borrow_mut();
+            if let Some(s) = map.get(seed) {
+                let needs_parent = s.parent().is_none() && parent.is_some();
+                let needs_ty = s.ty().is_none() && ty.is_some();
+                if !needs_parent && !needs_ty {
+                    return s.clone();
+                }
+                let upgraded = Rc::new(Sym::from_parts(
+                    s.handle(),
+                    s.name().to_string(),
+                    if needs_parent {
+                        parent.map(|p| Rc::new(p.clone()))
+                    } else {
+                        s.parent().map(|p| Rc::new(p.clone()))
+                    },
+                    if needs_ty {
+                        ty.map(|t| Rc::new(t.clone()))
+                    } else {
+                        s.ty().map(|t| Rc::new(t.clone()))
+                    },
+                ));
+                map.insert(seed.to_string(), upgraded.clone());
+                return upgraded;
+            }
+            let mut h = DefaultHasher::new();
+            seed.hash(&mut h);
+            let name = seed
+                .rsplit_once('.')
+                .map(|(_, n)| n.to_string())
+                .unwrap_or_else(|| seed.to_string());
+            let sym = Rc::new(Sym::from_parts(
+                h.finish() | SEEDED_BIT,
+                name,
+                parent.map(|p| Rc::new(p.clone())),
+                ty.map(|t| Rc::new(t.clone())),
             ));
             map.insert(seed.to_string(), sym.clone());
             sym
