@@ -97,8 +97,8 @@ hnl-engine-transform-rewrite = { path = "../engine-transform-rewrite" }
 [patch."https://github.com/handl-lang/engine-typecheck"]
 hnl-engine-typecheck = { path = "../engine-typecheck" }
 
-[patch."https://github.com/handl-lang/engine-typecheck-handl"]
-hnl-engine-typecheck-handl = { path = "../engine-typecheck-handl" }
+[patch."https://github.com/handl-lang/engine-typecheck-nbe"]
+hnl-engine-typecheck-nbe = { path = "../engine-typecheck-nbe" }
 
 [patch."https://github.com/handl-lang/host"]
 handl-kit-arrow-lower = { path = "../host/crates/handl-kit-arrow-lower" }
