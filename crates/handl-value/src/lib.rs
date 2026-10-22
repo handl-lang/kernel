@@ -351,13 +351,18 @@ impl Sym {
     /// Strict descendant check: `true` iff `other` appears in this sym's
     /// parent chain (excluding the sym itself — a sym is not its own
     /// strict descendant).
+    ///
+    /// Each hop is re-resolved through the seeded memo
+    /// ([`Sym::resealed`]): a sym minted before its links were declared
+    /// keeps the stale `parent = None` it was captured with — the memo
+    /// holds the upgraded entry, so the walk reads current links.
     pub fn is_descendant_of(&self, other: &Sym) -> bool {
-        let mut cur = self.parent.as_deref();
+        let mut cur = self.parent.as_deref().map(|p| p.resealed());
         while let Some(p) = cur {
-            if p == other {
+            if p.as_ref() == other {
                 return true;
             }
-            cur = p.parent.as_deref();
+            cur = p.parent.as_deref().map(|q| q.resealed());
         }
         false
     }
@@ -1972,8 +1977,12 @@ pub fn instance_of(value: &TaggedValue, nominal: &TaggedValue) -> bool {
         return false;
     };
     match value {
+        // The value sym re-resolves through the memo first: a stale
+        // bare mint keeps `parent`/`ty` unset; the memo has the
+        // declared links (`Sym::resealed`).
         TaggedValue::Sym(s) => {
-            s.has_ancestor(&n) || s.ty().is_some_and(|t| t.has_ancestor(&n))
+            let s = s.resealed();
+            s.has_ancestor(&n) || s.ty().is_some_and(|t| t.resealed().has_ancestor(&n))
         }
         TaggedValue::Obj(m) => {
             // `type` link first, `__tag__` bridge second (0154 §2 read

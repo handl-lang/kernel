@@ -446,8 +446,8 @@ impl Sym {
     /// This sym re-resolved through the seeded memo (see
     /// [`Sym::seeded_by_handle`]): fresh/unmemoized syms return
     /// unchanged.
-    pub fn resealed(self: &Rc<Sym>) -> Rc<Sym> {
-        Sym::seeded_by_handle(self.handle()).unwrap_or_else(|| self.clone())
+    pub fn resealed(&self) -> Rc<Sym> {
+        Sym::seeded_by_handle(self.handle()).unwrap_or_else(|| Rc::new(self.clone()))
     }
 
     /// Whether this is a seeded (declared) nominal — handle has the
