@@ -337,7 +337,11 @@ impl Ast {
         // old arena index -> new arena index.
         let mut map: HashMap<usize, usize> = HashMap::new();
         let mut new_nodes: Vec<AstNode> = Vec::new();
-        self.subtree_into(root, &mut map, &mut new_nodes)?;
+        // DFS stack of nodes currently on the visit path — the cycle guard.
+        // Scoped to this call (not thread-local): on error the whole
+        // traversal aborts, so error paths never need to unwind it.
+        let mut visiting: Vec<usize> = Vec::new();
+        self.subtree_into(root, &mut map, &mut new_nodes, &mut visiting)?;
         let mut out = Ast::new();
         // `subtree_into` already appended in post-order; rebuild via push to
         // keep arena indices identical to `new_nodes` positions.
@@ -348,23 +352,48 @@ impl Ast {
     }
 
     /// Recursive post-order helper for [`subtree`](Self::subtree).
+    ///
+    /// `visiting` is the DFS stack of arena indices on the current visit
+    /// path; re-entering one means the arena has a reference cycle, which is
+    /// reported with the cycle's node path. Entries are popped on success —
+    /// on error the whole [`subtree`](Self::subtree) call unwinds, so the
+    /// stack is simply abandoned.
     fn subtree_into(
         &self,
         root: AstRef,
         map: &mut std::collections::HashMap<usize, usize>,
         new_nodes: &mut Vec<AstNode>,
+        visiting: &mut Vec<usize>,
     ) -> Result<(), LangError> {
         let idx = root.index();
         if map.contains_key(&idx) {
             return Ok(());
         }
+        if let Some(pos) = visiting.iter().position(|&x| x == idx) {
+            let path = visiting[pos..]
+                .iter()
+                .chain(std::iter::once(&idx))
+                .map(|i| {
+                    format!(
+                        "{}:{}",
+                        i,
+                        self.nodes.get(*i).map(|n| n.kind.as_str()).unwrap_or("?")
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" -> ");
+            return Err(LangError::engine(format!(
+                "subtree: arena cycle detected: {path}"
+            )));
+        }
+        visiting.push(idx);
         let node = self.at(root)?;
         // Visit children first (post-order: children appended before parent).
         let mut child_new_indices: Vec<u64> = Vec::new();
         if let Some(children) = node.payload.get("children").and_then(|c| c.as_array()) {
             for child_ref in children {
                 if let Some(cidx) = child_ref.as_u64() {
-                    self.subtree_into(AstRef::new(cidx as usize), map, new_nodes)?;
+                    self.subtree_into(AstRef::new(cidx as usize), map, new_nodes, visiting)?;
                     child_new_indices.push(*map.get(&(cidx as usize)).unwrap() as u64);
                 }
             }
@@ -379,7 +408,7 @@ impl Ast {
             if let Some(v) = node.payload.get(*key).and_then(|v| v.as_u64()) {
                 let vidx = v as usize;
                 if vidx < self.len() {
-                    self.subtree_into(AstRef::new(vidx), map, new_nodes)?;
+                    self.subtree_into(AstRef::new(vidx), map, new_nodes, visiting)?;
                     key_new_indices.push(((*key).to_string(), *map.get(&vidx).unwrap() as u64));
                 }
             }
@@ -408,6 +437,7 @@ impl Ast {
             span: node.span,
             payload: new_payload,
         });
+        visiting.pop();
         Ok(())
     }
 }
