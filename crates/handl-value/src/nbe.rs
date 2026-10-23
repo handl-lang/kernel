@@ -115,6 +115,9 @@ pub struct EnvNode {
     pub next: Env,
     /// Optional declared name (for diagnostics; lookup is by level).
     pub name: Option<Rc<str>>,
+    /// List length at this node (self included) — caches [`Env::len`]
+    /// so it stays O(1) instead of a cons walk (WS-H).
+    pub len: u32,
 }
 
 impl Env {
@@ -129,6 +132,7 @@ impl Env {
             val,
             next: self.clone(),
             name,
+            len: self.len() as u32 + 1,
         })))
     }
 
@@ -147,15 +151,9 @@ impl Env {
         None
     }
 
-    /// Number of bindings (O(n)).
+    /// Number of bindings — O(1) (each node caches the list length).
     pub fn len(&self) -> usize {
-        let mut n = 0;
-        let mut cur = self;
-        while let Some(node) = &cur.0 {
-            n += 1;
-            cur = &node.next;
-        }
-        n
+        self.0.as_ref().map_or(0, |node| node.len as usize)
     }
 
     /// Whether the environment is empty.
@@ -180,8 +178,11 @@ pub enum MetaConstraint {
 /// One metavariable's state.
 #[derive(Clone, Debug)]
 pub struct MetaEntry {
-    /// `Some(v)` once solved; `None` while open.
-    pub solution: Option<Val>,
+    /// `Some(v)` once solved; `None` while open. Held shared so head
+    /// forcing ([`MetaStore::force_head_rc`]) can hand out an `Rc`
+    /// clone on the conversion hot path instead of deep-cloning the
+    /// solution.
+    pub solution: Option<Rc<Val>>,
     /// Solving constraint — checked by `MetaStore::solve`.
     pub constraint: MetaConstraint,
 }
@@ -215,13 +216,20 @@ impl MetaStore {
     pub fn solution(&self, id: MetaId) -> Option<&Val> {
         self.metas
             .get(id as usize)
-            .and_then(|e| e.solution.as_ref())
+            .and_then(|e| e.solution.as_deref())
     }
 
     /// Solve a meta to `val`. Returns `false` (without solving) when
     /// `val` violates the meta's constraint; an occurs check against
     /// `id` inside `val` is the caller's responsibility (`occurs`).
     pub fn solve(&mut self, id: MetaId, val: Val) -> bool {
+        self.solve_rc(id, Rc::new(val))
+    }
+
+    /// Shared-`Rc` counterpart of [`MetaStore::solve`] — the conversion
+    /// path hands over the store's own solution handle (or any other
+    /// `Rc`-shared value) without deep-cloning it.
+    pub fn solve_rc(&mut self, id: MetaId, val: Rc<Val>) -> bool {
         let Some(entry) = self.metas.get_mut(id as usize) else {
             return false;
         };
@@ -231,7 +239,7 @@ impl MetaStore {
         if let MetaConstraint::DescendantOf(sym) = &entry.constraint {
             // The solution's nominal head must have `sym` in its
             // parent chain — literal-type discipline (0154 §5).
-            let ok = match &val {
+            let ok = match &*val {
                 Val::Nominal(s) | Val::Former { head: s, .. } => {
                     s.has_ancestor(sym.as_ref())
                 }
@@ -279,6 +287,78 @@ impl MetaStore {
             }
         }
         cur
+    }
+
+    /// `force_head` without the deep clone: returns a [`Forced`] view —
+    /// `Ready` borrows the input (head already forced, zero cost),
+    /// `Solved` shares the store's `Rc` solution (one refcount bump
+    /// per followed link). Unlike [`MetaStore::force_head`] the result
+    /// does not borrow the store, so the caller can keep solving metas
+    /// while holding it — this is what lets `conv` compare forced
+    /// heads and solve in one pass.
+    pub fn force_head_rc<'v>(&self, val: &'v Val) -> Forced<'v> {
+        let mut cur: &Val = val;
+        let mut last: Option<Rc<Val>> = None;
+        while let Val::Flex { meta, spine } = cur {
+            if !spine.is_empty() {
+                break;
+            }
+            let Some(sol) = self
+                .metas
+                .get(*meta as usize)
+                .and_then(|e| e.solution.as_ref())
+            else {
+                break;
+            };
+            last = Some(sol.clone());
+            cur = &**sol;
+        }
+        match last {
+            Some(rc) => Forced::Solved(rc),
+            None => Forced::Ready(val),
+        }
+    }
+}
+
+/// Zero-copy result of [`MetaStore::force_head_rc`]: a `Val` view whose
+/// head constructor is not a *solved* `Flex`. `Deref`s to `Val` so
+/// existing `match` sites work unchanged.
+#[derive(Clone, Debug)]
+pub enum Forced<'v> {
+    /// The input's head was already forced — borrows the input.
+    Ready(&'v Val),
+    /// The head resolved through solved metas — an `Rc` clone of the
+    /// store's solution.
+    Solved(Rc<Val>),
+}
+
+impl<'v> Forced<'v> {
+    /// View as a `&Val` (same as `&*f` through `Deref`, spelled out for
+    /// pattern-matching scrutinees).
+    pub fn as_val(&self) -> &Val {
+        match self {
+            Forced::Ready(v) => v,
+            Forced::Solved(rc) => rc,
+        }
+    }
+
+    /// An owned, shared handle: `Solved` is a free `Rc` bump; `Ready`
+    /// deep-clones the value (the same cost as the old
+    /// `force_head(..).clone()` idiom — call only when an owned `Val`
+    /// is genuinely required).
+    pub fn into_rc(self) -> Rc<Val> {
+        match self {
+            Forced::Ready(v) => Rc::new(v.clone()),
+            Forced::Solved(rc) => rc,
+        }
+    }
+}
+
+impl std::ops::Deref for Forced<'_> {
+    type Target = Val;
+
+    fn deref(&self) -> &Val {
+        self.as_val()
     }
 }
 
@@ -564,28 +644,47 @@ mod tests {
 /// metas as a side effect; a failed `conv` may leave the store
 /// partially solved — callers snapshot `MetaStore::mark`/`truncate`.
 pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
-    let a = store.force_head(a).clone();
-    let b = store.force_head(b).clone();
-    match (a, b) {
-        // A solved-or-unsolved meta on the left: try to solve it to b
-        // (occurs check first — ?m ≠ spine containing ?m).
-        (Val::Flex { meta, .. }, other) | (other, Val::Flex { meta, .. }) => {
-            !store.occurs(meta, &other) && store.solve(meta, other)
-        }
+    // Pointer-identical inputs are trivially convertible — skips the
+    // structural walk entirely for `Rc`-shared subgraphs. `Flex` is
+    // excluded so `conv(?m, ?m)` keeps the occurs/solve verdict it has
+    // always had.
+    if std::ptr::eq(a, b) && !matches!(a, Val::Flex { .. }) {
+        return true;
+    }
+    // Head-forcing through solved metas yields a [`Forced`] view — an
+    // input borrow or an `Rc` clone of the solution, never a deep
+    // clone (WS-H: the previous `force_head(..).clone()` deep-copied
+    // both operands on every recursion level).
+    let af = store.force_head_rc(a);
+    let bf = store.force_head_rc(b);
+    // A solved-or-unsolved meta on either side: try to solve it to the
+    // other side (occurs check first — ?m ≠ spine containing ?m).
+    if let Val::Flex { meta, .. } = af.as_val() {
+        let meta = *meta;
+        let other = bf.into_rc();
+        return !store.occurs(meta, &other) && store.solve_rc(meta, other);
+    }
+    if let Val::Flex { meta, .. } = bf.as_val() {
+        let meta = *meta;
+        let other = af.into_rc();
+        return !store.occurs(meta, &other) && store.solve_rc(meta, other);
+    }
+    match (af.as_val(), bf.as_val()) {
         (Val::Rigid { lvl: l1, spine: s1 }, Val::Rigid { lvl: l2, spine: s2 }) => {
-            l1 == l2 && conv_spine(store, lvl, &s1, &s2)
+            l1 == l2 && conv_spine(store, lvl, s1, s2)
         }
         // Nominal heads compare by sym identity; index arguments by
-        // structural conversion (0152 §1 / 0154 §3).
+        // structural conversion (0152 §1 / 0154 §3). `Rc::ptr_eq`
+        // short-circuits heads shared through the seeded-sym memo.
         (
             Val::Former { head: h1, args: a1 },
             Val::Former { head: h2, args: a2 },
         ) => {
-            h1 == h2
+            (Rc::ptr_eq(h1, h2) || h1 == h2)
                 && a1.len() == a2.len()
                 && a1.iter().zip(a2.iter()).all(|(x, y)| conv(store, lvl, x, y))
         }
-        (Val::Nominal(s1), Val::Nominal(s2)) => s1 == s2,
+        (Val::Nominal(s1), Val::Nominal(s2)) => Rc::ptr_eq(s1, s2) || s1 == s2,
         (Val::Universe(i), Val::Universe(j)) => i == j,
         (Val::Const(v1), Val::Const(v2)) => v1 == v2,
         // Arrows are data: params + residual binds compare structurally;
@@ -593,21 +692,26 @@ pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
         // bodies is an engine concern — two identical definitions are
         // equal here, which is what transport/match need).
         (Val::Arrow(x), Val::Arrow(y)) => {
-            x.params == y.params
-                && x.body_def == y.body_def
-                && x.binds.len() == y.binds.len()
-                && x.binds.iter().all(|(k, v)| {
-                    y.binds.get(k).is_some_and(|w| conv(store, lvl, v, w))
-                })
+            Rc::ptr_eq(x, y)
+                || (x.params == y.params
+                    && x.body_def == y.body_def
+                    && x.binds.len() == y.binds.len()
+                    && x.binds.iter().all(|(k, v)| {
+                        y.binds.get(k).is_some_and(|w| conv(store, lvl, v, w))
+                    }))
         }
         // Unfold: same top-level name is the fast path (Kovács); on a
         // name mismatch force both sides and retry — a failed name
         // compare must not poison the store.
-        (Val::Unfold { name: n1, .. }, Val::Unfold { name: n2, .. }) if n1 == n2 => true,
+        (Val::Unfold { name: n1, .. }, Val::Unfold { name: n2, .. })
+            if Rc::ptr_eq(n1, n2) || n1 == n2 =>
+        {
+            true
+        }
         (u @ Val::Unfold { .. }, other) | (other, u @ Val::Unfold { .. }) => {
             if let Val::Unfold { value, .. } = u {
                 if let Some(v) = value.get() {
-                    return conv(store, lvl, v, &other);
+                    return conv(store, lvl, v, other);
                 }
             }
             false
@@ -692,6 +796,54 @@ mod conv_tests {
         let m2 = store.fresh_constrained(MetaConstraint::DescendantOf(Sym::seeded("type.Number")));
         assert!(!conv(&mut store, 0, &Val::Flex { meta: m2, spine: Spine::default() },
                      &Val::Nominal(Sym::seeded("type.Str"))));
+    }
+
+    /// WS-H microbench: `conv` over a deep `Former` nest. The zero-copy
+    /// `force_head_rc` change makes each level O(1) view + O(width)
+    /// structural work; previously every level deep-cloned the whole
+    /// remaining nest (O(depth²) clones per `conv`). Run with
+    /// `--nocapture` for the timing line.
+    #[test]
+    fn conv_bench_deep_former() {
+        let mut store = MetaStore::default();
+        let nest = |inner: &Val| Val::Former {
+            head: Sym::seeded("type.Vec"),
+            args: vec![inner.clone()],
+        };
+        let mut a = Val::Nominal(Sym::seeded("type.Int"));
+        for _ in 0..64 {
+            a = nest(&a);
+        }
+        let b = a.clone(); // structurally equal, independently allocated
+        let t0 = std::time::Instant::now();
+        let iters = 200;
+        for _ in 0..iters {
+            assert!(conv(&mut store, 0, &a, &b));
+        }
+        eprintln!(
+            "conv_bench_deep_former: {iters} conv() over 64-deep Former nest: {:?}",
+            t0.elapsed()
+        );
+    }
+
+    /// WS-H microbench: flex solving — each `conv(?m, v)` hands `v` to
+    /// the store as an `Rc` (solutions no longer deep-clone per call).
+    #[test]
+    fn conv_bench_flex_solve() {
+        let mut store = MetaStore::default();
+        let v = Val::Former {
+            head: Sym::seeded("type.Vec"),
+            args: vec![Val::Nominal(Sym::seeded("type.Int"))],
+        };
+        let metas: Vec<MetaId> = (0..1000).map(|_| store.fresh()).collect();
+        let t0 = std::time::Instant::now();
+        for m in metas {
+            assert!(conv(&mut store, 0, &Val::Flex {
+                meta: m,
+                spine: Spine::default(),
+            }, &v));
+        }
+        eprintln!("conv_bench_flex_solve: 1000 flex solves: {:?}", t0.elapsed());
     }
 }
 
