@@ -42,6 +42,9 @@ pub mod law_inference;
 /// Explicit `forall f g. lhs = rhs` quantified law syntax over the `Term`
 /// IR (ADR-0076 OQ#4).
 pub mod quantified_laws;
+/// `Val → Ast` reification — the AST-surface half of `quote`
+/// (phase-2 spec WS-G; metaprogram term materialization).
+pub mod quote_ast;
 /// Staged `lex`/`parse`/`eval` dispatch entry points.
 pub mod staged;
 /// The arrow-calculus `Term` kernel (ADR-0052).
@@ -72,6 +75,7 @@ pub use fragments::{
 };
 pub use instantiate::LIT_KIND;
 pub use language::Language;
+pub use quote_ast::{REIFY_LIT_KIND, reify_ast, reify_ast_value};
 pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
     normalize, uses_first,

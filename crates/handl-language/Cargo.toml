@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 hnl-engine = { git = "https://github.com/handl-lang/engine", branch = "main" }
+handl-value = { git = "https://github.com/handl-lang/kernel", branch = "main" }
+rustc-hash = "2"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
