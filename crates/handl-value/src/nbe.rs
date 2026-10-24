@@ -17,6 +17,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use rustc_hash::FxHashMap;
 use serde_json::Value;
@@ -644,11 +646,15 @@ mod tests {
 /// metas as a side effect; a failed `conv` may leave the store
 /// partially solved — callers snapshot `MetaStore::mark`/`truncate`.
 pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
+    conv_stats_probe(a, b);
     // Pointer-identical inputs are trivially convertible — skips the
     // structural walk entirely for `Rc`-shared subgraphs. `Flex` is
     // excluded so `conv(?m, ?m)` keeps the occurs/solve verdict it has
     // always had.
     if std::ptr::eq(a, b) && !matches!(a, Val::Flex { .. }) {
+        if conv_stats_enabled() {
+            CONV_PTR_FASTPATH.fetch_add(1, Ordering::Relaxed);
+        }
         return true;
     }
     // Head-forcing through solved metas yields a [`Forced`] view — an
@@ -750,6 +756,115 @@ pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
 fn conv_spine(store: &mut MetaStore, lvl: Lvl, s1: &Spine, s2: &Spine) -> bool {
     s1.0.len() == s2.0.len()
         && s1.0.iter().zip(s2.0.iter()).all(|(x, y)| conv(store, lvl, x, y))
+}
+
+// ---------------------------------------------------------------------------
+// Conv instrumentation (phase-3 WS-H perf pass): process-global counters
+// for repeat `(a, b)` structural pairs, gated on `HNL_CONV_STATS`. When
+// unset every probe is one relaxed atomic load — safe to keep in-tree.
+// ---------------------------------------------------------------------------
+
+static CONV_STATS_ON: OnceLock<bool> = OnceLock::new();
+static CONV_CALLS: AtomicU64 = AtomicU64::new(0);
+static CONV_PTR_FASTPATH: AtomicU64 = AtomicU64::new(0);
+static CONV_DUP_RIGID: AtomicU64 = AtomicU64::new(0);
+static CONV_DUP_FLEX: AtomicU64 = AtomicU64::new(0);
+static CONV_SEEN: Mutex<Option<std::collections::HashSet<(u64, u64)>>> = Mutex::new(None);
+
+#[inline]
+fn conv_stats_enabled() -> bool {
+    *CONV_STATS_ON.get_or_init(|| {
+        std::env::var("HNL_CONV_STATS")
+            .map(|v| v != "0" && !v.is_empty())
+            .unwrap_or(false)
+    })
+}
+
+/// `(calls, ptr_fastpath, rigid_dup_pairs, flex_dup_pairs)`.
+pub fn conv_stats() -> (u64, u64, u64, u64) {
+    (
+        CONV_CALLS.load(Ordering::Relaxed),
+        CONV_PTR_FASTPATH.load(Ordering::Relaxed),
+        CONV_DUP_RIGID.load(Ordering::Relaxed),
+        CONV_DUP_FLEX.load(Ordering::Relaxed),
+    )
+}
+
+/// Structural fingerprint — `Sym` hashes by handle (identity), `Const`
+/// by its debug encoding (boundary data — measurement only). `Flex`
+/// fingerprints by meta id so the same unsolved meta recurring counts
+/// as the same pair.
+fn val_fp(v: &Val, h: &mut DefaultHasher) {
+    match v {
+        Val::Rigid { lvl, spine } => {
+            0u8.hash(h);
+            lvl.hash(h);
+            for x in &spine.0 {
+                val_fp(x, h);
+            }
+        }
+        Val::Flex { meta, spine } => {
+            1u8.hash(h);
+            meta.hash(h);
+            for x in &spine.0 {
+                val_fp(x, h);
+            }
+        }
+        Val::Former { head, args } => {
+            2u8.hash(h);
+            head.handle().hash(h);
+            for x in args {
+                val_fp(x, h);
+            }
+        }
+        Val::Nominal(s) => {
+            3u8.hash(h);
+            s.handle().hash(h);
+        }
+        Val::Arrow(a) => {
+            4u8.hash(h);
+            format!("{:?}", a).hash(h);
+        }
+        Val::Universe(i) => {
+            5u8.hash(h);
+            i.hash(h);
+        }
+        Val::Const(c) => {
+            6u8.hash(h);
+            format!("{:?}", c).hash(h);
+        }
+        Val::Unfold { name, spine, .. } => {
+            7u8.hash(h);
+            name.hash(h);
+            for x in &spine.0 {
+                val_fp(x, h);
+            }
+        }
+    }
+}
+
+#[inline]
+fn conv_stats_probe(a: &Val, b: &Val) {
+    if !conv_stats_enabled() {
+        return;
+    }
+    CONV_CALLS.fetch_add(1, Ordering::Relaxed);
+    let mut ha = DefaultHasher::new();
+    let mut hb = DefaultHasher::new();
+    val_fp(a, &mut ha);
+    val_fp(b, &mut hb);
+    let flex = matches!(a, Val::Flex { .. }) || matches!(b, Val::Flex { .. });
+    let mut guard = CONV_SEEN.lock().unwrap();
+    if !guard
+        .get_or_insert_with(std::collections::HashSet::new)
+        .insert((ha.finish(), hb.finish()))
+    {
+        if flex {
+            CONV_DUP_FLEX.fetch_add(1, Ordering::Relaxed);
+        } else {
+            CONV_DUP_RIGID.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1428,6 +1543,59 @@ mod conv_tests {
             }, &v));
         }
         eprintln!("conv_bench_flex_solve: 1000 flex solves: {:?}", t0.elapsed());
+    }
+
+    /// WS-H microbench: repeat-pair conversions — the same `(a, b)`
+    /// Former pair re-derived `iters` times, the workload a conv memo
+    /// would collapse to one structural walk + `iters-1` lookups.
+    /// Measured to bound the upside of memoizing `conv` (the
+    /// `HNL_CONV_STATS` dup-pair counter says how often real checks
+    /// repeat a pair).
+    #[test]
+    fn conv_bench_repeat_pairs() {
+        let mut store = MetaStore::default();
+        let mut a = Val::Nominal(Sym::seeded("type.Int"));
+        for _ in 0..64 {
+            a = Val::Former {
+                head: Sym::seeded("type.Hom"),
+                args: vec![Val::Universe(2), a],
+            };
+        }
+        let b = a.clone();
+        assert!(conv(&mut store, 0, &a, &b));
+        let t0 = std::time::Instant::now();
+        let iters = 500;
+        for _ in 0..iters {
+            assert!(conv(&mut store, 0, &a, &b));
+        }
+        eprintln!(
+            "conv_bench_repeat_pairs: {iters} conv() of the same 16-deep Former pair: {:?}",
+            t0.elapsed()
+        );
+    }
+
+    /// WS-H microbench: ptr-identical pairs — the `std::ptr::eq` fast
+    /// path's cost floor; the delta against `repeat_pairs` is what a
+    /// structural-fingerprint memo could recover at best.
+    #[test]
+    fn conv_bench_ptr_shared() {
+        let mut store = MetaStore::default();
+        let mut a = Val::Nominal(Sym::seeded("type.Int"));
+        for _ in 0..64 {
+            a = Val::Former {
+                head: Sym::seeded("type.Hom"),
+                args: vec![Val::Universe(2), a],
+            };
+        }
+        let t0 = std::time::Instant::now();
+        let iters = 500;
+        for _ in 0..iters {
+            assert!(conv(&mut store, 0, &a, &a));
+        }
+        eprintln!(
+            "conv_bench_ptr_shared: {iters} conv() of the ptr-identical 64-deep pair: {:?}",
+            t0.elapsed()
+        );
     }
 }
 
