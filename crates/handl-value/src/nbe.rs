@@ -676,6 +676,20 @@ pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
         // Nominal heads compare by sym identity; index arguments by
         // structural conversion (0152 §1 / 0154 §3). `Rc::ptr_eq`
         // short-circuits heads shared through the seeded-sym memo.
+        // `cell.comp`/`cell.id` applications compare by comp-tree
+        // normal form (phase-3 WS-B): associativity flattens, `id_k`
+        // units absorb, uniform interchange grids transpose. Either
+        // side cell-headed fires the normalizer; a normalized tree
+        // against a non-tree leaf stays a stuck (structural) compare.
+        (
+            Val::Former { head: h1, .. },
+            Val::Former { head: h2, .. },
+        ) if is_cell_head(h1) || is_cell_head(h2) => {
+            let mut fuel = CELL_NF_FUEL;
+            let na = cell_nf(store, &mut fuel, af.as_val());
+            let nb = cell_nf(store, &mut fuel, bf.as_val());
+            conv_cell_nf(store, lvl, &na, &nb)
+        }
         (
             Val::Former { head: h1, args: a1 },
             Val::Former { head: h2, args: a2 },
@@ -716,6 +730,19 @@ pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
             }
             false
         }
+        // A cell-headed `Former` against a non-`Former` (or a `Rigid`/
+        // `Const` leaf): the comp-tree normalizer still applies — a
+        // `comp(k, id, f)` tree reduces to `f` and converts against
+        // leaves, which structural matching would miss.
+        (x, y)
+            if matches!(x, Val::Former { head, .. } if is_cell_head(head))
+                || matches!(y, Val::Former { head, .. } if is_cell_head(head)) =>
+        {
+            let mut fuel = CELL_NF_FUEL;
+            let na = cell_nf(store, &mut fuel, af.as_val());
+            let nb = cell_nf(store, &mut fuel, bf.as_val());
+            conv_cell_nf(store, lvl, &na, &nb)
+        }
         _ => false,
     }
 }
@@ -723,6 +750,394 @@ pub fn conv(store: &mut MetaStore, lvl: Lvl, a: &Val, b: &Val) -> bool {
 fn conv_spine(store: &mut MetaStore, lvl: Lvl, s1: &Spine, s2: &Spine) -> bool {
     s1.0.len() == s2.0.len()
         && s1.0.iter().zip(s2.0.iter()).all(|(x, y)| conv(store, lvl, x, y))
+}
+
+// ---------------------------------------------------------------------------
+// Comp-tree normal forms (phase-3 WS-B): `cell.comp(k,·,·)`/`cell.id`
+// former applications normalize for conversion — the globular laws
+// that hold *syntactically* (no types required):
+//
+// - **associativity** — nested same-axis `∘ₖ` chains flatten into one
+//   `CellNf::Axis(k, [x₁..xₙ])` node — the canonical ordered list;
+// - **units** — `∘ₖ` drops identity children: `id_j(x)` is a `∘ₖ`
+//   unit when `j ≤ k+1` (the flat `Hom(j, x, x)` encoding makes every
+//   `id_j` at `j ≤ k+1` an absorbing unit — `id_{k+1}` is the boundary
+//   unit, lower `j` are degenerate promotions), or recursively when
+//   `x` is itself a `∘ₖ` unit; objects (`Nominal`/`Const`/`Universe`/
+//   non-cell `Former` heads) are degenerate `id` towers and absorb at
+//   every axis — the same reading `cell_boundaries` gives them;
+// - **interchange** — `(a ∘ⱼ b) ∘ₖ (c ∘ⱼ d) ≡ (a ∘ₖ c) ∘ⱼ (b ∘ₖ d)`
+//   for `j < k`: a uniform `j`-grid `Axis(k, [Axis(j,·)..])` (same
+//   inner axis and arity in every row) transposes to
+//   `Axis(j, [Axis(k,·)..])`. The canonical form sorts *smaller axes
+//   outward*; each transpose strictly decreases the preorder axis
+//   sequence, so normalization terminates.
+//
+// Non-uniform grids (mixed inner axes or mismatched arities), open
+// axes (meta/non-literal `k`), open `id` levels, and non-unit leaves
+// stay *stuck* — they compare structurally and are never wrong-equal.
+// ---------------------------------------------------------------------------
+
+/// Rewrite fuel for [`cell_nf`] — each node visit and each transpose
+/// burns one; exhaustion leaves the remaining tree stuck (structural).
+const CELL_NF_FUEL: u64 = 4096;
+
+fn cell_comp_sym() -> Rc<Sym> {
+    Sym::seeded("cell.comp")
+}
+
+fn cell_id_sym() -> Rc<Sym> {
+    Sym::seeded("cell.id")
+}
+
+/// Whether `head` is a cell term former (`cell.comp`/`cell.id`) — the
+/// heads whose applications carry globular laws into `conv`.
+fn is_cell_head(head: &Rc<Sym>) -> bool {
+    let h = head.handle();
+    h == cell_comp_sym().handle() || h == cell_id_sym().handle()
+}
+
+/// The comp-tree normal form.
+#[derive(Clone, Debug)]
+enum CellNf {
+    /// A non-composite value; its interior is recursively normalized.
+    Leaf(Val),
+    /// `x₁ ∘ₖ ⋯ ∘ₖ xₙ` (n ≥ 2 after reduction) — flattened, unit-free,
+    /// smaller axes sorted outward.
+    Axis(u64, Vec<CellNf>),
+}
+
+/// Reify a normal form back to a `Val` — `Axis(k,·)` folds into a
+/// right-associated `cell.comp(k,·,·)` chain (the canonical spelling).
+fn nf_val(nf: CellNf) -> Val {
+    match nf {
+        CellNf::Leaf(v) => v,
+        CellNf::Axis(k, cs) => {
+            let mut it = cs.into_iter().rev();
+            // Chains are non-empty by construction.
+            let mut acc = it.next().map(nf_val).unwrap_or(Val::Universe(0));
+            for c in it {
+                acc = Val::Former {
+                    head: cell_comp_sym(),
+                    args: vec![Val::Const(TaggedValue::Int(k as i64)), nf_val(c), acc],
+                };
+            }
+            acc
+        }
+    }
+}
+
+/// Normalize `v`'s comp-tree: bottom-up — children first, then the
+/// `cell.comp` former at the root flattens/reduces via [`reduce_axis`].
+/// Every `Val` child position is normalized (Former args, spines,
+/// Arrow binds) so nested comp trees canonicalize inside any carrier.
+fn cell_nf(store: &MetaStore, fuel: &mut u64, v: &Val) -> CellNf {
+    if *fuel == 0 {
+        return CellNf::Leaf(v.clone());
+    }
+    *fuel -= 1;
+    let forced = store.force_head_rc(v);
+    match forced.as_val() {
+        Val::Former { head, args }
+            if head.handle() == cell_comp_sym().handle() && args.len() == 3 =>
+        {
+            let k = match store.force_head_rc(&args[0]).as_val() {
+                Val::Const(TaggedValue::Int(k)) => u64::try_from(*k).ok(),
+                _ => None,
+            };
+            let a = cell_nf(store, fuel, &args[1]);
+            let b = cell_nf(store, fuel, &args[2]);
+            match k {
+                Some(k) => reduce_axis(store, fuel, k, vec![a, b]),
+                // Open axis — stuck composite; operands still normalize.
+                None => CellNf::Leaf(Val::Former {
+                    head: head.clone(),
+                    args: vec![args[0].clone(), nf_val(a), nf_val(b)],
+                }),
+            }
+        }
+        Val::Former { head, args } => {
+            // `cell.id` (a comp leaf), odd-arity `cell.comp`, and
+            // non-cell formers: normalize the interior, keep the head.
+            CellNf::Leaf(Val::Former {
+                head: head.clone(),
+                args: args
+                    .iter()
+                    .map(|a| nf_val(cell_nf(store, fuel, a)))
+                    .collect(),
+            })
+        }
+        Val::Rigid { lvl, spine } => CellNf::Leaf(Val::Rigid {
+            lvl: *lvl,
+            spine: Spine(
+                spine
+                    .0
+                    .iter()
+                    .map(|a| nf_val(cell_nf(store, fuel, a)))
+                    .collect(),
+            ),
+        }),
+        Val::Flex { meta, spine } => CellNf::Leaf(Val::Flex {
+            meta: *meta,
+            spine: Spine(
+                spine
+                    .0
+                    .iter()
+                    .map(|a| nf_val(cell_nf(store, fuel, a)))
+                    .collect(),
+            ),
+        }),
+        Val::Unfold {
+            name,
+            spine,
+            value,
+        } => CellNf::Leaf(Val::Unfold {
+            name: name.clone(),
+            spine: Spine(
+                spine
+                    .0
+                    .iter()
+                    .map(|a| nf_val(cell_nf(store, fuel, a)))
+                    .collect(),
+            ),
+            value: value.clone(),
+        }),
+        Val::Arrow(a) => CellNf::Leaf(Val::Arrow(Rc::new(ArrowVal {
+            params: a.params.clone(),
+            body_def: a.body_def.clone(),
+            binds: Rc::new(
+                a.binds
+                    .iter()
+                    .map(|(k, v)| (k.clone(), nf_val(cell_nf(store, fuel, v))))
+                    .collect(),
+            ),
+        }))),
+        _ => CellNf::Leaf(forced.as_val().clone()),
+    }
+}
+
+/// Reduce an axis-`k` chain: flatten same-axis children (assoc), drop
+/// `∘ₖ` units, transpose uniform `j`-grids (`j < k`) — the canonical
+/// "smaller axes outward" form.
+fn reduce_axis(store: &MetaStore, fuel: &mut u64, k: u64, parts: Vec<CellNf>) -> CellNf {
+    if *fuel == 0 {
+        return CellNf::Axis(k, parts);
+    }
+    // Flatten nested same-axis chains — associativity.
+    let mut chain: Vec<CellNf> = Vec::with_capacity(parts.len());
+    for p in parts {
+        match p {
+            CellNf::Axis(k2, cs) if k2 == k => chain.extend(cs),
+            other => chain.push(other),
+        }
+    }
+    // Units absorb. An all-unit chain is itself a unit: `u₁ ∘ₖ ⋯ ∘ₖ uₘ`
+    // collapses — left/right unit laws make every member convertible
+    // under well-typedness, so the first member is a deterministic
+    // normal pick.
+    if chain.iter().all(|c| is_unit_nf(store, c, k)) {
+        return chain
+            .into_iter()
+            .next()
+            .unwrap_or(CellNf::Leaf(Val::Universe(0)));
+    }
+    let mut kept: Vec<CellNf> = chain
+        .into_iter()
+        .filter(|c| !is_unit_nf(store, c, k))
+        .collect();
+    if kept.len() == 1 {
+        return kept.pop().unwrap_or(CellNf::Leaf(Val::Universe(0)));
+    }
+    // Interchange: every child a uniform `Axis(j, ·)` grid row — same
+    // `j < k`, same arity — transposes the m×n grid.
+    let uniform = match kept.first() {
+        Some(CellNf::Axis(j, gs)) if *j < k => {
+            let n = gs.len();
+            if kept
+                .iter()
+                .all(|c| matches!(c, CellNf::Axis(j2, gs2) if *j2 == *j && gs2.len() == n))
+            {
+                Some((*j, n))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    if let Some((j, n)) = uniform {
+        if *fuel == 0 {
+            return CellNf::Axis(k, kept);
+        }
+        *fuel -= 1;
+        // Column `l` is the l-th grandchild of every row, re-composed
+        // at axis `k`; the transposed node is itself reduced (columns
+        // may flatten or re-interchange, all `∘ⱼ` units drop).
+        let mut cols: Vec<CellNf> = Vec::with_capacity(n);
+        for l in 0..n {
+            let members: Vec<CellNf> = kept
+                .iter()
+                .map(|c| match c {
+                    CellNf::Axis(_, gs) => gs[l].clone(),
+                    _ => unreachable!("uniform j-grid rows"),
+                })
+                .collect();
+            cols.push(reduce_axis(store, fuel, k, members));
+        }
+        return reduce_axis(store, fuel, j, cols);
+    }
+    CellNf::Axis(k, kept)
+}
+
+/// Whether the normal form `c` is a `∘ₖ` unit.
+fn is_unit_nf(store: &MetaStore, c: &CellNf, k: u64) -> bool {
+    match c {
+        CellNf::Axis(..) => false,
+        CellNf::Leaf(v) => is_unit_val(store, v, k),
+    }
+}
+
+/// Whether the value `v` is a `∘ₖ` unit — syntactic, no types:
+/// `id_j(x)` with `j ≤ k+1` (or recursively `x` a `∘ₖ` unit), `id x`
+/// on a unit/object payload, and object-like values (the degenerate
+/// `id`-tower reading). Rigid/flex/arrow/unfold payloads are *not*
+/// decided — a variable can be a cell of any level.
+fn is_unit_val(store: &MetaStore, v: &Val, k: u64) -> bool {
+    match store.force_head_rc(v).as_val() {
+        // Objects promote to `id` towers — units at every axis (the
+        // degenerate-cell reading the checker's `cell_boundaries`
+        // gives them).
+        Val::Nominal(_) | Val::Universe(_) | Val::Const(_) => true,
+        Val::Former { head, args } => {
+            let h = head.handle();
+            if h == cell_id_sym().handle() {
+                match args.as_slice() {
+                    [j, x] => match store.force_head_rc(j).as_val() {
+                        Val::Const(TaggedValue::Int(j)) => match u64::try_from(*j) {
+                            // `id_j` is a `∘_{j-1}` unit outright; for
+                            // `j > k+1` it is an `id` tower whose
+                            // payload must absorb recursively.
+                            Ok(j) => j <= k + 1 || is_unit_val(store, x, k),
+                            Err(_) => false,
+                        },
+                        // Open `id` level — the payload's unit-ness
+                        // still decides (`id_?(unit)` absorbs; a
+                        // non-unit payload can't decide the level).
+                        _ => is_unit_val(store, x, k),
+                    },
+                    // Bare `id x` — level `dim(x)+1` (2 on objects).
+                    [x] => {
+                        let xf = store.force_head_rc(x);
+                        match xf.as_val() {
+                            Val::Former {
+                                head: hx,
+                                args: ax,
+                            } if hx.handle() == cell_id_sym().handle() => {
+                                match ax.as_slice() {
+                                    // `id` on `id_{jx}` has level
+                                    // `jx+1` — a `∘ₖ` unit when
+                                    // `jx+1 ≤ k+1`, else recursively.
+                                    [jx, _] => match store.force_head_rc(jx).as_val() {
+                                        Val::Const(TaggedValue::Int(jx)) => {
+                                            match u64::try_from(*jx) {
+                                                Ok(jx) => {
+                                                    jx <= k || is_unit_val(store, x, k)
+                                                }
+                                                Err(_) => false,
+                                            }
+                                        }
+                                        _ => is_unit_val(store, x, k),
+                                    },
+                                    _ => is_unit_val(store, x, k),
+                                }
+                            }
+                            // `id x` on any other payload: the unit
+                            // check is the payload's own (objects make
+                            // `id` a unit tower; open-level payloads
+                            // don't decide).
+                            _ => is_unit_val(store, x, k),
+                        }
+                    }
+                    _ => false,
+                }
+            } else if h == cell_comp_sym().handle() {
+                // A composite is not an identity.
+                false
+            } else {
+                // Non-cell formers are types/data — objects.
+                true
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Conversion on normal forms — `Axis` nodes match axis and arity
+/// pointwise; leaves go through [`conv_leaf`].
+fn conv_cell_nf(store: &mut MetaStore, lvl: Lvl, a: &CellNf, b: &CellNf) -> bool {
+    match (a, b) {
+        (CellNf::Leaf(x), CellNf::Leaf(y)) => conv_leaf(store, lvl, x, y),
+        (CellNf::Axis(k1, c1), CellNf::Axis(k2, c2)) => {
+            k1 == k2
+                && c1.len() == c2.len()
+                && c1
+                    .iter()
+                    .zip(c2.iter())
+                    .all(|(x, y)| conv_cell_nf(store, lvl, x, y))
+        }
+        _ => false,
+    }
+}
+
+/// Leaf comparison inside a normal form. Cell-headed formers that
+/// normalization left *stuck* (open axis, odd arity) compare
+/// structurally — dispatching to [`conv`] on the root would re-enter
+/// the normalizer at the same root forever. A forced `Unfold` on the
+/// non-cell side still unfolds.
+fn conv_leaf(store: &mut MetaStore, lvl: Lvl, x: &Val, y: &Val) -> bool {
+    let xf = store.force_head_rc(x);
+    let yf = store.force_head_rc(y);
+    let cx = matches!(xf.as_val(), Val::Former { head, .. } if is_cell_head(head));
+    let cy = matches!(yf.as_val(), Val::Former { head, .. } if is_cell_head(head));
+    match (cx, cy) {
+        (true, true) => {
+            let (
+                Val::Former {
+                    head: h1,
+                    args: a1,
+                },
+                Val::Former {
+                    head: h2,
+                    args: a2,
+                },
+            ) = (xf.as_val(), yf.as_val())
+            else {
+                unreachable!()
+            };
+            (Rc::ptr_eq(h1, h2) || h1 == h2)
+                && a1.len() == a2.len()
+                && a1
+                    .iter()
+                    .zip(a2.iter())
+                    .all(|(u, v)| conv(store, lvl, u, v))
+        }
+        (true, false) => {
+            if let Val::Unfold { value, .. } = yf.as_val() {
+                if let Some(v) = value.get() {
+                    return conv_leaf(store, lvl, x, v);
+                }
+            }
+            false
+        }
+        (false, true) => {
+            if let Val::Unfold { value, .. } = xf.as_val() {
+                if let Some(v) = value.get() {
+                    return conv_leaf(store, lvl, v, y);
+                }
+            }
+            false
+        }
+        (false, false) => conv(store, lvl, x, y),
+    }
 }
 
 impl MetaStore {
@@ -796,6 +1211,175 @@ mod conv_tests {
         let m2 = store.fresh_constrained(MetaConstraint::DescendantOf(Sym::seeded("type.Number")));
         assert!(!conv(&mut store, 0, &Val::Flex { meta: m2, spine: Spine::default() },
                      &Val::Nominal(Sym::seeded("type.Str"))));
+    }
+
+    // --- comp-tree normal forms (phase-3 WS-B) -------------------------
+
+    fn cell_comp(k: i64, a: Val, b: Val) -> Val {
+        Val::Former {
+            head: Sym::seeded("cell.comp"),
+            args: vec![Val::Const(TaggedValue::Int(k)), a, b],
+        }
+    }
+
+    fn cell_id(k: i64, x: Val) -> Val {
+        Val::Former {
+            head: Sym::seeded("cell.id"),
+            args: vec![Val::Const(TaggedValue::Int(k)), x],
+        }
+    }
+
+    fn rigid(l: u32) -> Val {
+        Val::Rigid {
+            lvl: l,
+            spine: Spine::default(),
+        }
+    }
+
+    #[test]
+    fn comp_nf_associativity() {
+        let mut store = MetaStore::default();
+        let (a, b, c) = (rigid(0), rigid(1), rigid(2));
+        let lhs = cell_comp(2, cell_comp(2, a.clone(), b.clone()), c.clone());
+        let rhs = cell_comp(2, a.clone(), cell_comp(2, b.clone(), c.clone()));
+        assert!(conv(&mut store, 3, &lhs, &rhs));
+        // Order still matters — different order does not convert.
+        let rhs2 = cell_comp(2, a, cell_comp(2, c, b));
+        assert!(!conv(&mut store, 3, &lhs, &rhs2));
+    }
+
+    #[test]
+    fn comp_nf_unit_absorbs() {
+        let mut store = MetaStore::default();
+        let (e, f) = (rigid(0), rigid(1));
+        // `id₂(f) ∘₂ e ≡ e` and `e ∘₂ id₂(g) ≡ e`.
+        let lhs = cell_comp(2, cell_id(2, f.clone()), e.clone());
+        assert!(conv(&mut store, 2, &lhs, &e));
+        let rhs = cell_comp(2, e.clone(), cell_id(2, rigid(2)));
+        assert!(conv(&mut store, 3, &rhs, &e));
+        // Units drop mid-chain too: `a ∘ id ∘ b ≡ a ∘ b`.
+        let a = rigid(3);
+        let chain = cell_comp(
+            2,
+            a.clone(),
+            cell_comp(2, cell_id(2, f.clone()), e.clone()),
+        );
+        let flat = cell_comp(2, a, e.clone());
+        assert!(conv(&mut store, 4, &chain, &flat));
+        // `id` towers absorb at deep axes: `id₃(id₂(y))` is a `∘₁` unit.
+        let y = rigid(1);
+        let tower = cell_id(3, cell_id(2, y));
+        let lhs = cell_comp(1, tower, e.clone());
+        assert!(conv(&mut store, 2, &lhs, &e));
+        // But `id₂` is NOT a `∘₀` unit on a non-id payload —
+        // `id₂(f) ∘₀ e` is whiskering, not the identity.
+        let whisker = cell_comp(0, cell_id(2, f), e.clone());
+        assert!(!conv(&mut store, 2, &whisker, &e));
+        // `id₁(A)` on an object IS a `∘₀` unit.
+        let obj_id = cell_id(1, Val::Nominal(Sym::seeded("type.Int")));
+        let lhs = cell_comp(0, obj_id, e.clone());
+        assert!(conv(&mut store, 2, &lhs, &e));
+        // And object leaves themselves promote to degenerate cells —
+        // `A ∘ₖ e ≡ e` for a type value at any axis.
+        let obj = Val::Nominal(Sym::seeded("type.Int"));
+        for k in [0, 1, 4] {
+            let lhs = cell_comp(k, obj.clone(), e.clone());
+            assert!(conv(&mut store, 2, &lhs, &e), "axis {k}");
+        }
+    }
+
+    #[test]
+    fn comp_nf_interchange_grid() {
+        let mut store = MetaStore::default();
+        // `(a ∘₀ c) ∘₂ (b ∘₀ d) ≡ (a ∘₂ b) ∘₀ (c ∘₂ d)` — the exchange
+        // law; the canonical form sorts the smaller axis outward.
+        let (a, b, c, d) = (rigid(0), rigid(1), rigid(2), rigid(3));
+        let lhs = cell_comp(
+            2,
+            cell_comp(0, a.clone(), c.clone()),
+            cell_comp(0, b.clone(), d.clone()),
+        );
+        let rhs = cell_comp(
+            0,
+            cell_comp(2, a.clone(), b.clone()),
+            cell_comp(2, c.clone(), d.clone()),
+        );
+        assert!(conv(&mut store, 4, &lhs, &rhs));
+        // The user's verify shape: `(f ∘₁ g) ∘₂ (f' ∘₁ g') ≡
+        // (f ∘₂ f') ∘₁ (g ∘₂ g')` — axes 1 < 2 transpose the same way.
+        let (f, g, f2, g2) = (rigid(0), rigid(1), rigid(2), rigid(3));
+        let lhs = cell_comp(
+            2,
+            cell_comp(1, f.clone(), g.clone()),
+            cell_comp(1, f2.clone(), g2.clone()),
+        );
+        let rhs = cell_comp(
+            1,
+            cell_comp(2, f.clone(), f2.clone()),
+            cell_comp(2, g.clone(), g2.clone()),
+        );
+        assert!(conv(&mut store, 4, &lhs, &rhs));
+        // n-ary grids transpose as blocks:
+        // `(a∘₀c∘₀e) ∘₂ (b∘₀d∘₀h) ≡ (a∘₂b) ∘₀ (c∘₂d) ∘₀ (e∘₂h)`.
+        let (a, b, c, d, e2, h) = (
+            rigid(0),
+            rigid(1),
+            rigid(2),
+            rigid(3),
+            rigid(4),
+            rigid(5),
+        );
+        let lhs = cell_comp(
+            2,
+            cell_comp(0, cell_comp(0, a.clone(), c.clone()), e2.clone()),
+            cell_comp(0, cell_comp(0, b.clone(), d.clone()), h.clone()),
+        );
+        let rhs = cell_comp(
+            0,
+            cell_comp(0, cell_comp(2, a, b), cell_comp(2, c, d)),
+            cell_comp(2, e2, h),
+        );
+        assert!(conv(&mut store, 6, &lhs, &rhs));
+        // A non-uniform grid stays stuck: `(a ∘₀ b) ∘₂ (c ∘₁ d)` —
+        // mixed inner axes don't exchange (structural only).
+        let lhs = cell_comp(
+            2,
+            cell_comp(0, rigid(0), rigid(1)),
+            cell_comp(1, rigid(2), rigid(3)),
+        );
+        let rhs = cell_comp(
+            0,
+            cell_comp(2, rigid(0), rigid(2)),
+            cell_comp(1, rigid(1), rigid(3)),
+        );
+        assert!(!conv(&mut store, 4, &lhs, &rhs));
+    }
+
+    #[test]
+    fn comp_nf_nested_under_hom() {
+        let mut store = MetaStore::default();
+        let hom = |n: i64, s: Val, t: Val| Val::Former {
+            head: Sym::seeded("type.hom"),
+            args: vec![Val::Const(TaggedValue::Int(n)), s, t],
+        };
+        let (a, b, c) = (rigid(0), rigid(1), rigid(2));
+        // Comp trees nested inside `Hom` args normalize too —
+        // `Hom(4, (a∘b)∘c, a∘(b∘c))` arg-wise converts.
+        let lhs = hom(
+            4,
+            cell_comp(2, cell_comp(2, a.clone(), b.clone()), c.clone()),
+            rigid(9),
+        );
+        let rhs = hom(
+            4,
+            cell_comp(2, a, cell_comp(2, b, c)),
+            rigid(9),
+        );
+        assert!(conv(&mut store, 10, &lhs, &rhs));
+        // An `id`-absorbing tree nested under `Hom`:
+        let lhs = hom(4, cell_comp(2, cell_id(2, rigid(5)), rigid(6)), rigid(9));
+        let rhs = hom(4, rigid(6), rigid(9));
+        assert!(conv(&mut store, 10, &lhs, &rhs));
     }
 
     /// WS-H microbench: `conv` over a deep `Former` nest. The zero-copy
