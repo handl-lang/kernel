@@ -31,3 +31,13 @@ on `handl-lang/kernel` (`branch = "main"`, float-on-main); for local
 development a sibling `../kernel` checkout is wired through the
 consumer's `[patch]` table (`scripts/dev-link.sh` in host
 regenerates it).
+
+## Documentation
+
+Published site (Diátaxis): <https://handl-lang.github.io/docs/kernel/>
+
+- [Reference](https://handl-lang.github.io/docs/kernel/reference/) — public API surface
+- [How-to](https://handl-lang.github.io/docs/kernel/how-to/) — task recipes
+- [Explanation](https://handl-lang.github.io/docs/kernel/explanation/) — design and rationale
+
+Decision records live on the `project` branch under `project/adrs/`.
