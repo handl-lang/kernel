@@ -25,26 +25,36 @@ jobs:
             echo "::warning::CI_TOKEN is not set — private sibling git deps will fail to fetch"
           fi
 
-      - name: drop local [patch] tables
+      - name: drop sibling [patch] tables
         # The [patch] blocks point at sibling checkouts for local development
         # (ADR-0128 §Resolution). CI has no siblings, so it resolves the
-        # pinned `rev` git deps instead.
+        # pinned `rev` git deps instead — except for the kernel self-patch,
+        # which maps the kernel crates to *this* workspace's members. Keep
+        # that one: without it a second `handl-language` resolves from git
+        # and the build fails on `expected Language, found Language` (E0308).
         run: |
           python3 - <<'PY'
-          import pathlib, re
+          import pathlib
+          import re
 
           pat = re.compile(
               r'\n\[patch\."https://github\.com/handl-lang/[^"]+"\]'
               r'[\s\S]*?(?=\n\[|\Z)'
           )
+
+          def keep(match):
+              """Drop sibling-checkout patches, keep in-repo self-patches."""
+              block = match.group(0)
+              return '\n' if 'path = "../' in block else block
+
           for p in sorted(pathlib.Path('.').rglob('Cargo.toml')):
               if 'target/' in str(p):
                   continue
               t = p.read_text()
-              n = pat.sub('\n', t)
+              n = pat.sub(keep, t)
               if n != t:
                   p.write_text(n)
-                  print('stripped [patch] from', p)
+                  print('stripped sibling [patch] from', p)
           PY
 
       - uses: dtolnay/rust-toolchain@stable
