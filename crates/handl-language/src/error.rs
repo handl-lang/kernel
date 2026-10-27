@@ -96,6 +96,24 @@ pub enum LangError {
         /// A human-readable description of the failure.
         message: String,
     },
+    /// Evaluation suspended at a `perform`ed effect, waiting on `resume`
+    /// (multi-shot effect resumption — `host/project/design/
+    /// multishot-resume.md`).
+    ///
+    /// This is an **engine-internal control-flow signal**, not a user
+    /// error: a `perform` under a `handle` whose clause takes the
+    /// resumption unwinds evaluation to the innermost `handle` driver,
+    /// which invokes the clause with the `resume` value. The `id`
+    /// indexes the suspending engine's thread-local suspension table —
+    /// the payload lives there, not in this variant, so the kernel stays
+    /// free of `TaggedValue`/`TermData` dependencies. An engine that
+    /// never mints suspension records must never see this variant; one
+    /// escaping to the user reports as an ordinary error message.
+    #[error("eval suspended awaiting resumption {id}")]
+    Suspended {
+        /// The engine-side suspension-table index.
+        id: u64,
+    },
 }
 
 impl From<serde_json::Error> for LangError {
@@ -115,6 +133,26 @@ impl LangError {
             context: String::new(),
             span: None,
             node_kind: None,
+        }
+    }
+
+    /// Build a [`LangError::Suspended`] control-flow signal for the
+    /// engine-side suspension record `id` (multi-shot `resume`).
+    pub fn suspended(id: u64) -> Self {
+        LangError::Suspended { id }
+    }
+
+    /// The suspension-table index when this error is a
+    /// [`LangError::Suspended`] control-flow signal, else `None`.
+    ///
+    /// `handle` drivers match on this to catch only suspensions — any
+    /// code that *catches* engine errors (impl-value fallbacks,
+    /// language-level `try`) must re-propagate `Suspended` unchanged or
+    /// a `resume` continuation dies silently.
+    pub fn suspension_id(&self) -> Option<u64> {
+        match self {
+            LangError::Suspended { id } => Some(*id),
+            _ => None,
         }
     }
 
