@@ -150,8 +150,6 @@ handl-lib-collections = { path = "../lib-collections" }
 handl-plugin-lib-crypto = { path = "../lib-crypto" }
 
 
-[patch."https://github.com/handl-lang/lib-encoding"]
-handl-lib-encoding = { path = "../lib-encoding" }
 
 [patch."https://github.com/handl-lang/lib-hello"]
 handl-lib-hello = { path = "../lib-hello" }
@@ -191,8 +189,6 @@ handl-plugin-lib-lang-typecheck = { path = "../lib-lang-typecheck" }
 [patch."https://github.com/handl-lang/lib-otlp-std"]
 handl-plugin-lib-otlp-std = { path = "../lib-otlp-std" }
 
-[patch."https://github.com/handl-lang/lib-parse"]
-handl-lib-parse = { path = "../lib-parse" }
 
 
 
