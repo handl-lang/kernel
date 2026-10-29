@@ -297,8 +297,6 @@ handl-plugin-lib-otlp-c = { path = "../lib-otlp-c" }
 [patch."https://github.com/handl-lang/lib-perlin"]
 handl-lib-perlin = { path = "../lib-perlin" }
 
-[patch."https://github.com/handl-lang/lib-rand-stub"]
-handl-lib-rand-stub = { path = "../lib-rand-stub" }
 
 [patch."https://github.com/handl-lang/lib-serialize-toml-c"]
 handl-plugin-lib-serialize-toml-c = { path = "../lib-serialize-toml-c" }
@@ -312,5 +310,3 @@ handl-lib-simplex = { path = "../lib-simplex" }
 [patch."https://github.com/handl-lang/lib-test"]
 handl-lib-test = { path = "../lib-test" }
 
-[patch."https://github.com/handl-lang/lib-type-handl"]
-handl-lib-type-handl = { path = "../lib-type-handl" }
