@@ -136,17 +136,11 @@ handl-kit-stdlib = { path = "../kit-stdlib/crates/kit-stdlib" }
 [patch."https://github.com/handl-lang/kit-test"]
 handl-kit-test = { path = "../kit-test/crates/kit-test" }
 
-[patch."https://github.com/handl-lang/lib-archive"]
-handl-lib-archive = { path = "../lib-archive" }
 
-[patch."https://github.com/handl-lang/lib-arrow-iter"]
-handl-lib-arrow-iter = { path = "../lib-arrow-iter" }
 
 [patch."https://github.com/handl-lang/lib-base64"]
 handl-lib-base64 = { path = "../lib-base64" }
 
-[patch."https://github.com/handl-lang/lib-char"]
-handl-lib-char = { path = "../lib-char" }
 
 [patch."https://github.com/handl-lang/lib-char-native"]
 handl-plugin-lib-char-native = { path = "../lib-char-native" }
@@ -157,8 +151,6 @@ handl-lib-collections = { path = "../lib-collections" }
 [patch."https://github.com/handl-lang/lib-crypto"]
 handl-plugin-lib-crypto = { path = "../lib-crypto" }
 
-[patch."https://github.com/handl-lang/lib-datetime"]
-handl-lib-datetime = { path = "../lib-datetime" }
 
 [patch."https://github.com/handl-lang/lib-encoding"]
 handl-lib-encoding = { path = "../lib-encoding" }
@@ -169,11 +161,7 @@ handl-lib-hello = { path = "../lib-hello" }
 [patch."https://github.com/handl-lang/lib-hex"]
 handl-lib-hex = { path = "../lib-hex" }
 
-[patch."https://github.com/handl-lang/lib-intl"]
-handl-lib-intl = { path = "../lib-intl" }
 
-[patch."https://github.com/handl-lang/lib-intl-c"]
-handl-lib-intl-c = { path = "../lib-intl-c" }
 
 [patch."https://github.com/handl-lang/lib-ip"]
 handl-lib-ip = { path = "../lib-ip" }
@@ -205,8 +193,6 @@ handl-plugin-lib-lang-run-compiled = { path = "../lib-lang-run-compiled" }
 [patch."https://github.com/handl-lang/lib-lang-typecheck"]
 handl-plugin-lib-lang-typecheck = { path = "../lib-lang-typecheck" }
 
-[patch."https://github.com/handl-lang/lib-option"]
-handl-lib-option = { path = "../lib-option" }
 
 [patch."https://github.com/handl-lang/lib-otlp-std"]
 handl-plugin-lib-otlp-std = { path = "../lib-otlp-std" }
@@ -214,11 +200,7 @@ handl-plugin-lib-otlp-std = { path = "../lib-otlp-std" }
 [patch."https://github.com/handl-lang/lib-parse"]
 handl-lib-parse = { path = "../lib-parse" }
 
-[patch."https://github.com/handl-lang/lib-rand-c"]
-handl-lib-rand-c = { path = "../lib-rand-c" }
 
-[patch."https://github.com/handl-lang/lib-result"]
-handl-lib-result = { path = "../lib-result" }
 
 [patch."https://github.com/handl-lang/lib-serialize"]
 handl-lib-serialize = { path = "../lib-serialize" }
@@ -233,17 +215,11 @@ handl-lib-tag = { path = "../lib-tag" }
 [patch."https://github.com/handl-lang/lib-tar"]
 handl-lib-tar = { path = "../lib-tar" }
 
-[patch."https://github.com/handl-lang/lib-time-c"]
-handl-lib-time-c = { path = "../lib-time-c" }
 
 [patch."https://github.com/handl-lang/lib-transform"]
 handl-lib-transform = { path = "../lib-transform" }
 
-[patch."https://github.com/handl-lang/lib-unicode"]
-handl-lib-unicode = { path = "../lib-unicode" }
 
-[patch."https://github.com/handl-lang/lib-unicode-c"]
-handl-lib-unicode-c = { path = "../lib-unicode-c" }
 
 [patch."https://github.com/handl-lang/lib-url-rfc"]
 handl-lib-url-rfc = { path = "../lib-url-rfc" }
@@ -251,8 +227,6 @@ handl-lib-url-rfc = { path = "../lib-url-rfc" }
 [patch."https://github.com/handl-lang/lib-url-whatwg"]
 handl-lib-url-whatwg = { path = "../lib-url-whatwg" }
 
-[patch."https://github.com/handl-lang/lib-utils"]
-handl-lib-utils = { path = "../lib-utils" }
 
 [patch."https://github.com/handl-lang/platform"]
 handl-kit-arrow-lower = { path = "../host/crates/handl-kit-arrow-lower" }
