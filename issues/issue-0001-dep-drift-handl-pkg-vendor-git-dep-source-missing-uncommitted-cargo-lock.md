@@ -1,7 +1,7 @@
 +++
 id = "I-001"
 title = "dep drift — handl-pkg-vendor git-dep source missing, uncommitted Cargo.lock"
-status = "open"
+status = "in-progress"
 created = "2026-10-31"
 owner = "devin"
 priority = "high"
