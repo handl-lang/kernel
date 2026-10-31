@@ -30,3 +30,30 @@ branch = "refs/heads/main"
   kind = "script"
   cmd = "bash scripts/ci.sh"
   cancel_running = true
+
+[trigger]
+kind = "github"
+listen = "127.0.0.1:29173"
+secret_env = "BUPHA_WEBHOOK_SECRET"
+
+# global runner — same shell cmd; a merged watcher overrides it per repo
+# anyway ([repo.runner] is a full replacement).
+[runner]
+kind = "script"
+cmd = "bash scripts/ci.sh"
+token_env = "BUPHA_TOKEN"
+
+[status]
+kind = "github"
+context = "ci/bupha"
+
+[tunnel]
+provider = "cloudflared"
+name = "bupha-ci"
+local_url = "http://127.0.0.1:29173"
+public_url = "https://ci.luisfuturist.com"   # hooks land at <url>/hook
+
+[worktree]
+# Runs land at <base>-handl-lang-kernel-<sha12>. Same base the shared
+# watcher uses, so history.jsonl stays in one place.
+base = "/home/luis/dagger/worktrees/bupha"
