@@ -1,0 +1,20 @@
+[package]
+name = "handl-lib-parse"
+version = "0.1.0"
+edition = "2024"
+description = "parse: Handl stdlib port + the parser trait (ADR-0128 split)."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/handl-lang/lib-parse"
+
+# Vendored at lib-parse@57dbb56 — the last rev that shipped the Rust
+# shell (dropped upstream in ADR-0161) — because handl-lib-url-rfc and
+# handl-lib-url-whatwg still declare `branch = "main"` git deps on this
+# crate. Remove when the dead deps are removed upstream. Deps below are
+# git-declared like the upstream manifest; the workspace root [patch]
+# tables resolve them to sibling checkouts.
+[dependencies]
+handl-platform = { git = "https://github.com/handl-lang/host", branch = "main" }
+handl-plugin-lib-handl = { git = "https://github.com/handl-lang/host", branch = "main" }
+handl-lib-ops = { git = "https://github.com/handl-lang/kernel", branch = "main" }
+serde_json = "1"
+thiserror = "2"

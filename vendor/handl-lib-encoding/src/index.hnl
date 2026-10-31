@@ -1,0 +1,34 @@
+--- encoding -- generic encoding to/from string forms for the handl runtime.
+---
+--- Single source of truth for the `encoding` stdlib interface: 2 functions
+--- covering encoding of a `serde_json::Value` to a string form (e.g. base64,
+--- hex) and decoding of a value back into a `Value`. The Rust bridge in
+--- `plugin-lib-utils` loads this file via `include_str!`, parses the `cap`
+--- declarations for the plugin capability surface, and registers the Rust
+--- handls (handlers) in an `OpRegistry` that dispatches each `op` to its
+--- native Rust impl backed by an `EncodingRegistry`.
+---
+--- Both functions are FFI atoms (they delegate to `EncodingRegistry` from
+--- `plugin-lib-encoding`, which wraps Base64 and Hex codecs, and cannot be
+--- expressed as pure handl arrows without losing the exact error messages
+--- the tests rely on). The `op`/`handl` declaration form (ADR-0077 Phase 2)
+--- declares the interface; the Rust `Function` impls in `ops.rs` provide the
+--- logic.
+---
+--- ## Capability declarations (ADR-0077 Phase 4)
+--- encoding.encode -- encode a value into a string form using a named codec.
+--- encoding.decode -- decode a value into a value using a named codec.
+cap "encoding.encode"
+cap "encoding.decode"
+op "encoding.encode" : (Value * Value) -> String
+  guarantee: True
+op "encoding.decode" : (Value * Value) -> Value
+  guarantee: True
+handle "encoding.encode" with encode
+handle "encoding.decode" with decode
+
+--- Codec dispatch: the codec object is a record carrying `encode`/`decode`
+--- arrows — produced by `hex.codec`/`base64.codec`/… — so `encoding.*` is a
+--- pure `.hnl` field-call; no Rust registry needed.
+export encode := (v, codec_obj) ~> (codec_obj.encode)(v)
+export decode := (v, codec_obj) ~> (codec_obj.decode)(v)

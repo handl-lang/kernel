@@ -140,6 +140,14 @@ handl-kit-test = { path = "../kit-test/crates/kit-test" }
 
 
 
+# lib-base64/lib-url-*/lib-parse/lib-encoding are referenced transitively
+# (kit-stdlib -> base64 -> encoding, url-rfc/whatwg -> parse); patching
+# them to sibling checkouts keeps their own dep edges on the patch path
+# — the retired-shell crates below (encoding/parse, vendored) can then
+# substitute cleanly instead of resolving dead `branch = "main"` HEADs.
+[patch."https://github.com/handl-lang/lib-base64"]
+handl-lib-base64 = { path = "../lib-base64" }
+
 [patch."https://github.com/handl-lang/lib-char-native"]
 handl-plugin-lib-char-native = { path = "../lib-char-native" }
 
@@ -153,6 +161,9 @@ handl-plugin-lib-crypto = { path = "../lib-crypto" }
 
 [patch."https://github.com/handl-lang/lib-hello"]
 handl-lib-hello = { path = "../lib-hello" }
+
+[patch."https://github.com/handl-lang/lib-hex"]
+handl-lib-hex = { path = "../lib-hex" }
 
 
 
@@ -207,6 +218,12 @@ handl-lib-tag = { path = "../lib-tag" }
 [patch."https://github.com/handl-lang/lib-transform"]
 handl-lib-transform = { path = "../lib-transform" }
 
+[patch."https://github.com/handl-lang/lib-url-rfc"]
+handl-lib-url-rfc = { path = "../lib-url-rfc" }
+
+[patch."https://github.com/handl-lang/lib-url-whatwg"]
+handl-lib-url-whatwg = { path = "../lib-url-whatwg" }
+
 
 
 
@@ -235,6 +252,14 @@ handl-lib-comb = { path = "../lib-comb" }
 [patch."https://github.com/handl-lang/lib-desugar"]
 handl-lib-desugar = { path = "../lib-desugar" }
 
+# lib-encoding's Rust shell was dropped upstream (ADR-0161) but
+# handl-lib-base64 still git-deps it — `branch = "main"` now resolves to
+# a rev with no Cargo.toml. Patch to the vendored copy (the last rev that
+# shipped the crate; the dep is dead weight — see vendor/) until the dep
+# is removed upstream.
+[patch."https://github.com/handl-lang/lib-encoding"]
+handl-lib-encoding = { path = "vendor/handl-lib-encoding" }
+
 [patch."https://github.com/handl-lang/lib-ffi"]
 handl-lib-ffi = { path = "../lib-ffi" }
 
@@ -245,6 +270,13 @@ handl-lib-loader = { path = "../lib-loader" }
 
 [patch."https://github.com/handl-lang/lib-otlp-c"]
 handl-plugin-lib-otlp-c = { path = "../lib-otlp-c" }
+
+# Same retired-shell hazard as lib-encoding: lib-parse's Rust shell was
+# dropped upstream (ADR-0161) while handl-lib-url-rfc/-url-whatwg still
+# git-dep it on `branch = "main"` — patch to the vendored last-shelled
+# rev until the dead deps are removed upstream.
+[patch."https://github.com/handl-lang/lib-parse"]
+handl-lib-parse = { path = "vendor/handl-lib-parse" }
 
 [patch."https://github.com/handl-lang/lib-perlin"]
 handl-lib-perlin = { path = "../lib-perlin" }

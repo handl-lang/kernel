@@ -1,0 +1,27 @@
+--- parse -- generic string parsing for the handl runtime.
+---
+--- Single source of truth for the `parse` stdlib interface: 1 function
+--- covering parsing of a string into a `serde_json::Value` via a named
+--- parser (e.g. `"url_whatwg"`, `"url_rfc"`). The Rust bridge in
+--- `plugin-lib-utils` loads this file via `include_str!`, parses the `cap`
+--- declarations for the plugin capability surface, and registers the Rust
+--- handl (handler) in an `OpRegistry` that dispatches the `op` to its
+--- native Rust impl backed by a `DynParser` registry.
+---
+--- The function is an FFI atom (it delegates to `DynParser` impls from
+--- `plugin-lib-parse`, specifically `Whatwg` and `Rfc` URL parsers, and
+--- cannot be expressed as pure handl arrows without losing the exact error
+--- messages the tests rely on). The `op`/`handl` declaration form
+--- (ADR-0077 Phase 2) declares the interface; the Rust `Function` impl in
+--- `ops.rs` provides the logic.
+---
+--- ## Capability declarations (ADR-0077 Phase 4)
+--- parse.parse -- parse a string into a value using a named parser.
+cap "parse.parse"
+op "parse.parse" : (String * Value) -> Value
+  guarantee: True
+handle "parse.parse" with parse
+
+--- Parser dispatch: the parser object is a record carrying a `parse`
+--- arrow — produced by `url_rfc.url_rfc`/`url_whatwg.url_whatwg`/…
+export parse := (input, parser) ~> (parser.parse)(input)

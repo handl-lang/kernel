@@ -1,0 +1,32 @@
+# bupha.toml — shell-runner CI for handl-lang/kernel.
+#
+# Same pattern as the other handl-lang repos: the runner is
+# `bash scripts/ci.sh` executed natively inside a detached worktree of
+# the pushed sha — no containers, no GHA. The script recreates the
+# sibling-checkout layout in the worktree's parent (../kernel -> the sha
+# under test, every other sibling -> the real checkout under
+# ~/GitHub/handl-lang) because the committed [patch] tables are relative
+# paths; a bare `cargo check` in the worktree resolves stale/absent
+# siblings and fails before compiling (the a78bc80 run died on
+# ../host/crates/pkg-vendor for exactly this reason).
+#
+# This [[repos]] entry is merged into the shared watcher config
+# ~/.config/bupha/bupha.toml. Run a dedicated instance with
+# `bupha watch --config bupha.toml` after moving `trigger.listen` to a
+# free port.
+#
+# Secrets resolve env var -> OS keyring -> ~/.config/bupha/env; never
+# this file. Schema: github.com/9aia/bupha examples/bupha.toml.example.
+#
+# Manual run (whole gate in this checkout, no worktree):
+#   bupha run                      # = bash scripts/ci.sh
+#   bash scripts/ci.sh doctor      # layout smoke, no compile
+
+[[repos]]
+name = "handl-lang/kernel"
+dir = "/home/luis/GitHub/handl-lang/kernel"
+branch = "refs/heads/main"
+  [repos.runner]
+  kind = "script"
+  cmd = "bash scripts/ci.sh"
+  cancel_running = true
