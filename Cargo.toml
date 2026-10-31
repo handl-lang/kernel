@@ -73,6 +73,9 @@ hnl-engine-exec-cranelift = { path = "../engine-exec-cranelift" }
 [patch."https://github.com/handl-lang/engine-exec-tree-walk"]
 hnl-engine-exec-tree-walk = { path = "../engine-exec-tree-walk" }
 
+[patch."https://github.com/handl-lang/engine-fmt"]
+hnl-engine-fmt = { path = "../engine-fmt" }
+
 [patch."https://github.com/handl-lang/engine-lex"]
 hnl-engine-lex = { path = "../engine-lex" }
 
@@ -103,8 +106,11 @@ hnl-engine-typecheck-nbe = { path = "../engine-typecheck-nbe" }
 [patch."https://github.com/handl-lang/host"]
 handl-kit-arrow-lower = { path = "../host/crates/handl-kit-arrow-lower" }
 handl-kit-data = { path = "../host/crates/handl-kit-data" }
+handl-pkg-vendor = { path = "../host/crates/pkg-vendor" }
 handl-platform = { path = "../host/crates/platform" }
 handl-plugin-ext-diag = { path = "../host/crates/plugin-ext-diag" }
+handl-plugin-ext-fmt = { path = "../host/crates/plugin-ext-fmt" }
+handl-plugin-ext-lint = { path = "../host/crates/plugin-ext-lint" }
 handl-plugin-lib-handl = { path = "../host/crates/plugin-lib-handl" }
 handl-plugin-lib-stdlib = { path = "../host/crates/plugin-lib-stdlib" }
 handl-plugin-lib-tag = { path = "../host/crates/plugin-lib-tag" }
@@ -127,6 +133,9 @@ handl-kit-lang = { path = "../kit-lang/crates/kit-lang" }
 [patch."https://github.com/handl-lang/kit-prelude"]
 handl-kit-prelude = { path = "../kit-prelude/crates/kit-prelude" }
 
+[patch."https://github.com/handl-lang/kit-prelude-lang"]
+handl-kit-prelude-lang = { path = "../kit-prelude-lang/crates/handl-kit-prelude-lang" }
+
 [patch."https://github.com/handl-lang/kit-server"]
 handl-kit-server = { path = "../kit-server/crates/kit-server" }
 
@@ -140,11 +149,11 @@ handl-kit-test = { path = "../kit-test/crates/kit-test" }
 
 
 
-# lib-base64/lib-url-*/lib-parse/lib-encoding are referenced transitively
-# (kit-stdlib -> base64 -> encoding, url-rfc/whatwg -> parse); patching
-# them to sibling checkouts keeps their own dep edges on the patch path
-# — the retired-shell crates below (encoding/parse, vendored) can then
-# substitute cleanly instead of resolving dead `branch = "main"` HEADs.
+# lib-base64/lib-url-* are referenced transitively (kit-stdlib ->
+# base64); patching them to sibling checkouts keeps their own dep edges
+# on the patch path. (lib-encoding/lib-parse were removed upstream —
+# the vendored shells under vendor/ remain only because sibling repos'
+# patch tables still point at ../kernel/vendor/... .)
 [patch."https://github.com/handl-lang/lib-base64"]
 handl-lib-base64 = { path = "../lib-base64" }
 
@@ -171,6 +180,9 @@ handl-lib-hex = { path = "../lib-hex" }
 [patch."https://github.com/handl-lang/lib-ip"]
 handl-lib-ip = { path = "../lib-ip" }
 
+
+[patch."https://github.com/handl-lang/lib-json"]
+handl-lib-json = { path = "../lib-json" }
 
 [patch."https://github.com/handl-lang/lib-kv"]
 handl-plugin-lib-kv = { path = "../lib-kv" }
@@ -210,6 +222,9 @@ handl-lib-serialize = { path = "../lib-serialize" }
 [patch."https://github.com/handl-lang/lib-str-handl"]
 handl-lib-str-handl = { path = "../lib-str-handl" }
 
+[patch."https://github.com/handl-lang/lib-tar"]
+handl-lib-tar = { path = "../lib-tar" }
+
 [patch."https://github.com/handl-lang/lib-tag"]
 handl-lib-tag = { path = "../lib-tag" }
 
@@ -232,8 +247,11 @@ handl-lib-url-whatwg = { path = "../lib-url-whatwg" }
 [patch."https://github.com/handl-lang/platform"]
 handl-kit-arrow-lower = { path = "../host/crates/handl-kit-arrow-lower" }
 handl-kit-data = { path = "../host/crates/handl-kit-data" }
+handl-pkg-vendor = { path = "../host/crates/pkg-vendor" }
 handl-platform = { path = "../host/crates/platform" }
 handl-plugin-ext-diag = { path = "../host/crates/plugin-ext-diag" }
+handl-plugin-ext-fmt = { path = "../host/crates/plugin-ext-fmt" }
+handl-plugin-ext-lint = { path = "../host/crates/plugin-ext-lint" }
 handl-plugin-lib-handl = { path = "../host/crates/plugin-lib-handl" }
 handl-plugin-lib-stdlib = { path = "../host/crates/plugin-lib-stdlib" }
 handl-plugin-lib-tag = { path = "../host/crates/plugin-lib-tag" }
@@ -252,14 +270,6 @@ handl-lib-comb = { path = "../lib-comb" }
 [patch."https://github.com/handl-lang/lib-desugar"]
 handl-lib-desugar = { path = "../lib-desugar" }
 
-# lib-encoding's Rust shell was dropped upstream (ADR-0161) but
-# handl-lib-base64 still git-deps it — `branch = "main"` now resolves to
-# a rev with no Cargo.toml. Patch to the vendored copy (the last rev that
-# shipped the crate; the dep is dead weight — see vendor/) until the dep
-# is removed upstream.
-[patch."https://github.com/handl-lang/lib-encoding"]
-handl-lib-encoding = { path = "vendor/handl-lib-encoding" }
-
 [patch."https://github.com/handl-lang/lib-ffi"]
 handl-lib-ffi = { path = "../lib-ffi" }
 
@@ -270,13 +280,6 @@ handl-lib-loader = { path = "../lib-loader" }
 
 [patch."https://github.com/handl-lang/lib-otlp-c"]
 handl-plugin-lib-otlp-c = { path = "../lib-otlp-c" }
-
-# Same retired-shell hazard as lib-encoding: lib-parse's Rust shell was
-# dropped upstream (ADR-0161) while handl-lib-url-rfc/-url-whatwg still
-# git-dep it on `branch = "main"` — patch to the vendored last-shelled
-# rev until the dead deps are removed upstream.
-[patch."https://github.com/handl-lang/lib-parse"]
-handl-lib-parse = { path = "vendor/handl-lib-parse" }
 
 [patch."https://github.com/handl-lang/lib-perlin"]
 handl-lib-perlin = { path = "../lib-perlin" }
