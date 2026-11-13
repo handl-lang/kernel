@@ -19,10 +19,11 @@ extension ABI, and the `handl-lib-*` floor-lib packages. The
 - `crates/{bytes,cmp,combinators,error,mood,obj,ops,prim,prim-handl,type}`
   — the `handl-lib-*` substrate packages.
 
-Engines, emitters, kits, plugins, and hosts are **not** kernel — they live
-in `handl-lang/host` and the target repos. The kernel deps on
-`handl-lang/engine` (`hnl-engine`, git dep on `main`), so downstream
-repos can pin the substrate without pulling the host repo.
+Engines, emitters, kits, plugins, and hosts are **not** kernel — they live in
+the sibling `engine-*`/`compile-*`/`sdkgen-*`, `kit-*`, `ext-*` and `host-*`
+repos. The kernel deps on `handl-lang/engine` (`hnl-engine`, git dep on
+`main`), so downstream repos can pin the substrate without pulling the host
+repo.
 
 It was extracted from the `handl-lang/host` workspace per the
 ADR-0128 repo-split pattern: `git subtree split` preserves each crate's

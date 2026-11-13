@@ -10,9 +10,9 @@ dependency arrows all point downwards.
 
 ## Where it sits
 
-This crate belongs to the `engine-*` family. Plugins, kits and hosts reach it
-through the kit's operation slot, so the engine can be swapped without touching a
-language definition.
+This crate is the substrate layer under the `engine-*`, `kit-*` and `host-*`
+families. Engines, kits and hosts reach it through the kit's operation slot, so
+the engine can be swapped without touching a language definition.
 
 See the [reference](/kernel/reference/) for the API and the
 [how-to guides](/kernel/how-to/) for tasks.
