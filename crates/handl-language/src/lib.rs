@@ -69,29 +69,29 @@ pub use fragments::{
     AstDesugarChild, AstDesugarCondition, AstDesugarRule, AstShapeDef, AstShapeRef, CapabilityDecl,
     ChildRoleSpec, ChildSeparator, DelimitedShape, EvalSchemeDef, GrammarPosition, GrammarRow,
     KeywordClause, LexerPattern, LexerRuleDef, LintCheck, LintFix, LintRuleDef, LiteralKind,
-    LspDef, LspMatch, LspRule, OptionSchema, PairShape, PayloadExtractSpec, PayloadTokenSpec,
-    RewriteStep, TokenKindDef, TokenStep, TransformCondition, TransformDef, TransformRule,
-    TypeRuleDef,
+    LspDef, LspMatch, LspRule, OptionSchema, PAYLOAD_ATTR_OF, PairShape, PayloadExtractSpec,
+    PayloadTokenSpec, RewriteStep, TokenKindDef, TokenStep, TransformCondition, TransformDef,
+    TransformRule, TypeRuleDef,
 };
+pub use hnl_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
 pub use instantiate::LIT_KIND;
 pub use language::Language;
-pub use quote_ast::{REIFY_LIT_KIND, reify_ast, reify_ast_value};
 pub use law_inference::{
     InferredLaw, LawCheckResult, LawPattern, LawStatus, builtin_law_catalog, infer_laws, law_equal,
     normalize, uses_first,
 };
-pub use hnl_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
 pub use quantified_laws::{
     LawCheckResult as QuantifiedLawCheckResult, LawExpr, LawSubst, LawVar, QuantifiedLaw,
     builtin_quantified_laws, check_quantified_law, instantiate,
+};
+pub use quote_ast::{REIFY_LIT_KIND, reify_ast, reify_ast_value};
+pub use term::{
+    ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };
 pub use token_classes::{
     TokenClasses, is_bool_kind, is_comment_kind, is_delimiter_kind, is_doc_comment_kind,
     is_identifier_kind, is_keyword_kind, is_null_kind, is_number_kind, is_operator_kind,
     is_string_kind, is_template_kind,
-};
-pub use term::{
-    ArrSource, RewriteWitness, Side, Term, eliminate_all_handlers, eliminate_handler_in_scheme,
 };
 
 impl hnl_engine::AstView for Ast {

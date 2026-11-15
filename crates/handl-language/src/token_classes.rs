@@ -4,7 +4,6 @@
 
 use crate::Language;
 
-
 /// Token-kind classification resolved from a [`Language`]'s `tokens` fragment
 /// set (`TokenKindDef::category`/`pair`/`doc`/`label`) — the data-driven
 /// replacement for the string-matching `is_identifier_kind`-style helpers

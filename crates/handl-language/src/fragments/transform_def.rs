@@ -72,6 +72,19 @@ fn is_zero(i: &i32) -> bool {
     *i == 0
 }
 
+/// The payload marker a [`RewriteStep::Create`] `payload` (or a
+/// [`TransformRule::Declarative`] `payload` patch) uses to copy an
+/// attribute value off a node of the *matched* subtree into the
+/// rewritten node — the attr_rhs half of the mlopt law bridge.
+///
+/// A payload value of the form `{"$attr_of": {"path": […], "attr":
+/// "name"}}` resolves, at rewrite time, to the `payload["attrs"][name]`
+/// value of the descendant reached by child-index `path` below the
+/// matched node (empty `path` = the matched node itself). Resolution
+/// is recursive through objects and arrays; an unresolvable marker is
+/// an error, never a silently fabricated value.
+pub const PAYLOAD_ATTR_OF: &str = "$attr_of";
+
 /// The rewrite a [`TransformDef`] applies (ADR-0094 §3).
 ///
 /// - [`TransformRule::Declarative`] rewrites the matched node into a new node
@@ -240,6 +253,46 @@ pub enum TransformCondition {
     },
     /// The node must have exactly this many children.
     ChildCount(usize),
+    /// An attribute guard for data-driven nodes whose op attrs ride in
+    /// `payload["attrs"]` (the mlopt bridge's encoding — ADR-0094
+    /// vocabulary extension for law guards).
+    ///
+    /// The node reached by child-index `path` below the matched node
+    /// (empty = the node itself) must carry `attr` in its
+    /// `payload["attrs"]` map; when `value` is present the attr must
+    /// equal it, when absent presence alone satisfies the condition
+    /// (a bound attr *metavariable* — mlopt requires the attr to exist
+    /// but its value is unconstrained). An unresolvable path or a
+    /// missing `attrs` map evaluates to `false`, never panics.
+    AttrEq {
+        /// Child-index path to the attr-carrying node (empty = self).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path: Vec<usize>,
+        /// The attr name inside the node's `payload["attrs"]` map.
+        attr: String,
+        /// Literal the attr must equal; absent = presence only.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<Value>,
+    },
+    /// Two attribute locations must hold equal values — the handl
+    /// spelling of a *repeated attr metavariable* in a law lhs: mlopt's
+    /// matcher binds the metavar once, so every occurrence beyond the
+    /// first is an equality constraint between the attr values at the
+    /// recorded positions. Both sides resolve like
+    /// [`TransformCondition::AttrEq`]; either side missing its attr
+    /// evaluates to `false`.
+    SameAttr {
+        /// Child-index path to the first attr-carrying node.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path_a: Vec<usize>,
+        /// The attr name inside that node's `payload["attrs"]` map.
+        attr_a: String,
+        /// Child-index path to the second attr-carrying node.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        path_b: Vec<usize>,
+        /// The attr name inside that node's `payload["attrs"]` map.
+        attr_b: String,
+    },
     /// All sub-conditions must hold.
     And(Vec<TransformCondition>),
     /// At least one sub-condition must hold.
@@ -484,6 +537,22 @@ mod tests {
                 path: "p".into(),
                 value: Value::from(true),
             },
+            TransformCondition::AttrEq {
+                path: vec![0, 1],
+                attr: "dim".into(),
+                value: Some(Value::from(-1)),
+            },
+            TransformCondition::AttrEq {
+                path: vec![],
+                attr: "chunks".into(),
+                value: None,
+            },
+            TransformCondition::SameAttr {
+                path_a: vec![0],
+                attr_a: "dim".into(),
+                path_b: vec![1, 0],
+                attr_b: "dim".into(),
+            },
             TransformCondition::ChildCount(0),
             TransformCondition::And(vec![]),
             TransformCondition::Or(vec![TransformCondition::ChildCount(1)]),
@@ -504,9 +573,7 @@ mod tests {
             "t.replace",
             "optimize",
             "neg",
-            TransformRule::Replace {
-                path: vec![0, 0],
-            },
+            TransformRule::Replace { path: vec![0, 0] },
         );
         let j = serde_json::to_string(&def).unwrap();
         assert!(j.contains("\"Replace\""), "{j}");

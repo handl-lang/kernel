@@ -42,5 +42,7 @@ pub use lint_rule::{LintCheck, LintFix, LintRuleDef};
 pub use lsp::{LspDef, LspMatch, LspRule};
 pub use option::OptionSchema;
 pub use token_kind::{LiteralKind, TokenKindDef};
-pub use transform_def::{RewriteStep, TransformCondition, TransformDef, TransformRule};
+pub use transform_def::{
+    PAYLOAD_ATTR_OF, RewriteStep, TransformCondition, TransformDef, TransformRule,
+};
 pub use type_rule::TypeRuleDef;

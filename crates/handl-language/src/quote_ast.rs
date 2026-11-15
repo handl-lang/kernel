@@ -117,9 +117,7 @@ fn push_quoted_lit(store: &MetaStore, lvl: Lvl, val: &Val, ast: &mut Ast) -> Ast
 fn push_call(ast: &mut Ast, callee: AstRef, args: Vec<AstRef>) -> AstRef {
     let mut children = vec![callee.index() as u64];
     children.extend(args.iter().map(|r| r.index() as u64));
-    ast.push(
-        AstNode::new("call").with_payload(serde_json::json!({ "children": children })),
-    )
+    ast.push(AstNode::new("call").with_payload(serde_json::json!({ "children": children })))
 }
 
 /// `var` node: the name rides the payload directly (the `eval.var`
@@ -207,8 +205,8 @@ fn reify_into(store: &MetaStore, lvl: Lvl, val: &Val, names: &[Rc<str>], ast: &m
 #[cfg(test)]
 mod tests {
     use super::*;
-    use handl_value::nbe::{ArrowVal, Spine};
     use handl_value::Sym;
+    use handl_value::nbe::{ArrowVal, Spine};
 
     fn root_kind(ast: &Ast) -> &str {
         ast.nodes().last().map(|n| n.kind.as_str()).unwrap_or("")
@@ -255,10 +253,7 @@ mod tests {
         assert_eq!(n.kind, "lit");
         assert_eq!(n.payload["__former__"]["sym"]["__sym__"]["name"], "Vec");
         assert_eq!(n.payload["__former__"]["args"][0], serde_json::json!(2));
-        assert_eq!(
-            n.payload["__former__"]["args"][1]["__sym__"]["name"],
-            "Int"
-        );
+        assert_eq!(n.payload["__former__"]["args"][1]["__sym__"]["name"], "Int");
     }
 
     #[test]
