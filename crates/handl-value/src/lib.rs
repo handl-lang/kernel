@@ -885,14 +885,53 @@ fn sym_from_json(sym_val: &Map<String, Value>) -> Option<TaggedValue> {
     Some(TaggedValue::Sym(Rc::new(sym)))
 }
 
+/// Decode one `data` element of a tensor wire record: a JSON number,
+/// or the `{"__nonfinite__": "nan" | "inf" | "-inf"}` tag for a
+/// non-finite `f64` — the spelling `host-tensor`'s `codec.rs`
+/// (`decode_f64`, commit `0528649`) uses because `serde_json` has no
+/// NaN/±inf literals. `None` on anything else (a `null`, a string, a
+/// bool, an unknown tag), so a malformed element degrades the whole
+/// payload to a plain object rather than silently coercing.
+fn decode_f64_element(x: &Value) -> Option<f64> {
+    if let Some(n) = x.as_f64() {
+        return Some(n);
+    }
+    match x.get("__nonfinite__")?.as_str()? {
+        "nan" => Some(f64::NAN),
+        "inf" => Some(f64::INFINITY),
+        "-inf" => Some(f64::NEG_INFINITY),
+        _ => None,
+    }
+}
+
+/// Encode one `data` element for the tensor wire record: finite `f64`s
+/// stay JSON numbers; NaN/`inf`/`-inf` become the
+/// `{"__nonfinite__": …}` tag (the same spelling `host-tensor`'s
+/// `codec.rs::encode_f64` emits — `serde_json::Number::from_f64`
+/// rejects non-finite values, which otherwise serialize as `null`).
+fn encode_f64_element(x: f64) -> Value {
+    if x.is_nan() {
+        serde_json::json!({"__nonfinite__": "nan"})
+    } else if x == f64::INFINITY {
+        serde_json::json!({"__nonfinite__": "inf"})
+    } else if x == f64::NEG_INFINITY {
+        serde_json::json!({"__nonfinite__": "-inf"})
+    } else {
+        serde_json::Number::from_f64(x)
+            .map(Value::Number)
+            .unwrap_or(Value::Null)
+    }
+}
+
 /// Decode the inner payload of a `{"__tensor__": {...}}` JSON object into
 /// a [`TaggedValue::Tensor`]. Returns `None` when the payload is
 /// malformed — a `dtype` present but not `"f64"`, a non-array `shape` or
 /// `data`, a negative/non-integer/`usize`-overflowing extent, a
-/// non-numeric element, or a `data` length that is not `product(shape)` —
-/// so the caller falls back to a plain object (the lenient `__bytes__`
-/// convention). `dtype` is optional on decode, matching `host-tensor`'s
-/// `decode_tensor`.
+/// `data` element that is neither a number nor a valid
+/// `{"__nonfinite__": …}` tag, or a `data` length that is not
+/// `product(shape)` — so the caller falls back to a plain object (the
+/// lenient `__bytes__` convention). `dtype` is optional on decode,
+/// matching `host-tensor`'s `decode_tensor`.
 fn tensor_from_json(inner: &Map<String, Value>) -> Option<TaggedValue> {
     if let Some(dtype) = inner.get("dtype") {
         if dtype.as_str() != Some("f64") {
@@ -909,7 +948,7 @@ fn tensor_from_json(inner: &Map<String, Value>) -> Option<TaggedValue> {
         .get("data")?
         .as_array()?
         .iter()
-        .map(|x| x.as_f64())
+        .map(|x| decode_f64_element(x))
         .collect::<Option<_>>()?;
     TensorValue::new(shape, data)
         .ok()
@@ -1300,15 +1339,18 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
         }
         TaggedValue::Tensor(t) => {
             // The host-tensor wire form: `{"__tensor__": {"shape": [...],
-            // "data": [...], "dtype": "f64"}}`. serde_json renders
-            // non-finite floats as `null` (matching `Float`'s encoding);
-            // such a payload then decodes as a plain object rather than
-            // a `Tensor`, the same graceful degradation `Float(NaN)` →
-            // `Null` already applies.
+            // "data": [...], "dtype": "f64"}}`. Non-finite `f64`
+            // elements have no `serde_json` number representation, so
+            // they emit the `{"__nonfinite__": "nan"|"inf"|"-inf"}` tag
+            // — the same spelling `host-tensor`'s `encode_tensor`
+            // (0528649) uses — which [`decode_f64_element`] reads back
+            // as the same `f64`. Finite tensors encode byte-identically
+            // to the pre-tag wire form.
+            let data: Vec<Value> = t.data.iter().map(|&x| encode_f64_element(x)).collect();
             serde_json::json!({
                 "__tensor__": {
                     "shape": t.shape,
-                    "data": t.data.as_slice(),
+                    "data": data,
                     "dtype": "f64",
                 }
             })

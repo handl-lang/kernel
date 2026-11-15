@@ -59,6 +59,65 @@ fn tensor_decode_accepts_the_host_tensor_forms() {
 }
 
 #[test]
+fn tensor_decode_accepts_nonfinite_tags() {
+    // `{"__nonfinite__": "nan"|"inf"|"-inf"}` elements decode to the
+    // matching f64 — the spelling host-tensor's `codec.rs` emits since
+    // commit 0528649 (serde_json has no NaN/±inf literals).
+    let v = json!({"__tensor__": {"shape": [4], "data": [
+        1.5,
+        {"__nonfinite__": "nan"},
+        {"__nonfinite__": "inf"},
+        {"__nonfinite__": "-inf"},
+    ], "dtype": "f64"}});
+    let t = TaggedValue::from(v);
+    let tv = t.as_tensor().expect("tagged data should decode to Tensor");
+    assert_eq!(tv.data[0], 1.5);
+    assert!(tv.data[1].is_nan());
+    assert_eq!(tv.data[2], f64::INFINITY);
+    assert_eq!(tv.data[3], f64::NEG_INFINITY);
+}
+
+#[test]
+fn tensor_encode_emits_nonfinite_tags() {
+    // The encode side mirrors `encode_tensor`: finite elements stay
+    // JSON numbers, non-finite elements become the tag objects — so a
+    // host result carrying NaN/±inf no longer degrades to `null`.
+    let t = tensor(vec![3], vec![f64::NAN, f64::INFINITY, f64::NEG_INFINITY]).unwrap();
+    let v = tagged_to_value(&t);
+    assert_eq!(
+        v["__tensor__"]["data"],
+        json!([
+            {"__nonfinite__": "nan"},
+            {"__nonfinite__": "inf"},
+            {"__nonfinite__": "-inf"},
+        ])
+    );
+    // And the emitted form decodes back to the same non-finite values
+    // (Tensor equality is structural f64 `==`, so NaN compares unequal
+    // — assert on the decoded payload, not `TaggedValue` equality).
+    let back = TaggedValue::from(v);
+    let tv = back.as_tensor().expect("re-encoded tensor should decode");
+    assert!(tv.data[0].is_nan());
+    assert_eq!(tv.data[1], f64::INFINITY);
+    assert_eq!(tv.data[2], f64::NEG_INFINITY);
+}
+
+#[test]
+fn tensor_decode_rejects_bad_nonfinite_elements() {
+    // An unknown tag spelling is malformed — the payload falls back to
+    // a plain object rather than coercing.
+    let bad_tag = json!({"__tensor__": {"shape": [1], "data": [{"__nonfinite__": "bogus"}]}});
+    assert!(matches!(TaggedValue::from(bad_tag), TaggedValue::Obj(_)));
+    // A literal `null` element (the pre-tag serde_json spelling of a
+    // non-finite) is rejected too — matching `decode_f64`.
+    let null_el = json!({"__tensor__": {"shape": [1], "data": [null]}});
+    assert!(matches!(TaggedValue::from(null_el), TaggedValue::Obj(_)));
+    // A non-string tag value is malformed.
+    let num_tag = json!({"__tensor__": {"shape": [1], "data": [{"__nonfinite__": 1}]}});
+    assert!(matches!(TaggedValue::from(num_tag), TaggedValue::Obj(_)));
+}
+
+#[test]
 fn tensor_decode_falls_back_to_object_on_malformed_payloads() {
     // A `dtype` other than "f64" is not silently relabeled.
     let bad_dtype = json!({"__tensor__": {"shape": [1], "data": [7], "dtype": "i32"}});
