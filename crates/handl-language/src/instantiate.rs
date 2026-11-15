@@ -791,6 +791,7 @@ mod tests {
                 args: vec![],
                 source: ArrSource::Native,
                 lit: None,
+                attrs: None,
             },
             replaces: vec![],
             requires: vec![],
