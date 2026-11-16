@@ -141,26 +141,121 @@ impl fmt::Debug for ForeignResource {
     }
 }
 // ---------------------------------------------------------------------------
-// TensorValue — dense row-major f64 tensor (the host-tensor wire payload)
+// TensorValue — dense row-major tensor (the host-tensor wire payload)
 // ---------------------------------------------------------------------------
 
-/// A dense, row-major `f64` tensor — the payload of
-/// [`TaggedValue::Tensor`].
+/// The element storage of a [`TensorValue`] — dtype-preserving
+/// (ADR-0179): `F64`/`F32` only, the two dtypes the safetensors sidecar
+/// produces. An `F32` payload is *exactly* determined by its widened
+/// `f64` values (`f32 → f64` is lossless and injective), so equality
+/// and hashing compare the f64 widening — preserving the pre-ADR-0179
+/// structural semantics where every tensor was `f64`.
+#[derive(Clone)]
+pub enum TensorData {
+    /// Dense `f64` payload.
+    F64(Vec<f64>),
+    /// Dense `f32` payload (stored narrow; widens exactly on read).
+    F32(Vec<f32>),
+}
+
+/// Iterator over a [`TensorData`] payload widened to `f64` — the
+/// element view equality, hashing, the array wire spelling, and
+/// `object_view` all consume.
+pub enum TensorDataIter<'a> {
+    F64(std::slice::Iter<'a, f64>),
+    F32(std::slice::Iter<'a, f32>),
+}
+
+impl Iterator for TensorDataIter<'_> {
+    type Item = f64;
+    fn next(&mut self) -> Option<f64> {
+        match self {
+            TensorDataIter::F64(it) => it.next().copied(),
+            TensorDataIter::F32(it) => it.next().map(|&x| x as f64),
+        }
+    }
+}
+
+impl TensorData {
+    /// Number of elements (`== product(shape)` by the [`TensorValue`]
+    /// invariant).
+    pub fn len(&self) -> usize {
+        match self {
+            TensorData::F64(v) => v.len(),
+            TensorData::F32(v) => v.len(),
+        }
+    }
+
+    /// Whether the payload is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// The wire `dtype` spelling of the storage (`"f64"`/`"f32"`).
+    pub fn dtype(&self) -> &'static str {
+        match self {
+            TensorData::F64(_) => "f64",
+            TensorData::F32(_) => "f32",
+        }
+    }
+
+    /// The payload widened to `f64` (a copy for `F32`; `f32 → f64` is
+    /// exact, so the widening is lossless).
+    pub fn iter_f64(&self) -> TensorDataIter<'_> {
+        match self {
+            TensorData::F64(v) => TensorDataIter::F64(v.iter()),
+            TensorData::F32(v) => TensorDataIter::F32(v.iter()),
+        }
+    }
+
+    /// The whole payload as a widened `Vec<f64>` — the
+    /// [`host-tensor`](https://github.com/handl-lang/host-tensor) `Tensor`
+    /// representation (`Vec<f64>`, f64 compute).
+    pub fn to_f64_vec(&self) -> Vec<f64> {
+        match self {
+            TensorData::F64(v) => v.clone(),
+            TensorData::F32(v) => v.iter().map(|&x| x as f64).collect(),
+        }
+    }
+
+    /// The raw little-endian payload bytes — exactly the
+    /// `__tensor_bin__` binary spelling's content (`numel × itemsize`).
+    /// Non-finite elements keep their raw IEEE bits.
+    pub fn le_bytes(&self) -> Vec<u8> {
+        match self {
+            TensorData::F64(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
+            TensorData::F32(v) => v.iter().flat_map(|x| x.to_le_bytes()).collect(),
+        }
+    }
+}
+
+impl PartialEq for TensorData {
+    /// Structural equality over the **f64 widening**: an `F32` tensor
+    /// equals the `F64` tensor holding the same widened values
+    /// (`f32 → f64` is exact and injective, so this loses nothing).
+    /// Elementwise `f64` `==` — `NaN` never equals itself, matching
+    /// [`TaggedValue::Float`].
+    fn eq(&self, other: &TensorData) -> bool {
+        self.len() == other.len() && self.iter_f64().zip(other.iter_f64()).all(|(a, b)| a == b)
+    }
+}
+
+/// A dense, row-major tensor — the payload of [`TaggedValue::Tensor`].
 ///
 /// Mirrors the `{"__tensor__": {"shape": [d, ...], "data": [x, ...],
 /// "dtype": "f64"}}` wire form `host-tensor` emits across its `Function`
-/// boundary: `shape` is the extent per axis (rank = `shape.len()`),
-/// `data` the flat row-major payload with `data.len() == product(shape)`.
-/// `dtype` is implicit — `"f64"` is the only element type this variant
-/// carries.
+/// boundary — extended by ADR-0179 with the binary `data` spelling
+/// `{"__tensor_bin__": "<base64 LE>"}` and `"f32"` storage —
+/// `shape` is the extent per axis (rank = `shape.len()`), `data` the
+/// flat row-major payload with `data.len() == product(shape)`.
 ///
 /// Unlike [`ForeignResource`], a tensor is a *value*, not an opaque
-/// handle: equality is structural over `shape` + `data` (elementwise
-/// `f64` `==`, matching [`TaggedValue::Float`]'s comparison — so `0.0`
-/// and `-0.0` compare equal and a `NaN` element makes a tensor unequal
-/// to itself), and hashing agrees (elements hash as `f64` bits with
-/// `-0.0` normalized to `+0.0`, since `0.0 == -0.0` but their bit
-/// patterns differ).
+/// handle: equality is structural over `shape` + the f64 widening of
+/// `data` (elementwise `f64` `==`, matching [`TaggedValue::Float`]'s
+/// comparison — so `0.0` and `-0.0` compare equal and a `NaN` element
+/// makes a tensor unequal to itself), and hashing agrees (elements
+/// hash as `f64` bits with `-0.0` normalized to `+0.0`, since
+/// `0.0 == -0.0` but their bit patterns differ).
 #[derive(Clone, PartialEq)]
 pub struct TensorValue {
     /// Extent per axis; `shape.len()` is the rank. An empty `shape` is a
@@ -168,14 +263,22 @@ pub struct TensorValue {
     pub shape: Vec<usize>,
     /// Flat row-major payload; `data.len() == product(shape)`. `Rc`-
     /// backed so a value-preserving view/reshape can share storage.
-    pub data: Rc<Vec<f64>>,
+    /// [`TensorData`] keeps the sidecar dtype (`F64`/`F32`) instead of
+    /// widening everything to `f64` (ADR-0179).
+    pub data: Rc<TensorData>,
 }
 
 impl TensorValue {
     /// Construct a tensor, enforcing `data.len() == product(shape)`
     /// (the product is checked — shape extents whose product overflows
-    /// `usize` are rejected).
+    /// `usize` are rejected). The payload is stored as [`TensorData::F64`].
     pub fn new(shape: Vec<usize>, data: Vec<f64>) -> Result<TensorValue, String> {
+        Self::new_data(shape, TensorData::F64(data))
+    }
+
+    /// Construct a tensor with explicit [`TensorData`] storage
+    /// (`F64`/`F32`), enforcing `data.len() == product(shape)`.
+    pub fn new_data(shape: Vec<usize>, data: TensorData) -> Result<TensorValue, String> {
         let expected = shape.iter().try_fold(1usize, |acc, &d| acc.checked_mul(d));
         match expected {
             Some(n) if n == data.len() => Ok(TensorValue {
@@ -629,12 +732,12 @@ impl Hash for TaggedValue {
             TaggedValue::Tensor(t) => {
                 13u8.hash(state);
                 t.shape.hash(state);
-                for x in t.data.iter() {
+                for x in t.data.iter_f64() {
                     // Hash consistent with elementwise `==` equality:
                     // normalize -0.0 → +0.0 (0.0 == -0.0 but their bit
                     // patterns differ). NaN never compares equal, so its
                     // payload bits are unconstrained.
-                    let bits = if *x == 0.0 {
+                    let bits = if x == 0.0 {
                         0.0f64.to_bits()
                     } else {
                         x.to_bits()
@@ -844,10 +947,7 @@ fn sym_link_from_json(v: Option<&Value>) -> Result<Option<Rc<Sym>>, ()> {
         // The encoder nests the link target as a full {"__sym__": {...}}
         // value; unwrap the wrapper before recursing.
         Some(Value::Object(obj)) => {
-            let inner = obj
-                .get("__sym__")
-                .and_then(|v| v.as_object())
-                .ok_or(())?;
+            let inner = obj.get("__sym__").and_then(|v| v.as_object()).ok_or(())?;
             match sym_from_json(inner) {
                 Some(TaggedValue::Sym(s)) => Ok(Some(s)),
                 _ => Err(()),
@@ -925,27 +1025,44 @@ fn encode_f64_element(x: f64) -> Value {
 
 /// Decode the inner payload of a `{"__tensor__": {...}}` JSON object into
 /// a [`TaggedValue::Tensor`]. Returns `None` when the payload is
-/// malformed — a `dtype` present but not `"f64"`, a non-array `shape` or
-/// `data`, a negative/non-integer/`usize`-overflowing extent, a
-/// `data` element that is neither a number nor a valid
-/// `{"__nonfinite__": …}` tag, or a `data` length that is not
-/// `product(shape)` — so the caller falls back to a plain object (the
-/// lenient `__bytes__` convention). `dtype` is optional on decode,
-/// matching `host-tensor`'s `decode_tensor`.
+/// malformed — a `dtype` that does not match the `data` spelling
+/// (`"f64"`/absent for the array form, `"f32"`/`"f64"` required for the
+/// ADR-0179 `__tensor_bin__` form), a non-array `shape`, a negative/
+/// non-integer/`usize`-overflowing extent, a `data` element that is
+/// neither a number nor a valid `{"__nonfinite__": …}` tag, a bad
+/// base64/length `__tensor_bin__` payload, or a `data` length that is
+/// not `product(shape)` — so the caller falls back to a plain object
+/// (the lenient `__bytes__` convention). `dtype` is optional on the
+/// array spelling, matching `host-tensor`'s `decode_tensor`.
 fn tensor_from_json(inner: &Map<String, Value>) -> Option<TaggedValue> {
-    if let Some(dtype) = inner.get("dtype") {
-        if dtype.as_str() != Some("f64") {
-            return None;
-        }
-    }
     let shape: Vec<usize> = inner
         .get("shape")?
         .as_array()?
         .iter()
         .map(|d| d.as_u64().and_then(|n| usize::try_from(n).ok()))
         .collect::<Option<_>>()?;
-    let data: Vec<f64> = inner
-        .get("data")?
+    let data_val = inner.get("data")?;
+    // Binary spelling (ADR-0179): `data` is
+    // `{"__tensor_bin__": "<base64 LE>"}` and `dtype` is required to be
+    // `"f32"` or `"f64"`. Any malformation (bad base64, wrong payload
+    // length, missing/other dtype) degrades the whole record to a
+    // plain object — the lenient `__bytes__` convention.
+    if data_val.is_object() {
+        let dtype = inner.get("dtype")?.as_str()?;
+        let data = tensor_bin_decode(&shape, dtype, data_val)?;
+        return TensorValue::new_data(shape, data)
+            .ok()
+            .map(|t| TaggedValue::Tensor(Rc::new(t)));
+    }
+    // Array spelling: `dtype` is optional but only `"f64"` is legal —
+    // the array carries widened `f64` elements (an `"f32"` array is
+    // malformed, matching host-tensor's `decode_tensor`).
+    if let Some(dtype) = inner.get("dtype") {
+        if dtype.as_str() != Some("f64") {
+            return None;
+        }
+    }
+    let data: Vec<f64> = data_val
         .as_array()?
         .iter()
         .map(|x| decode_f64_element(x))
@@ -1339,21 +1456,35 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
         }
         TaggedValue::Tensor(t) => {
             // The host-tensor wire form: `{"__tensor__": {"shape": [...],
-            // "data": [...], "dtype": "f64"}}`. Non-finite `f64`
-            // elements have no `serde_json` number representation, so
-            // they emit the `{"__nonfinite__": "nan"|"inf"|"-inf"}` tag
-            // — the same spelling `host-tensor`'s `encode_tensor`
-            // (0528649) uses — which [`decode_f64_element`] reads back
-            // as the same `f64`. Finite tensors encode byte-identically
-            // to the pre-tag wire form.
-            let data: Vec<Value> = t.data.iter().map(|&x| encode_f64_element(x)).collect();
-            serde_json::json!({
-                "__tensor__": {
-                    "shape": t.shape,
-                    "data": data,
-                    "dtype": "f64",
+            // "data": [...], "dtype": "f64"}}` — extended by ADR-0179
+            // with the binary `data` spelling
+            // `{"__tensor_bin__": "<base64 LE>"}` + `"f32"` dtype,
+            // emitted iff `numel >= TENSOR_BIN_THRESHOLD` (below it the
+            // wire is byte-identical to the pre-ADR form). Non-finite
+            // `f64` elements have no `serde_json` number representation,
+            // so the array spelling emits the
+            // `{"__nonfinite__": "nan"|"inf"|"-inf"}` tag — the same
+            // spelling `host-tensor`'s `encode_tensor` (0528649) uses —
+            // which [`decode_f64_element`] reads back as the same `f64`;
+            // the binary spelling carries raw IEEE bits instead.
+            // Finite small tensors encode byte-identically to the
+            // pre-tag wire form.
+            let bin = (t.data.len() >= TENSOR_BIN_THRESHOLD)
+                .then(|| tensor_bin_record(&t.shape, t.data.dtype(), &t.data.le_bytes()))
+                .flatten();
+            match bin {
+                Some(v) => v,
+                None => {
+                    let data: Vec<Value> = t.data.iter_f64().map(encode_f64_element).collect();
+                    serde_json::json!({
+                        "__tensor__": {
+                            "shape": t.shape,
+                            "data": data,
+                            "dtype": "f64",
+                        }
+                    })
                 }
-            })
+            }
         }
     }
 }
@@ -1600,17 +1731,14 @@ impl TaggedValue {
                     Rc::from("data"),
                     TaggedValue::Arr(Rc::from(
                         t.data
-                            .iter()
-                            .map(|&x| TaggedValue::Float(x))
+                            .iter_f64()
+                            .map(TaggedValue::Float)
                             .collect::<Vec<_>>(),
                     )),
                 );
                 inner.insert(Rc::from("dtype"), TaggedValue::Str(Rc::from("f64")));
                 let mut outer = FxHashMap::default();
-                outer.insert(
-                    Rc::from("__tensor__"),
-                    TaggedValue::Obj(Rc::new(inner)),
-                );
+                outer.insert(Rc::from("__tensor__"), TaggedValue::Obj(Rc::new(inner)));
                 Some(TaggedValue::Obj(Rc::new(outer)))
             }
             TaggedValue::Bytes(b) => {
@@ -1627,14 +1755,8 @@ impl TaggedValue {
             }
             TaggedValue::Sym(s) => {
                 let mut inner = FxHashMap::default();
-                inner.insert(
-                    Rc::from("handle"),
-                    TaggedValue::Int(s.handle() as i64),
-                );
-                inner.insert(
-                    Rc::from("name"),
-                    TaggedValue::Str(Rc::from(s.name())),
-                );
+                inner.insert(Rc::from("handle"), TaggedValue::Int(s.handle() as i64));
+                inner.insert(Rc::from("name"), TaggedValue::Str(Rc::from(s.name())));
                 let link_view = |link: Option<&Sym>| {
                     link.map(|p| {
                         TaggedValue::Sym(Rc::new(p.clone()))
@@ -1651,15 +1773,9 @@ impl TaggedValue {
             }
             TaggedValue::Resource(r) => {
                 let mut inner = FxHashMap::default();
-                inner.insert(
-                    Rc::from("ptr"),
-                    TaggedValue::Int(r.ptr as usize as i64),
-                );
+                inner.insert(Rc::from("ptr"), TaggedValue::Int(r.ptr as usize as i64));
                 let mut outer = FxHashMap::default();
-                outer.insert(
-                    Rc::from("__resource__"),
-                    TaggedValue::Obj(Rc::new(inner)),
-                );
+                outer.insert(Rc::from("__resource__"), TaggedValue::Obj(Rc::new(inner)));
                 Some(TaggedValue::Obj(Rc::new(outer)))
             }
             _ => None,
@@ -1721,6 +1837,223 @@ pub unsafe fn resource(ptr: *mut c_void, finalizer: Option<unsafe fn(*mut c_void
 /// `data.len() == product(shape)` is enforced (see [`TensorValue::new`]).
 pub fn tensor(shape: Vec<usize>, data: Vec<f64>) -> Result<TaggedValue, String> {
     TensorValue::new(shape, data).map(|t| TaggedValue::Tensor(Rc::new(t)))
+}
+
+// ---------------------------------------------------------------------------
+// Binary tensor payloads — the `__tensor_bin__` wire spelling (ADR-0179)
+// ---------------------------------------------------------------------------
+//
+// `"data"` may be the JSON array (small tensors) or
+// `{"__tensor_bin__": "<base64 little-endian payload>"}` (large ones).
+// The binary spelling requires an explicit `"dtype": "f32"|"f64"` and
+// `payload.len() == numel × itemsize`; non-finite elements ride raw
+// IEEE bits. Encoders emit the binary form iff
+// `numel >= TENSOR_BIN_THRESHOLD` — below it the wire is
+// byte-identical to the pre-ADR-0179 form.
+
+/// The `numel` at and above which tensor encoders emit the binary
+/// `data` spelling (matching mlopt's `_SIDECAR_MIN_ELEMS` sidecar
+/// gate). Below it the wire is byte-identical to the array form.
+pub const TENSOR_BIN_THRESHOLD: usize = 4096;
+
+/// The `data`-field tag of the binary tensor spelling.
+const TENSOR_BIN_TAG: &str = "__tensor_bin__";
+
+/// The standard base64 alphabet (RFC 4648 §4, with `=` padding).
+const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Encode bytes as padded standard base64.
+fn b64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = *chunk.get(1).unwrap_or(&0) as u32;
+        let b2 = *chunk.get(2).unwrap_or(&0) as u32;
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(B64_ALPHABET[(n >> 18) as usize & 63] as char);
+        out.push(B64_ALPHABET[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            B64_ALPHABET[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64_ALPHABET[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// The 6-bit value of one base64 alphabet character (`None` on
+/// anything outside the standard alphabet — `=` is padding, handled
+/// by the caller).
+fn b64_val(c: u8) -> Option<u8> {
+    match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Decode padded standard base64. Strict: the input must be a
+/// multiple of 4 chars with `=` only as trailing padding (at most
+/// two, canonical positions) — a malformed payload returns `None` so
+/// callers degrade to their fallback rather than coercing.
+fn b64_decode(s: &str) -> Option<Vec<u8>> {
+    let b = s.as_bytes();
+    if b.is_empty() || b.len() % 4 != 0 {
+        return None;
+    }
+    // `=` is legal only as trailing padding (≤ 2 chars); anywhere else
+    // — or three+ in a row — is malformed.
+    let pad = b[b.len() - 2..].iter().filter(|&&c| c == b'=').count();
+    if pad > 2 || b[..b.len() - pad].contains(&b'=') {
+        return None;
+    }
+    let mut out = Vec::with_capacity(b.len() / 4 * 3);
+    for quad in b.chunks_exact(4) {
+        let mut vals = [0u8; 4];
+        for (i, &c) in quad.iter().enumerate() {
+            vals[i] = if c == b'=' { 0 } else { b64_val(c)? };
+        }
+        let n = ((vals[0] as u32) << 18)
+            | ((vals[1] as u32) << 12)
+            | ((vals[2] as u32) << 6)
+            | vals[3] as u32;
+        out.push((n >> 16) as u8);
+        if quad[2] != b'=' {
+            out.push((n >> 8) as u8);
+        }
+        if quad[3] != b'=' {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+/// Encode `shape` + `dtype` + raw little-endian `payload` bytes as the
+/// `{"__tensor__": {"shape", "dtype", "data": {"__tensor_bin__":
+/// "<base64>"}}}` wire record (ADR-0179). `dtype` must be `"f32"` or
+/// `"f64"` and `payload.len()` must equal `numel(shape) × itemsize` —
+/// `None` on either violation. Used by `host-tensor`'s `tensor.load`
+/// (whose safetensors payload range *is* already LE `f32`/`f64`, so the
+/// bin record is emitted straight from the ranged read) and by
+/// [`tagged_to_value`] for stored tensors.
+pub fn tensor_bin_record(shape: &[usize], dtype: &str, payload: &[u8]) -> Option<Value> {
+    let itemsize = match dtype {
+        "f32" => 4usize,
+        "f64" => 8usize,
+        _ => return None,
+    };
+    let numel = shape
+        .iter()
+        .try_fold(1usize, |acc, &d| acc.checked_mul(d))?;
+    if payload.len() != numel.checked_mul(itemsize)? {
+        return None;
+    }
+    Some(serde_json::json!({
+        "__tensor__": {
+            "shape": shape,
+            "dtype": dtype,
+            "data": { TENSOR_BIN_TAG: b64_encode(payload) },
+        }
+    }))
+}
+
+/// Decode the binary `data` spelling of a `__tensor__` record:
+/// `data` must be `{"__tensor_bin__": "<base64 LE>"}`, `dtype` must be
+/// `"f32"` or `"f64"`, and the decoded payload must be exactly
+/// `numel(shape) × itemsize` bytes. Returns the dtype-preserving
+/// [`TensorData`] (`F32`/`F64` — non-finite elements keep their raw
+/// IEEE bits). `None` on any malformation.
+pub fn tensor_bin_decode(shape: &[usize], dtype: &str, data: &Value) -> Option<TensorData> {
+    let itemsize = match dtype {
+        "f32" => 4usize,
+        "f64" => 8usize,
+        _ => return None,
+    };
+    let numel = shape
+        .iter()
+        .try_fold(1usize, |acc, &d| acc.checked_mul(d))?;
+    let b64 = data.get(TENSOR_BIN_TAG)?.as_str()?;
+    let bytes = b64_decode(b64)?;
+    if bytes.len() != numel.checked_mul(itemsize)? {
+        return None;
+    }
+    Some(match dtype {
+        "f32" => TensorData::F32(
+            bytes
+                .chunks_exact(4)
+                .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+                .collect(),
+        ),
+        _ => TensorData::F64(
+            bytes
+                .chunks_exact(8)
+                .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+                .collect(),
+        ),
+    })
+}
+
+/// Expand every `{"__tensor__": {…, "data": {"__tensor_bin__": …}}}`
+/// record in `v` back to the array `data` spelling — elements widened
+/// to `f64`, `dtype` restamped `"f64"`, non-finite values as
+/// `{"__nonfinite__": …}` tags (ADR-0179). This is the egress
+/// counterpart of the binary wire form: process-boundary printers
+/// (`hnl-run`) call it before serializing so `wire["data"]` is always
+/// a list for consumers that decode the array spelling. Malformed bin
+/// records (bad base64, wrong length, missing/other dtype) are left
+/// untouched. Recurses through objects and arrays, so tensors nested
+/// in `binds`/`handlers`/records materialize too.
+pub fn materialize_tensor_bin(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            if let Some(inner) = m.get_mut("__tensor__").and_then(Value::as_object_mut) {
+                materialize_tensor_bin_inner(inner);
+            }
+            for val in m.values_mut() {
+                materialize_tensor_bin(val);
+            }
+        }
+        Value::Array(a) => {
+            for val in a.iter_mut() {
+                materialize_tensor_bin(val);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The `{"__tensor__": …}`-inner half of [`materialize_tensor_bin`]:
+/// decode the bin record (immutable borrows), then rewrite `data` as
+/// the widened array and restamp `dtype` (mutable borrows).
+fn materialize_tensor_bin_inner(inner: &mut Map<String, Value>) {
+    let shape: Option<Vec<usize>> = inner.get("shape").and_then(Value::as_array).and_then(|a| {
+        a.iter()
+            .map(|d| d.as_u64().and_then(|n| usize::try_from(n).ok()))
+            .collect::<Option<Vec<usize>>>()
+    });
+    let widened = match (shape, inner.get("dtype"), inner.get("data")) {
+        (Some(shape), Some(dtype), Some(data)) => dtype
+            .as_str()
+            .and_then(|dt| tensor_bin_decode(&shape, dt, data))
+            .map(|td| td.to_f64_vec()),
+        _ => None,
+    };
+    let Some(elements) = widened else {
+        return;
+    };
+    inner.insert(
+        "data".to_string(),
+        Value::Array(elements.iter().map(|&x| encode_f64_element(x)).collect()),
+    );
+    inner.insert("dtype".to_string(), Value::from("f64"));
 }
 
 // ---------------------------------------------------------------------------
@@ -2972,16 +3305,16 @@ mod cell_tests {
             inner.get("data").and_then(|d| d.as_array()).unwrap().len(),
             4
         );
-        assert_eq!(
-            inner.get("dtype").and_then(|d| d.as_str()),
-            Some("f64")
-        );
+        assert_eq!(inner.get("dtype").and_then(|d| d.as_str()), Some("f64"));
 
         // `Bytes` projects `{"__bytes__": [n, …]}`.
         let b = TaggedValue::from(serde_json::json!({"__bytes__": [104, 105]}));
         let bv = b.object_view().unwrap();
         assert_eq!(
-            bv.get("__bytes__").and_then(|a| a.as_array()).unwrap().len(),
+            bv.get("__bytes__")
+                .and_then(|a| a.as_array())
+                .unwrap()
+                .len(),
             2
         );
 
@@ -2990,9 +3323,11 @@ mod cell_tests {
         assert!(TaggedValue::from(serde_json::json!({"__pair__": [1, 2]}))
             .object_view()
             .is_none());
-        assert!(TaggedValue::from(serde_json::json!({"__either__": "left", "value": 1}))
-            .object_view()
-            .is_none());
+        assert!(
+            TaggedValue::from(serde_json::json!({"__either__": "left", "value": 1}))
+                .object_view()
+                .is_none()
+        );
         assert!(TaggedValue::Int(1).object_view().is_none());
         assert!(TaggedValue::Null.object_view().is_none());
     }
@@ -3129,7 +3464,10 @@ mod cell_tests {
         assert!(!instance_of(&TaggedValue::Int(-1), &nat));
         assert!(instance_of(&TaggedValue::Float(1.5), &float));
         assert!(instance_of(&TaggedValue::Str("s".into()), &strs));
-        assert!(instance_of(&TaggedValue::Null, &TaggedValue::Sym(Sym::seeded("type.Null"))));
+        assert!(instance_of(
+            &TaggedValue::Null,
+            &TaggedValue::Sym(Sym::seeded("type.Null"))
+        ));
         // Former application as the nominal target.
         let vec = TaggedValue::from(serde_json::json!({
             "__former__": tagged_to_value(&TaggedValue::Sym(Sym::seeded("data.Vec"))),
@@ -3153,9 +3491,18 @@ mod cell_tests {
                 "__tag__": t, "__registry__": "type", "kind": "primitive"
             }))
         };
-        assert!(instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Obj"))));
-        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Int"))));
-        assert!(!instance_of(&datum("int"), &TaggedValue::Sym(Sym::seeded("type.Number"))));
+        assert!(instance_of(
+            &datum("int"),
+            &TaggedValue::Sym(Sym::seeded("type.Obj"))
+        ));
+        assert!(!instance_of(
+            &datum("int"),
+            &TaggedValue::Sym(Sym::seeded("type.Int"))
+        ));
+        assert!(!instance_of(
+            &datum("int"),
+            &TaggedValue::Sym(Sym::seeded("type.Number"))
+        ));
         // An unseeded nominal named like a std type no longer matches.
         let named = TaggedValue::Sym(Rc::new(Sym::fresh_with_parent(
             "Int",
