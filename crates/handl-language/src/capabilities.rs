@@ -12,7 +12,7 @@
 
 use std::collections::BTreeSet;
 
-use hnl_engine::TermData;
+use handl_calculus::TermData;
 
 use crate::fragment::Fragment;
 use crate::language::Language;

@@ -49,7 +49,7 @@
 //! `Choice` variant routes on `Either` but is not a functor, so the
 //! coproduct functor laws are not inferable here.
 
-use hnl_engine::TermData;
+use handl_calculus::TermData;
 use serde_json::Value;
 
 use crate::term::{ArrSource, Term};

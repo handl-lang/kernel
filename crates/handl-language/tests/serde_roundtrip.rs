@@ -1,11 +1,11 @@
 //! Integration test: a non-trivial `Language` serializes to JSON and
 //! deserializes to an equal `Language`.
 
+use handl_calculus::{ArrSource, TermData};
 use handl_language::{
     AstShapeDef, AstShapeRef, CapabilityDecl, EvalSchemeDef, GrammarPosition, GrammarRow, Language,
     SchemeVersion, Term, TokenKindDef,
 };
-use hnl_engine::{ArrSource, TermData};
 use serde_json::Value;
 
 /// Convert `TermData` back to `Term` for APIs that require `Term`.

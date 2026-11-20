@@ -4,7 +4,7 @@ use crate::fragments::ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesug
 use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
 use crate::fragments::{RewriteStep, TransformCondition, TransformRule};
 use crate::term::{ArrSource, Term};
-use hnl_engine::TermData;
+use handl_calculus::TermData;
 
 fn td(t: TermData) -> Term {
     t.to_term().expect("TermData -> Term")

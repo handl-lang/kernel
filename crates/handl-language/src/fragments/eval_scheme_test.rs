@@ -1,6 +1,6 @@
 use super::*;
 use crate::term::{ArrSource, Term};
-use hnl_engine::TermData;
+use handl_calculus::TermData;
 use serde_json::Value;
 
 /// Convert `TermData` back to `Term` for APIs that require `Term`.

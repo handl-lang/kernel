@@ -2,7 +2,7 @@ use super::*;
 use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
 use crate::fragments::{CapabilityDecl, EvalSchemeDef, GrammarRow, OptionSchema, TokenKindDef};
 use crate::term::{ArrSource, Term};
-use hnl_engine::TermData;
+use handl_calculus::TermData;
 use serde_json::Value;
 
 /// Convert `TermData` back to `Term` for APIs that require `Term`.

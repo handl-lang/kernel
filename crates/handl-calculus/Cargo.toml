@@ -1,0 +1,11 @@
+[package]
+name = "handl-calculus"
+version.workspace = true
+edition.workspace = true
+description = "The arrow-calculus IR (`Term`/`TermData`) and the pluggable model view traits for the HAndL platform."
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

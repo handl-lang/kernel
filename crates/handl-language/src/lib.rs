@@ -73,7 +73,7 @@ pub use fragments::{
     PayloadTokenSpec, RewriteStep, TokenKindDef, TokenStep, TransformCondition, TransformDef,
     TransformRule, TypeRuleDef,
 };
-pub use hnl_engine::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
+pub use handl_calculus::{AstView, LanguageView, Model, ModelCtx, RewriteResult};
 pub use instantiate::LIT_KIND;
 pub use language::Language;
 pub use law_inference::{
@@ -94,16 +94,20 @@ pub use token_classes::{
     is_string_kind, is_template_kind,
 };
 
-impl hnl_engine::AstView for Ast {
+impl handl_calculus::AstView for Ast {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
-    fn node_kind(&self, r: hnl_engine::AstRef) -> Option<&str> {
+    fn node_kind(&self, r: handl_calculus::AstRef) -> Option<&str> {
         self.get(AstRef::new(r)).map(|n| n.kind.as_str())
     }
 
-    fn node_child(&self, r: hnl_engine::AstRef, index: usize) -> Option<hnl_engine::AstRef> {
+    fn node_child(
+        &self,
+        r: handl_calculus::AstRef,
+        index: usize,
+    ) -> Option<handl_calculus::AstRef> {
         let node = self.get(AstRef::new(r))?;
         node.payload
             .get("children")?
@@ -114,7 +118,7 @@ impl hnl_engine::AstView for Ast {
     }
 }
 
-impl hnl_engine::LanguageView for Language {
+impl handl_calculus::LanguageView for Language {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/handl-calculus",
     "crates/handl-ext",
     "crates/handl-ops",
     "crates/defining-handl",
@@ -26,16 +27,12 @@ repository = "https://github.com/handl-lang/kernel"
 
 [workspace.dependencies]
 libloading = "0.8"
-hnl-engine = { git = "https://github.com/handl-lang/engine", branch = "main" }
 serde = "1"
 serde_json = "1"
 thiserror = "2"
 
 [profile.dev]
 opt-level = 1
-
-[patch."https://github.com/handl-lang/engine"]
-hnl-engine = { path = "../engine" }
 
 # The floor-lib crates (`handl-lib-*`) and `handl-value`/`handl-language`
 # declare `git = handl-lang/kernel` deps so they also build as standalone
@@ -45,6 +42,7 @@ hnl-engine = { path = "../engine" }
 # recorded — and drift against the members. Patch the kernel source back
 # to the members so the workspace always builds one coherent copy.
 [patch."https://github.com/handl-lang/kernel"]
+handl-calculus = { path = "crates/handl-calculus" }
 handl-ext = { path = "crates/handl-ext" }
 handl-ops = { path = "crates/handl-ops" }
 handl-language = { path = "crates/handl-language" }
