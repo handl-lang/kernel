@@ -7,9 +7,9 @@
 //! losing the exact error messages the tests rely on. The `op`/`handl`
 //! declaration form (ADR-0077 Phase 2) declares the interface in
 //! `mood.hnl`; these impls provide the logic and are registered in an
-//! [`OpRegistry`](handl_plugin_lib_handl::OpRegistry).
+//! [`OpRegistry`](handl_ops::OpRegistry).
 
-use handl_platform::{EvalContext, EvalError, Function};
+use handl_ops::{Op, OpContext, OpError};
 use serde_json::Value as JsonValue;
 
 use handl_lib_ops::shared::{
@@ -18,18 +18,18 @@ use handl_lib_ops::shared::{
 
 #[derive(Clone, Copy)]
 pub struct MoodInd;
-impl Function for MoodInd {
+impl Op for MoodInd {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
         match project(value, kind) {
             Some(v) => Ok(v),
-            None => Err(EvalError::Other(format!(
+            None => Err(OpError::Other(format!(
                 "mood.ind: expected {kind}, got {}",
                 type_name(value)
             ))),
@@ -39,12 +39,12 @@ impl Function for MoodInd {
 
 #[derive(Clone, Copy)]
 pub struct MoodInt;
-impl Function for MoodInt {
+impl Op for MoodInt {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -54,12 +54,12 @@ impl Function for MoodInt {
 
 #[derive(Clone, Copy)]
 pub struct MoodNorm;
-impl Function for MoodNorm {
+impl Op for MoodNorm {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -72,12 +72,12 @@ impl Function for MoodNorm {
 
 #[derive(Clone, Copy)]
 pub struct MoodPot;
-impl Function for MoodPot {
+impl Op for MoodPot {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -87,12 +87,12 @@ impl Function for MoodPot {
 
 #[derive(Clone, Copy)]
 pub struct MoodNeg;
-impl Function for MoodNeg {
+impl Op for MoodNeg {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -102,12 +102,12 @@ impl Function for MoodNeg {
 
 #[derive(Clone, Copy)]
 pub struct MoodCnd;
-impl Function for MoodCnd {
+impl Op for MoodCnd {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 3)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -116,7 +116,7 @@ impl Function for MoodCnd {
     }
 }
 
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::OpRegistry;
 use std::sync::Arc;
 
 pub const MOOD_OPS: &[&str] = &[

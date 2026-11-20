@@ -5,8 +5,8 @@ use handl_lib_ops::shared::{
     apply_fn, arr as to_arr, b as to_bool, find_extremum_by, num, require_array,
     require_function_and_array, require_one_arg,
 };
-use handl_platform::{EvalContext, EvalError, Function};
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::{Op, OpContext, OpError};
+use handl_ops::OpRegistry;
 use serde_json::Value as JsonValue;
 
 /// The handl source declaring the cmp `op` interface — the single source
@@ -107,9 +107,9 @@ fn compare_nfv(a: &serde_json::Value, b: &serde_json::Value) -> Ordering {
 
 fn require_two(
     args: &[serde_json::Value],
-) -> Result<(&serde_json::Value, &serde_json::Value), EvalError> {
+) -> Result<(&serde_json::Value, &serde_json::Value), OpError> {
     if args.len() < 2 {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             2,
             args.len(),
@@ -120,9 +120,9 @@ fn require_two(
 
 fn require_three(
     args: &[serde_json::Value],
-) -> Result<(&serde_json::Value, &serde_json::Value, &serde_json::Value), EvalError> {
+) -> Result<(&serde_json::Value, &serde_json::Value, &serde_json::Value), OpError> {
     if args.len() < 3 {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             3,
             args.len(),
@@ -137,12 +137,12 @@ fn require_three(
 
 #[derive(Clone, Copy)]
 pub struct Eq;
-impl Function for Eq {
+impl Op for Eq {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(a == b_arg))
     }
@@ -150,12 +150,12 @@ impl Function for Eq {
 
 #[derive(Clone, Copy)]
 pub struct Ne;
-impl Function for Ne {
+impl Op for Ne {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(a != b_arg))
     }
@@ -163,12 +163,12 @@ impl Function for Ne {
 
 #[derive(Clone, Copy)]
 pub struct Lt;
-impl Function for Lt {
+impl Op for Lt {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(compare_nfv(a, b_arg) == Ordering::Less))
     }
@@ -176,12 +176,12 @@ impl Function for Lt {
 
 #[derive(Clone, Copy)]
 pub struct Le;
-impl Function for Le {
+impl Op for Le {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(compare_nfv(a, b_arg) != Ordering::Greater))
     }
@@ -189,12 +189,12 @@ impl Function for Le {
 
 #[derive(Clone, Copy)]
 pub struct Gt;
-impl Function for Gt {
+impl Op for Gt {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(compare_nfv(a, b_arg) == Ordering::Greater))
     }
@@ -202,12 +202,12 @@ impl Function for Gt {
 
 #[derive(Clone, Copy)]
 pub struct Ge;
-impl Function for Ge {
+impl Op for Ge {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(to_bool(compare_nfv(a, b_arg) != Ordering::Less))
     }
@@ -215,12 +215,12 @@ impl Function for Ge {
 
 #[derive(Clone, Copy)]
 pub struct Compare;
-impl Function for Compare {
+impl Op for Compare {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (a, b_arg) = require_two(args)?;
         Ok(num(match compare_nfv(a, b_arg) {
             Ordering::Less => -1.0,
@@ -232,14 +232,14 @@ impl Function for Compare {
 
 #[derive(Clone, Copy)]
 pub struct Min;
-impl Function for Min {
+impl Op for Min {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let best = find_extremum_by(args, |a, b| compare_nfv(a, b) == Ordering::Less).ok_or(
-            EvalError::TypeMismatch(format!("expected {} args, got {}", 1, 0,)),
+            OpError::TypeMismatch(format!("expected {} args, got {}", 1, 0,)),
         )?;
         Ok(best.clone())
     }
@@ -247,14 +247,14 @@ impl Function for Min {
 
 #[derive(Clone, Copy)]
 pub struct Max;
-impl Function for Max {
+impl Op for Max {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let best = find_extremum_by(args, |a, b| compare_nfv(a, b) == Ordering::Greater).ok_or(
-            EvalError::TypeMismatch(format!("expected {} args, got {}", 1, 0,)),
+            OpError::TypeMismatch(format!("expected {} args, got {}", 1, 0,)),
         )?;
         Ok(best.clone())
     }
@@ -262,15 +262,15 @@ impl Function for Max {
 
 #[derive(Clone, Copy)]
 pub struct Clamp;
-impl Function for Clamp {
+impl Op for Clamp {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (value, lo, hi) = require_three(args)?;
         if compare_nfv(lo, hi) == Ordering::Greater {
-            return Err(EvalError::Other("clamp bounds are inverted".to_string()));
+            return Err(OpError::Other("clamp bounds are inverted".to_string()));
         }
         if compare_nfv(value, lo) == Ordering::Less {
             return Ok(lo.clone());
@@ -282,7 +282,7 @@ impl Function for Clamp {
     }
 }
 
-fn between_impl(args: &[serde_json::Value]) -> Result<serde_json::Value, EvalError> {
+fn between_impl(args: &[serde_json::Value]) -> Result<serde_json::Value, OpError> {
     let (x, lo, hi) = require_three(args)?;
     Ok(to_bool(
         compare_nfv(lo, x) != Ordering::Greater && compare_nfv(x, hi) != Ordering::Greater,
@@ -291,24 +291,24 @@ fn between_impl(args: &[serde_json::Value]) -> Result<serde_json::Value, EvalErr
 
 #[derive(Clone, Copy)]
 pub struct Between;
-impl Function for Between {
+impl Op for Between {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         between_impl(args)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct InRange;
-impl Function for InRange {
+impl Op for InRange {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         between_impl(args)
     }
 }
@@ -316,7 +316,7 @@ impl Function for InRange {
 fn is_sorted_impl(
     args: &[serde_json::Value],
     descending: bool,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     let input = require_one_arg(args)?;
     let arr_val = require_array(input)?;
     for window in arr_val.windows(2) {
@@ -333,29 +333,29 @@ fn is_sorted_impl(
 
 #[derive(Clone, Copy)]
 pub struct IsSorted;
-impl Function for IsSorted {
+impl Op for IsSorted {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         is_sorted_impl(args, false)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct IsSortedDesc;
-impl Function for IsSortedDesc {
+impl Op for IsSortedDesc {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         is_sorted_impl(args, true)
     }
 }
 
-fn sort_impl(args: &[serde_json::Value], descending: bool) -> Result<serde_json::Value, EvalError> {
+fn sort_impl(args: &[serde_json::Value], descending: bool) -> Result<serde_json::Value, OpError> {
     let input = require_one_arg(args)?;
     let arr_val = require_array(input)?;
     let mut sorted: Vec<JsonValue> = arr_val.to_vec();
@@ -369,24 +369,24 @@ fn sort_impl(args: &[serde_json::Value], descending: bool) -> Result<serde_json:
 
 #[derive(Clone, Copy)]
 pub struct Sort;
-impl Function for Sort {
+impl Op for Sort {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         sort_impl(args, false)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct SortDesc;
-impl Function for SortDesc {
+impl Op for SortDesc {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         sort_impl(args, true)
     }
 }
@@ -395,14 +395,14 @@ impl Function for SortDesc {
 
 fn sort_by_impl(
     args: &[serde_json::Value],
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     descending: bool,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     let (fn_val, array) = require_function_and_array(args)?;
     let mut keyed: Vec<(f64, JsonValue)> = Vec::with_capacity(array.len());
     for item in array {
         let key = apply_fn(ctx, &fn_val, item)?;
-        let num = key.as_f64().ok_or(EvalError::TypeMismatch(format!(
+        let num = key.as_f64().ok_or(OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "number", "non-number",
         )))?;
@@ -419,24 +419,24 @@ fn sort_by_impl(
 
 #[derive(Clone, Copy)]
 pub struct SortBy;
-impl Function for SortBy {
+impl Op for SortBy {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         sort_by_impl(args, ctx, false)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct SortByDesc;
-impl Function for SortByDesc {
+impl Op for SortByDesc {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         sort_by_impl(args, ctx, true)
     }
 }
@@ -445,14 +445,14 @@ impl Function for SortByDesc {
 
 fn extremum_by_impl(
     args: &[serde_json::Value],
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     pick_max: bool,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     let (fn_val, array) = require_function_and_array(args)?;
     let mut best: Option<(f64, &JsonValue)> = None;
     for item in array {
         let key = apply_fn(ctx, &fn_val, item)?;
-        let num = key.as_f64().ok_or(EvalError::TypeMismatch(format!(
+        let num = key.as_f64().ok_or(OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "number", "non-number",
         )))?;
@@ -471,24 +471,24 @@ fn extremum_by_impl(
 
 #[derive(Clone, Copy)]
 pub struct MinBy;
-impl Function for MinBy {
+impl Op for MinBy {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         extremum_by_impl(args, ctx, false)
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct MaxBy;
-impl Function for MaxBy {
+impl Op for MaxBy {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         extremum_by_impl(args, ctx, true)
     }
 }

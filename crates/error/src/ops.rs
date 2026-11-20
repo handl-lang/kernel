@@ -11,13 +11,13 @@
 //!
 //! Payload convention: a `String` payload is the message verbatim; any
 //! other value is embedded as its JSON serialization. Errors surface as
-//! [`EvalError::Other`], matching how `collections`' `collection is
+//! [`OpError::Other`], matching how `collections`' `collection is
 //! empty` and other contract violations report today.
 
 use std::sync::Arc;
 
-use handl_platform::{EvalContext, EvalError, Function};
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::{Op, OpContext, OpError};
+use handl_ops::OpRegistry;
 use serde_json::{Map, Value};
 
 /// The op names declared in `error.hnl`.
@@ -30,41 +30,41 @@ pub const ERROR_OPS: &[&str] = &["error.raise", "error.try"];
 #[derive(Debug, Clone, Copy)]
 pub struct Raise;
 
-impl Function for Raise {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Raise {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let message = match args.first() {
             None => "error raised".to_string(),
             Some(Value::String(s)) => s.clone(),
             Some(v) => serde_json::to_string(v).unwrap_or_else(|_| v.to_string()),
         };
-        Err(EvalError::Other(message))
+        Err(OpError::Other(message))
     }
 }
 
 /// `error.try(thunk: Fn) -> result`
 ///
 /// Calls the provided arrow with `null` for each of its parameters and
-/// captures any raised `EvalError`. Returns a `result`-shaped tag value:
+/// captures any raised `OpError`. Returns a `result`-shaped tag value:
 /// `{"__tag__": "ok", "value": v}` on success or
 /// `{"__tag__": "err", "value": <message>}` on failure.
 #[derive(Debug, Clone, Copy)]
 pub struct Try;
 
-fn eval_error_message(e: EvalError) -> String {
+fn eval_error_message(e: OpError) -> String {
     match e {
-        EvalError::Other(s)
-        | EvalError::TypeMismatch(s)
-        | EvalError::UnknownFunction(s)
-        | EvalError::UnknownVariable(s)
-        | EvalError::ResourceLimit(s) => s,
-        EvalError::Yield { .. } => "evaluation yielded".to_string(),
+        OpError::Other(s)
+        | OpError::TypeMismatch(s)
+        | OpError::UnknownFunction(s)
+        | OpError::UnknownVariable(s)
+        | OpError::ResourceLimit(s) => s,
+        OpError::Yield { .. } => "evaluation yielded".to_string(),
     }
 }
 
-impl Function for Try {
-    fn call(&self, args: &[Value], ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Try {
+    fn call(&self, args: &[Value], ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let f = args.first().ok_or_else(|| {
-            EvalError::TypeMismatch(format!("expected {} args, got {}", 1, args.len()))
+            OpError::TypeMismatch(format!("expected {} args, got {}", 1, args.len()))
         })?;
 
         // Thunks are typically nullary, but callers may write `_ ~> ...`
@@ -91,7 +91,7 @@ impl Function for Try {
                 err.insert("value".to_string(), Value::String(eval_error_message(e)));
                 Ok(Value::Object(err))
             }
-            None => Err(EvalError::Other(
+            None => Err(OpError::Other(
                 "error.try: no value callable in context".to_string(),
             )),
         }

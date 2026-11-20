@@ -8,19 +8,19 @@
 
 use std::sync::Arc;
 
-use handl_platform::{EvalContext, EvalError, Function};
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::{Op, OpContext, OpError};
+use handl_ops::OpRegistry;
 use serde_json::{Map, Value};
 
 /// The op names declared in `obj.hnl`.
 pub const OBJ_OPS: &[&str] = &["obj.keys", "obj.values", "obj.entries", "obj.set", "obj.from_entries"];
 
-fn require_one_object(args: &[Value]) -> Result<&Map<String, Value>, EvalError> {
+fn require_one_object(args: &[Value]) -> Result<&Map<String, Value>, OpError> {
     let arg = args.first().ok_or_else(|| {
-        EvalError::TypeMismatch(format!("expected {} args, got {}", 1, args.len()))
+        OpError::TypeMismatch(format!("expected {} args, got {}", 1, args.len()))
     })?;
     arg.as_object().ok_or_else(|| {
-        EvalError::TypeMismatch(format!(
+        OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "object",
             json_type_name(arg)
@@ -43,8 +43,8 @@ fn json_type_name(v: &Value) -> &'static str {
 #[derive(Debug, Clone, Copy)]
 pub struct Keys;
 
-impl Function for Keys {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Keys {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let input = require_one_object(args)?;
         Ok(Value::Array(
             input.keys().map(|k| Value::String(k.clone())).collect(),
@@ -56,8 +56,8 @@ impl Function for Keys {
 #[derive(Debug, Clone, Copy)]
 pub struct Values;
 
-impl Function for Values {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Values {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let input = require_one_object(args)?;
         Ok(Value::Array(input.values().cloned().collect()))
     }
@@ -67,8 +67,8 @@ impl Function for Values {
 #[derive(Debug, Clone, Copy)]
 pub struct Entries;
 
-impl Function for Entries {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Entries {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let input = require_one_object(args)?;
         Ok(Value::Array(
             input
@@ -83,17 +83,17 @@ impl Function for Entries {
 #[derive(Debug, Clone, Copy)]
 pub struct Set;
 
-impl Function for Set {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for Set {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let input = require_one_object(&args[..1])?;
         let key = args
             .get(1)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| EvalError::TypeMismatch("obj.set key must be a string".to_string()))?;
+            .ok_or_else(|| OpError::TypeMismatch("obj.set key must be a string".to_string()))?;
         let val = args
             .get(2)
             .cloned()
-            .ok_or_else(|| EvalError::TypeMismatch("obj.set expects 3 args".to_string()))?;
+            .ok_or_else(|| OpError::TypeMismatch("obj.set expects 3 args".to_string()))?;
         let mut obj = input.clone();
         obj.insert(key.to_string(), val);
         Ok(Value::Object(obj))
@@ -104,21 +104,21 @@ impl Function for Set {
 #[derive(Debug, Clone, Copy)]
 pub struct FromEntries;
 
-impl Function for FromEntries {
-    fn call(&self, args: &[Value], _ctx: &mut EvalContext) -> Result<Value, EvalError> {
+impl Op for FromEntries {
+    fn call(&self, args: &[Value], _ctx: &mut dyn OpContext) -> Result<Value, OpError> {
         let entries = args
             .first()
             .and_then(|v| v.as_array())
-            .ok_or_else(|| EvalError::TypeMismatch("obj.from_entries expects an array".to_string()))?;
+            .ok_or_else(|| OpError::TypeMismatch("obj.from_entries expects an array".to_string()))?;
         let mut obj = serde_json::Map::new();
         for e in entries {
             let pair = e
                 .as_array()
-                .ok_or_else(|| EvalError::TypeMismatch("entry must be [key, value]".to_string()))?;
+                .ok_or_else(|| OpError::TypeMismatch("entry must be [key, value]".to_string()))?;
             let key = pair
                 .first()
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| EvalError::TypeMismatch("entry key must be a string".to_string()))?;
+                .ok_or_else(|| OpError::TypeMismatch("entry key must be a string".to_string()))?;
             let val = pair.get(1).cloned().unwrap_or(Value::Null);
             obj.insert(key.to_string(), val);
         }

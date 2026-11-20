@@ -8,9 +8,9 @@
 //! messages the tests rely on. The `op`/`handl` declaration form
 //! (ADR-0077 Phase 2) declares the interface in `combinators.hnl`; these
 //! impls provide the logic and are registered in an
-//! [`OpRegistry`](handl_plugin_lib_handl::OpRegistry).
+//! [`OpRegistry`](handl_ops::OpRegistry).
 
-use handl_platform::{EvalContext, EvalError, Function};
+use handl_ops::{Op, OpContext, OpError};
 
 use handl_lib_ops::function_value::FunctionValue;
 use serde_json::Value as JsonValue;
@@ -85,9 +85,9 @@ fn is_ident_char(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
-fn inline_chain(fns: &[FunctionValue]) -> Result<FunctionValue, EvalError> {
+fn inline_chain(fns: &[FunctionValue]) -> Result<FunctionValue, OpError> {
     if fns.is_empty() {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )));
@@ -126,14 +126,14 @@ fn inline_chain(fns: &[FunctionValue]) -> Result<FunctionValue, EvalError> {
 
 #[derive(Clone, Copy)]
 pub struct Pipe;
-impl Function for Pipe {
+impl Op for Pipe {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -152,12 +152,12 @@ impl Function for Pipe {
 
 #[derive(Clone, Copy)]
 pub struct Flow;
-impl Function for Flow {
+impl Op for Flow {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let fns = require_functions(args)?;
         let composed = inline_chain(&fns)?;
         Ok(serde_json::Value::from(composed))
@@ -166,12 +166,12 @@ impl Function for Flow {
 
 #[derive(Clone, Copy)]
 pub struct Compose;
-impl Function for Compose {
+impl Op for Compose {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let fns = require_functions(args)?;
         let reversed: Vec<FunctionValue> = fns.into_iter().rev().collect();
         let composed = inline_chain(&reversed)?;
@@ -183,14 +183,14 @@ impl Function for Compose {
 
 #[derive(Clone, Copy)]
 pub struct Fanout;
-impl Function for Fanout {
+impl Op for Fanout {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -216,12 +216,12 @@ impl Function for Fanout {
 /// desugar target of the `&&&` arrow-calculus sugar.
 #[derive(Clone, Copy)]
 pub struct FanoutFn;
-impl Function for FanoutFn {
+impl Op for FanoutFn {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let fns = require_functions(args)?;
         // Bake the branch functions into the body as object-literal JSON so the
         // returned arrow, when applied, calls `fn.fanout(x, f, g, ...)`. Object
@@ -230,7 +230,7 @@ impl Function for FanoutFn {
             .iter()
             .map(|fv| serde_json::to_string(&fv.clone().to_json()))
             .collect::<Result<_, _>>()
-            .map_err(|e| EvalError::Other(format!("fanout_fn: serialize branch: {e}")))?;
+            .map_err(|e| OpError::Other(format!("fanout_fn: serialize branch: {e}")))?;
         let branch_list = branches.join(", ");
         let body = format!("fn.fanout(x, {branch_list})");
         let fn_val = FunctionValue {
@@ -248,14 +248,14 @@ impl Function for FanoutFn {
 
 #[derive(Clone, Copy)]
 pub struct Converge;
-impl Function for Converge {
+impl Op for Converge {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 3 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 3,
                 args.len(),
@@ -292,14 +292,14 @@ impl Function for Converge {
 
 #[derive(Clone, Copy)]
 pub struct Choice;
-impl Function for Choice {
+impl Op for Choice {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 4 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 4,
                 args.len(),
@@ -321,14 +321,14 @@ impl Function for Choice {
 
 #[derive(Clone, Copy)]
 pub struct When;
-impl Function for When {
+impl Op for When {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 3 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 3,
                 args.len(),
@@ -348,14 +348,14 @@ impl Function for When {
 
 #[derive(Clone, Copy)]
 pub struct Unless;
-impl Function for Unless {
+impl Op for Unless {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 3 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 3,
                 args.len(),
@@ -381,14 +381,14 @@ fn match_pattern(
     pattern: &JsonValue,
     value: &JsonValue,
     out: &mut Vec<(String, JsonValue)>,
-) -> Result<bool, EvalError> {
+) -> Result<bool, OpError> {
     if let Some(obj) = pattern.as_object() {
         if let Some(type_name) = obj.get("type").and_then(|v| v.as_str()) {
             match type_name {
                 "wildcard" => return Ok(true),
                 "literal" => {
                     let expected = pattern.get("value").ok_or_else(|| {
-                        EvalError::Other("literal pattern missing `value`".into())
+                        OpError::Other("literal pattern missing `value`".into())
                     })?;
                     return Ok(expected == value);
                 }
@@ -397,7 +397,7 @@ fn match_pattern(
                         .get("name")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| {
-                            EvalError::Other("identifier pattern missing `name`".into())
+                            OpError::Other("identifier pattern missing `name`".into())
                         })?;
                     out.push((name.to_string(), value.clone()));
                     return Ok(true);
@@ -407,7 +407,7 @@ fn match_pattern(
                         .get("patterns")
                         .and_then(|v| v.as_array())
                         .ok_or_else(|| {
-                            EvalError::Other("array pattern missing `patterns`".into())
+                            OpError::Other("array pattern missing `patterns`".into())
                         })?;
                     let arr = match value.as_array() {
                         Some(a) => a,
@@ -426,7 +426,7 @@ fn match_pattern(
                         .get("entries")
                         .and_then(|v| v.as_array())
                         .ok_or_else(|| {
-                            EvalError::Other("object pattern missing `entries`".into())
+                            OpError::Other("object pattern missing `entries`".into())
                         })?;
                     let obj = match value.as_object() {
                         Some(o) => o,
@@ -434,14 +434,14 @@ fn match_pattern(
                     };
                     for entry in entries {
                         let arr = entry.as_array().ok_or_else(|| {
-                            EvalError::Other("invalid object pattern entry".into())
+                            OpError::Other("invalid object pattern entry".into())
                         })?;
                         let key = arr
                             .get(0)
                             .and_then(|v| v.as_str())
-                            .ok_or_else(|| EvalError::Other("invalid object pattern key".into()))?;
+                            .ok_or_else(|| OpError::Other("invalid object pattern key".into()))?;
                         let child_pattern = arr.get(1).ok_or_else(|| {
-                            EvalError::Other("invalid object pattern entry".into())
+                            OpError::Other("invalid object pattern entry".into())
                         })?;
                         let child = obj.get(key).unwrap_or(&JsonValue::Null);
                         if !match_pattern(child_pattern, child, out)? {
@@ -451,7 +451,7 @@ fn match_pattern(
                     return Ok(true);
                 }
                 _ => {
-                    return Err(EvalError::Other(format!(
+                    return Err(OpError::Other(format!(
                         "unknown pattern type: {type_name}"
                     )));
                 }
@@ -465,14 +465,14 @@ fn match_pattern(
 
 #[derive(Clone, Copy)]
 pub struct Match;
-impl Function for Match {
+impl Op for Match {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -482,12 +482,12 @@ impl Function for Match {
         for branch_arg in &args[1..] {
             let branch = branch_arg
                 .as_array()
-                .ok_or(EvalError::TypeMismatch(format!(
+                .ok_or(OpError::TypeMismatch(format!(
                     "expected {}, got {}",
                     "array [pattern, handler]", "non-array branch",
                 )))?;
             if branch.len() < 2 {
-                return Err(EvalError::TypeMismatch(format!(
+                return Err(OpError::TypeMismatch(format!(
                     "expected {} args, got {}",
                     2,
                     branch.len(),
@@ -498,7 +498,7 @@ impl Function for Match {
             let mut bindings = Vec::new();
             if match_pattern(pattern, value, &mut bindings)? {
                 let fn_val =
-                    FunctionValue::from_json(handler).ok_or(EvalError::TypeMismatch(format!(
+                    FunctionValue::from_json(handler).ok_or(OpError::TypeMismatch(format!(
                         "expected {}, got {}",
                         "function value", "non-function branch handler",
                     )))?;
@@ -509,7 +509,7 @@ impl Function for Match {
                 return ctx.eval_expr(&fn_val.body, &vars);
             }
         }
-        Err(EvalError::Other("no matching branch".into()))
+        Err(OpError::Other("no matching branch".into()))
     }
 }
 
@@ -525,14 +525,14 @@ impl Function for Match {
 
 #[derive(Clone, Copy)]
 pub struct Apply;
-impl Function for Apply {
+impl Op for Apply {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -549,14 +549,14 @@ impl Function for Apply {
 
 #[derive(Clone, Copy)]
 pub struct Tap;
-impl Function for Tap {
+impl Op for Tap {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -578,14 +578,14 @@ impl Function for Tap {
 
 #[derive(Clone, Copy)]
 pub struct Map;
-impl Function for Map {
+impl Op for Map {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -601,14 +601,14 @@ impl Function for Map {
 
 #[derive(Clone, Copy)]
 pub struct Filter;
-impl Function for Filter {
+impl Op for Filter {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -624,14 +624,14 @@ impl Function for Filter {
 
 #[derive(Clone, Copy)]
 pub struct Reduce;
-impl Function for Reduce {
+impl Op for Reduce {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 3 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 3,
                 args.len(),
@@ -648,12 +648,12 @@ impl Function for Reduce {
 
 #[derive(Clone, Copy)]
 pub struct FlatMap;
-impl Function for FlatMap {
+impl Op for FlatMap {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         let mapped = map_iter(ctx, &fn_val, array.iter())?;
         let mut results = Vec::new();
@@ -672,12 +672,12 @@ impl Function for FlatMap {
 
 #[derive(Clone, Copy)]
 pub struct Find;
-impl Function for Find {
+impl Op for Find {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         let result = find_first(ctx, &fn_val, array.iter())?;
         match result {
@@ -691,12 +691,12 @@ impl Function for Find {
 
 #[derive(Clone, Copy)]
 pub struct SomeFn;
-impl Function for SomeFn {
+impl Op for SomeFn {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         for item in array {
             if is_truthy_fn(ctx, &fn_val, item)? {
@@ -709,12 +709,12 @@ impl Function for SomeFn {
 
 #[derive(Clone, Copy)]
 pub struct Every;
-impl Function for Every {
+impl Op for Every {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         for item in array {
             if !is_truthy_fn(ctx, &fn_val, item)? {
@@ -729,12 +729,12 @@ impl Function for Every {
 
 #[derive(Clone, Copy)]
 pub struct GroupBy;
-impl Function for GroupBy {
+impl Op for GroupBy {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         let mut groups: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
             std::collections::BTreeMap::new();
@@ -755,12 +755,12 @@ impl Function for GroupBy {
 
 #[derive(Clone, Copy)]
 pub struct Partition;
-impl Function for Partition {
+impl Op for Partition {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         let mut matching = Vec::new();
         let mut rest = Vec::new();
@@ -782,12 +782,12 @@ impl Function for Partition {
 
 #[derive(Clone, Copy)]
 pub struct CountBy;
-impl Function for CountBy {
+impl Op for CountBy {
     fn call(
         &self,
         args: &[serde_json::Value],
-        ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (fn_val, array) = require_function_and_array(args)?;
         let mut counts: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
         for item in array {
@@ -811,13 +811,13 @@ impl Function for CountBy {
 
 #[derive(Clone, Copy)]
 pub struct Constantly;
-impl Function for Constantly {
+impl Op for Constantly {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let value = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let value = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
@@ -837,17 +837,17 @@ impl Function for Constantly {
 
 #[derive(Clone, Copy)]
 pub struct Flip;
-impl Function for Flip {
+impl Op for Flip {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let fn_val = require_function_value(args.first().ok_or(EvalError::TypeMismatch(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let fn_val = require_function_value(args.first().ok_or(OpError::TypeMismatch(
             format!("expected {} args, got {}", 1, 0,),
         ))?)?;
         if fn_val.params.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {}, got {}",
                 "function with at least 2 parameters", "function with fewer than 2 parameters",
             )));
@@ -869,14 +869,14 @@ impl Function for Flip {
 
 #[derive(Clone, Copy)]
 pub struct Partial;
-impl Function for Partial {
+impl Op for Partial {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -910,7 +910,7 @@ impl Function for Partial {
     }
 }
 
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::OpRegistry;
 use std::sync::Arc;
 
 pub const COMBINATORS_OPS: &[&str] = &[

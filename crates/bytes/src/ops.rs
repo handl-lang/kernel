@@ -7,7 +7,7 @@
 //! UTF-8 coding cannot be expressed as pure handl arrows. The
 //! `op`/`handl` declaration form (ADR-0077 Phase 2) declares the
 //! interface in `bytes.hnl`; these impls provide the logic and are
-//! registered in an [`OpRegistry`](handl_plugin_lib_handl::OpRegistry).
+//! registered in an [`OpRegistry`](handl_ops::OpRegistry).
 //!
 //! `Bytes` values cross the `Function` boundary as
 //! `{"__bytes__": [n, ...]}` — the canonical JSON encoding produced by
@@ -18,8 +18,8 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use handl_platform::{EvalContext, EvalError, Function};
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::{Op, OpContext, OpError};
+use handl_ops::OpRegistry;
 use handl_value::{TaggedValue, tagged_to_value};
 
 // ---------------------------------------------------------------------------
@@ -29,10 +29,10 @@ use handl_value::{TaggedValue, tagged_to_value};
 /// Decode a `Bytes` argument through the canonical tagged-value decoder
 /// (`{"__bytes__": [n, ...]}` → `TaggedValue::Bytes`). A malformed or
 /// non-`Bytes` payload is a `TypeMismatch`.
-fn require_bytes(arg: &serde_json::Value) -> Result<Rc<Vec<u8>>, EvalError> {
+fn require_bytes(arg: &serde_json::Value) -> Result<Rc<Vec<u8>>, OpError> {
     match TaggedValue::from(arg.clone()) {
         TaggedValue::Bytes(b) => Ok(b),
-        _ => Err(EvalError::TypeMismatch(format!(
+        _ => Err(OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "Bytes", "non-Bytes",
         ))),
@@ -45,7 +45,7 @@ fn encode_bytes(buf: Vec<u8>) -> serde_json::Value {
     tagged_to_value(&handl_value::bytes(buf))
 }
 
-fn require_integer(arg: &serde_json::Value) -> Result<i64, EvalError> {
+fn require_integer(arg: &serde_json::Value) -> Result<i64, OpError> {
     // Integral floats count: upstream ops (e.g. `char.code_point_at`)
     // produce `f64` values, so an integer-valued `127.0` must satisfy the
     // `List Int` contract just like a literal `127` does — matching the
@@ -56,23 +56,23 @@ fn require_integer(arg: &serde_json::Value) -> Result<i64, EvalError> {
                 .filter(|n| n.fract() == 0.0 && n.is_finite())
                 .map(|n| n as i64)
         })
-        .ok_or(EvalError::TypeMismatch(format!(
+        .ok_or(OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "integer", "non-integer",
         )))
 }
 
-fn require_string(arg: &serde_json::Value) -> Result<&str, EvalError> {
-    arg.as_str().ok_or(EvalError::TypeMismatch(format!(
+fn require_string(arg: &serde_json::Value) -> Result<&str, OpError> {
+    arg.as_str().ok_or(OpError::TypeMismatch(format!(
         "expected {}, got {}",
         "string", "non-string",
     )))
 }
 
-fn require_non_negative(arg: &serde_json::Value) -> Result<usize, EvalError> {
+fn require_non_negative(arg: &serde_json::Value) -> Result<usize, OpError> {
     let n = require_integer(arg)?;
     usize::try_from(n).map_err(|_| {
-        EvalError::TypeMismatch(format!(
+        OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "non-negative number", "negative number",
         ))
@@ -90,13 +90,13 @@ fn require_non_negative(arg: &serde_json::Value) -> Result<usize, EvalError> {
 /// truncation (matching the FFI marshal boundary's byte-range rule).
 #[derive(Clone, Copy)]
 pub struct FromList;
-impl Function for FromList {
+impl Op for FromList {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let arg = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
@@ -105,7 +105,7 @@ impl Function for FromList {
         for el in arr {
             let n = require_integer(el)?;
             let byte = u8::try_from(n)
-                .map_err(|_| EvalError::TypeMismatch(format!("byte out of range 0..=255: {n}")))?;
+                .map_err(|_| OpError::TypeMismatch(format!("byte out of range 0..=255: {n}")))?;
             buf.push(byte);
         }
         Ok(encode_bytes(buf))
@@ -115,13 +115,13 @@ impl Function for FromList {
 /// The Rust handl for `op "bytes.to_list" : Bytes -> (List Int)`.
 #[derive(Clone, Copy)]
 pub struct ToList;
-impl Function for ToList {
+impl Op for ToList {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let arg = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
@@ -141,14 +141,14 @@ impl Function for ToList {
 /// The Rust handl for `op "bytes.concat" : (Bytes * Bytes) -> Bytes`.
 #[derive(Clone, Copy)]
 pub struct Concat;
-impl Function for Concat {
+impl Op for Concat {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -170,14 +170,14 @@ impl Function for Concat {
 /// `TypeMismatch`.
 #[derive(Clone, Copy)]
 pub struct Slice;
-impl Function for Slice {
+impl Op for Slice {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 3 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 3,
                 args.len(),
@@ -195,13 +195,13 @@ impl Function for Slice {
 /// The Rust handl for `op "bytes.len" : Bytes -> Int`.
 #[derive(Clone, Copy)]
 pub struct Len;
-impl Function for Len {
+impl Op for Len {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let arg = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
@@ -216,14 +216,14 @@ impl Function for Len {
 /// out-of-bounds error (the same convention as `str.char_at`).
 #[derive(Clone, Copy)]
 pub struct At;
-impl Function for At {
+impl Op for At {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         if args.len() < 2 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {} args, got {}",
                 2,
                 args.len(),
@@ -232,13 +232,13 @@ impl Function for At {
         let buf = require_bytes(&args[0])?;
         let index = require_integer(&args[1])?;
         if index < 0 {
-            return Err(EvalError::TypeMismatch(format!(
+            return Err(OpError::TypeMismatch(format!(
                 "expected {}, got {}",
                 "non-negative number", "negative number",
             )));
         }
         let byte = buf.get(index as usize).ok_or_else(|| {
-            EvalError::Other(format!(
+            OpError::Other(format!(
                 "index {index} out of bounds (byte count: {})",
                 buf.len()
             ))
@@ -254,13 +254,13 @@ impl Function for At {
 /// The Rust handl for `op "bytes.utf8_encode" : String -> Bytes`.
 #[derive(Clone, Copy)]
 pub struct Utf8Encode;
-impl Function for Utf8Encode {
+impl Op for Utf8Encode {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let arg = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
@@ -274,19 +274,19 @@ impl Function for Utf8Encode {
 /// Invalid UTF-8 is an error (matching the `base64.decode` utf-8 check).
 #[derive(Clone, Copy)]
 pub struct Utf8Decode;
-impl Function for Utf8Decode {
+impl Op for Utf8Decode {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
-        let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
+        let arg = args.first().ok_or(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )))?;
         let buf = require_bytes(arg)?;
         let s = String::from_utf8((*buf).clone())
-            .map_err(|e| EvalError::Other(format!("bytes.utf8_decode is not valid utf-8: {e}")))?;
+            .map_err(|e| OpError::Other(format!("bytes.utf8_decode is not valid utf-8: {e}")))?;
         Ok(serde_json::Value::from(s))
     }
 }

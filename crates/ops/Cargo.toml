@@ -7,10 +7,8 @@ license = "MIT"
 repository = "https://github.com/handl-lang/lib-ops"
 
 [dependencies]
+handl-ops = { git = "https://github.com/handl-lang/kernel", branch = "main" }
 serde_json = "1"
-# ADR-0128 §Resolution: the platform crates come from the sibling checkout for
-# local development (see the `[patch]` table); CI resolves the git source.
-handl-platform = { git = "https://github.com/handl-lang/host", branch = "main" }
 
-[patch."https://github.com/handl-lang/host"]
-handl-platform = { path = "../host/crates/platform" }
+[patch."https://github.com/handl-lang/kernel"]
+handl-ops = { path = "../handl-ops" }

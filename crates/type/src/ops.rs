@@ -7,9 +7,9 @@
 //! on. The `op`/`handl` declaration form (ADR-0077 Phase 2) declares the
 //! interface in `type.hnl`; these impls provide the logic and are
 //! registered in an
-//! [`OpRegistry`](handl_plugin_lib_handl::OpRegistry).
+//! [`OpRegistry`](handl_ops::OpRegistry).
 
-use handl_platform::{EvalContext, EvalError, Function};
+use handl_ops::{Op, OpContext, OpError};
 
 use handl_lib_ops::shared::{
     as_kind, complement, err_result, matches, ok_result, project, require_arg_count,
@@ -20,8 +20,8 @@ use handl_lib_ops::shared::{
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn require_one_arg_local(args: &[serde_json::Value]) -> Result<&serde_json::Value, EvalError> {
-    args.first().ok_or(EvalError::TypeMismatch(format!(
+fn require_one_arg_local(args: &[serde_json::Value]) -> Result<&serde_json::Value, OpError> {
+    args.first().ok_or(OpError::TypeMismatch(format!(
         "expected {} args, got {}",
         1, 0,
     )))
@@ -29,9 +29,9 @@ fn require_one_arg_local(args: &[serde_json::Value]) -> Result<&serde_json::Valu
 
 fn require_two_args(
     args: &[serde_json::Value],
-) -> Result<(&serde_json::Value, &serde_json::Value), EvalError> {
+) -> Result<(&serde_json::Value, &serde_json::Value), OpError> {
     if args.len() < 2 {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             2,
             args.len(),
@@ -50,12 +50,12 @@ fn number_to_string(n: f64) -> String {
 
 #[derive(Clone, Copy)]
 pub struct ToString;
-impl Function for ToString {
+impl Op for ToString {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let arg = require_one_arg_local(args)?;
         let result = if let Some(s) = arg.as_str() {
             s.to_string()
@@ -74,12 +74,12 @@ impl Function for ToString {
 
 #[derive(Clone, Copy)]
 pub struct ToNumber;
-impl Function for ToNumber {
+impl Op for ToNumber {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let arg = require_one_arg_local(args)?;
         let result = if let Some(n) = arg.as_f64() {
             n
@@ -102,12 +102,12 @@ impl Function for ToNumber {
 
 #[derive(Clone, Copy)]
 pub struct ToBool;
-impl Function for ToBool {
+impl Op for ToBool {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let arg = require_one_arg_local(args)?;
         let result = if let Some(b) = arg.as_bool() {
             b
@@ -134,12 +134,12 @@ impl Function for ToBool {
 
 #[derive(Clone, Copy)]
 pub struct TypeOf;
-impl Function for TypeOf {
+impl Op for TypeOf {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let arg = require_one_arg(args)?;
         let type_name = if arg.is_null() {
             "null"
@@ -162,12 +162,12 @@ impl Function for TypeOf {
 
 #[derive(Clone, Copy)]
 pub struct TypeIs;
-impl Function for TypeIs {
+impl Op for TypeIs {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -177,12 +177,12 @@ impl Function for TypeIs {
 
 #[derive(Clone, Copy)]
 pub struct TypeMust;
-impl Function for TypeMust {
+impl Op for TypeMust {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -195,12 +195,12 @@ impl Function for TypeMust {
 
 #[derive(Clone, Copy)]
 pub struct TypeMay;
-impl Function for TypeMay {
+impl Op for TypeMay {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -213,12 +213,12 @@ impl Function for TypeMay {
 
 #[derive(Clone, Copy)]
 pub struct TypeNot;
-impl Function for TypeNot {
+impl Op for TypeNot {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 2)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -229,12 +229,12 @@ impl Function for TypeNot {
 
 #[derive(Clone, Copy)]
 pub struct TypeWhen;
-impl Function for TypeWhen {
+impl Op for TypeWhen {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 3)?;
         let value = &args[0];
         let kind = as_kind(&args[1])?;
@@ -249,12 +249,12 @@ impl Function for TypeWhen {
 
 #[derive(Clone, Copy)]
 pub struct StringTag(&'static str);
-impl Function for StringTag {
+impl Op for StringTag {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         require_arg_count(args, 0)?;
         Ok(serde_json::Value::from(self.0.to_string()))
     }
@@ -281,12 +281,12 @@ pub static UNKNOWN_TAG: StringTag = StringTag("type.unknown");
 
 #[derive(Clone, Copy)]
 pub struct Identity;
-impl Function for Identity {
+impl Op for Identity {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let arg = require_one_arg_local(args)?;
         Ok(arg.clone())
     }
@@ -294,12 +294,12 @@ impl Function for Identity {
 
 #[derive(Clone, Copy)]
 pub struct Default;
-impl Function for Default {
+impl Op for Default {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         let (value, fallback) = require_two_args(args)?;
         if value.is_null() {
             Ok(fallback.clone())
@@ -311,12 +311,12 @@ impl Function for Default {
 
 #[derive(Clone, Copy)]
 pub struct Coalesce;
-impl Function for Coalesce {
+impl Op for Coalesce {
     fn call(
         &self,
         args: &[serde_json::Value],
-        _ctx: &mut EvalContext,
-    ) -> Result<serde_json::Value, EvalError> {
+        _ctx: &mut dyn OpContext,
+    ) -> Result<serde_json::Value, OpError> {
         for arg in args {
             if !arg.is_null() {
                 return Ok(arg.clone());
@@ -326,7 +326,7 @@ impl Function for Coalesce {
     }
 }
 
-use handl_plugin_lib_handl::OpRegistry;
+use handl_ops::OpRegistry;
 use std::sync::Arc;
 
 pub const TYPE_OPS: &[&str] = &[

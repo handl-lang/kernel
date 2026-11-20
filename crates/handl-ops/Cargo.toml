@@ -1,0 +1,11 @@
+[package]
+name = "handl-ops"
+version.workspace = true
+edition.workspace = true
+description = "Op ABI — the registration surface for native Handl operations (Op, OpContext, OpRegistry)."
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }

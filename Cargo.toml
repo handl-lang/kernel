@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/handl-ext",
+    "crates/handl-ops",
     "crates/defining-handl",
     "crates/handl-language",
     "crates/handl-value",
@@ -45,6 +46,7 @@ hnl-engine = { path = "../engine" }
 # to the members so the workspace always builds one coherent copy.
 [patch."https://github.com/handl-lang/kernel"]
 handl-ext = { path = "crates/handl-ext" }
+handl-ops = { path = "crates/handl-ops" }
 handl-language = { path = "crates/handl-language" }
 handl-value = { path = "crates/handl-value" }
 handl-lib-bytes = { path = "crates/bytes" }

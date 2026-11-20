@@ -9,7 +9,7 @@
 use serde_json::{Map, Value as JsonValue};
 
 use crate::function_value::FunctionValue;
-use handl_platform::{EvalContext, EvalError};
+use handl_ops::{OpContext, OpError};
 
 // ════════════════════════════════════════════════════════════════════
 // Tier 0: Shared helpers (replaces duplicated copies across modules)
@@ -17,17 +17,17 @@ use handl_platform::{EvalContext, EvalError};
 
 // ── type requirements ──────────────────────────────────────────────
 
-pub fn require_array(arg: &serde_json::Value) -> Result<&[serde_json::Value], EvalError> {
+pub fn require_array(arg: &serde_json::Value) -> Result<&[serde_json::Value], OpError> {
     arg.as_array()
         .map(Vec::as_slice)
-        .ok_or(EvalError::TypeMismatch(format!(
+        .ok_or(OpError::TypeMismatch(format!(
             "expected {}, got {}",
             "array", "non-array",
         )))
 }
 
-pub fn require_function_value(arg: &serde_json::Value) -> Result<FunctionValue, EvalError> {
-    FunctionValue::from_json(arg).ok_or(EvalError::TypeMismatch(format!(
+pub fn require_function_value(arg: &serde_json::Value) -> Result<FunctionValue, OpError> {
+    FunctionValue::from_json(arg).ok_or(OpError::TypeMismatch(format!(
         "expected {}, got {}",
         "function value", "non-function",
     )))
@@ -35,8 +35,8 @@ pub fn require_function_value(arg: &serde_json::Value) -> Result<FunctionValue, 
 
 // ── argument count requirements ────────────────────────────────────
 
-pub fn require_one_arg(args: &[serde_json::Value]) -> Result<&serde_json::Value, EvalError> {
-    args.first().ok_or(EvalError::TypeMismatch(format!(
+pub fn require_one_arg(args: &[serde_json::Value]) -> Result<&serde_json::Value, OpError> {
+    args.first().ok_or(OpError::TypeMismatch(format!(
         "expected {} args, got {}",
         1, 0,
     )))
@@ -45,8 +45,8 @@ pub fn require_one_arg(args: &[serde_json::Value]) -> Result<&serde_json::Value,
 #[allow(dead_code)]
 pub fn require_one_array(
     args: &[serde_json::Value],
-) -> Result<&[serde_json::Value], EvalError> {
-    let arg = args.first().ok_or(EvalError::TypeMismatch(format!(
+) -> Result<&[serde_json::Value], OpError> {
+    let arg = args.first().ok_or(OpError::TypeMismatch(format!(
         "expected {} args, got {}",
         1, 0,
     )))?;
@@ -56,9 +56,9 @@ pub fn require_one_array(
 #[allow(dead_code)]
 pub fn require_two_arrays(
     args: &[serde_json::Value],
-) -> Result<(&[serde_json::Value], &[serde_json::Value]), EvalError> {
+) -> Result<(&[serde_json::Value], &[serde_json::Value]), OpError> {
     if args.len() < 2 {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             2,
             args.len(),
@@ -71,9 +71,9 @@ pub fn require_two_arrays(
 
 pub fn require_function_and_array(
     args: &[serde_json::Value],
-) -> Result<(FunctionValue, &[serde_json::Value]), EvalError> {
+) -> Result<(FunctionValue, &[serde_json::Value]), OpError> {
     if args.len() < 2 {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             2,
             args.len(),
@@ -86,9 +86,9 @@ pub fn require_function_and_array(
 
 pub fn require_functions(
     args: &[serde_json::Value],
-) -> Result<Vec<FunctionValue>, EvalError> {
+) -> Result<Vec<FunctionValue>, OpError> {
     if args.is_empty() {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             1, 0,
         )));
@@ -132,7 +132,7 @@ fn destructure_pattern(
     pattern: &JsonValue,
     value: &JsonValue,
     out: &mut Vec<(String, JsonValue)>,
-) -> Result<(), EvalError> {
+) -> Result<(), OpError> {
     match pattern.get("type").and_then(|v| v.as_str()) {
         Some("identifier") => {
             if let Some(name) = pattern_binding_name(pattern) {
@@ -143,8 +143,8 @@ fn destructure_pattern(
             let patterns = pattern
                 .get("patterns")
                 .and_then(|v| v.as_array())
-                .ok_or(EvalError::Other("invalid array pattern".to_string()))?;
-            let arr = value.as_array().ok_or(EvalError::TypeMismatch(format!(
+                .ok_or(OpError::Other("invalid array pattern".to_string()))?;
+            let arr = value.as_array().ok_or(OpError::TypeMismatch(format!(
                 "expected {}, got {}",
                 "array", "non-array",
             )))?;
@@ -154,25 +154,25 @@ fn destructure_pattern(
             }
         }
         Some("object") => {
-            let obj = value.as_object().ok_or(EvalError::TypeMismatch(format!(
+            let obj = value.as_object().ok_or(OpError::TypeMismatch(format!(
                 "expected {}, got {}",
                 "object", "non-object",
             )))?;
             let entries = pattern
                 .get("entries")
                 .and_then(|v| v.as_array())
-                .ok_or(EvalError::Other("invalid object pattern".to_string()))?;
+                .ok_or(OpError::Other("invalid object pattern".to_string()))?;
             for entry in entries {
                 let arr = entry
                     .as_array()
-                    .ok_or(EvalError::Other("invalid object pattern entry".to_string()))?;
+                    .ok_or(OpError::Other("invalid object pattern entry".to_string()))?;
                 let key = arr
                     .get(0)
                     .and_then(|v| v.as_str())
-                    .ok_or(EvalError::Other("invalid object pattern key".to_string()))?;
+                    .ok_or(OpError::Other("invalid object pattern key".to_string()))?;
                 let child_pattern = arr
                     .get(1)
-                    .ok_or(EvalError::Other("invalid object pattern entry".to_string()))?;
+                    .ok_or(OpError::Other("invalid object pattern entry".to_string()))?;
                 let child = obj.get(key).unwrap_or(&JsonValue::Null);
                 destructure_pattern(child_pattern, child, out)?;
             }
@@ -185,7 +185,7 @@ fn destructure_pattern(
 pub fn bind_function_params(
     fn_val: &FunctionValue,
     args: &[JsonValue],
-) -> Result<Vec<(String, serde_json::Value)>, EvalError> {
+) -> Result<Vec<(String, serde_json::Value)>, OpError> {
     let mut bindings = Vec::new();
 
     for (i, (name, _)) in fn_val.params.iter().enumerate() {
@@ -302,9 +302,9 @@ pub fn find_extremum_by<'a, T>(
 pub fn require_arg_count(
     args: &[serde_json::Value],
     expected: usize,
-) -> Result<(), EvalError> {
+) -> Result<(), OpError> {
     if args.len() != expected {
-        return Err(EvalError::TypeMismatch(format!(
+        return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
             expected,
             args.len()
@@ -313,10 +313,10 @@ pub fn require_arg_count(
     Ok(())
 }
 
-pub fn as_kind(value: &serde_json::Value) -> Result<&str, EvalError> {
+pub fn as_kind(value: &serde_json::Value) -> Result<&str, OpError> {
     value
         .as_str()
-        .ok_or_else(|| EvalError::Other("type kind must be a string".to_string()))
+        .ok_or_else(|| OpError::Other("type kind must be a string".to_string()))
 }
 
 pub fn type_name(value: &serde_json::Value) -> &'static str {
@@ -417,21 +417,21 @@ pub fn err_result(message: &str) -> serde_json::Value {
 
 /// Apply a single-param function to a value: bind_param + eval_expr.
 pub fn apply_fn(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     let vars = bind_param(fn_val, value);
     ctx.eval_expr(&fn_val.body, &vars)
 }
 
 /// Apply a two-param function to two values: bind_two_params + eval_expr.
 pub fn apply_fn2(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     a: &serde_json::Value,
     b: &serde_json::Value,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     let vars = bind_two_params(fn_val, a, b);
     ctx.eval_expr(&fn_val.body, &vars)
 }
@@ -450,14 +450,14 @@ pub fn is_arrow_value(value: &serde_json::Value) -> bool {
 /// If the value is an arrow-value, uses `ctx.try_call_value`. Otherwise,
 /// falls back to `FunctionValue` + `eval_expr`.
 pub fn apply_callable(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     if is_arrow_value(fn_arg) {
         ctx.try_call_value(fn_arg, std::slice::from_ref(value))
             .unwrap_or_else(|| {
-                Err(EvalError::TypeMismatch(
+                Err(OpError::TypeMismatch(
                     "call_value: no value callable set in context".to_string(),
                 ))
             })
@@ -469,15 +469,15 @@ pub fn apply_callable(
 
 /// Apply a callable value to two args (for reduce-like combinators).
 pub fn apply_callable2(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     a: &serde_json::Value,
     b: &serde_json::Value,
-) -> Result<serde_json::Value, EvalError> {
+) -> Result<serde_json::Value, OpError> {
     if is_arrow_value(fn_arg) {
         ctx.try_call_value(fn_arg, &[a.clone(), b.clone()])
             .unwrap_or_else(|| {
-                Err(EvalError::TypeMismatch(
+                Err(OpError::TypeMismatch(
                     "call_value: no value callable set in context".to_string(),
                 ))
             })
@@ -489,20 +489,20 @@ pub fn apply_callable2(
 
 /// Check if a callable value's result is truthy (for filter-like combinators).
 pub fn is_truthy_callable(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     value: &serde_json::Value,
-) -> Result<bool, EvalError> {
+) -> Result<bool, OpError> {
     let result = apply_callable(ctx, fn_arg, value)?;
     Ok(is_truthy_value(&result))
 }
 
 /// Apply a predicate function and check if the result is truthy.
 pub fn is_truthy_fn(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     value: &serde_json::Value,
-) -> Result<bool, EvalError> {
+) -> Result<bool, OpError> {
     let result = apply_fn(ctx, fn_val, value)?;
     Ok(is_truthy_value(&result))
 }
@@ -510,10 +510,10 @@ pub fn is_truthy_fn(
 /// Map a function over an iterator, collecting results.
 /// Works with any iterator yielding `&serde_json::Value`.
 pub fn map_iter<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     iter: I,
-) -> Result<Vec<serde_json::Value>, EvalError>
+) -> Result<Vec<serde_json::Value>, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
@@ -527,10 +527,10 @@ where
 
 /// Map a callable (arrow-value or FunctionValue) over an iterator.
 pub fn map_callable_iter<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     iter: I,
-) -> Result<Vec<serde_json::Value>, EvalError>
+) -> Result<Vec<serde_json::Value>, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
@@ -544,10 +544,10 @@ where
 
 /// Filter an iterator by a callable predicate (arrow-value or FunctionValue).
 pub fn filter_callable_iter<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     iter: I,
-) -> Result<Vec<serde_json::Value>, EvalError>
+) -> Result<Vec<serde_json::Value>, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
@@ -562,11 +562,11 @@ where
 
 /// Fold an iterator with a two-param callable (arrow-value or FunctionValue).
 pub fn fold_callable_iter<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_arg: &serde_json::Value,
     iter: I,
     init: serde_json::Value,
-) -> Result<serde_json::Value, EvalError>
+) -> Result<serde_json::Value, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
@@ -581,10 +581,10 @@ where
 /// Find the first element matching a predicate.
 /// Returns `None` if no match.
 pub fn find_first<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     iter: I,
-) -> Result<Option<serde_json::Value>, EvalError>
+) -> Result<Option<serde_json::Value>, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
@@ -600,10 +600,10 @@ where
 /// Returns `None` if no match.
 #[allow(dead_code)]
 pub fn find_index<'a, I>(
-    ctx: &mut EvalContext,
+    ctx: &mut dyn OpContext,
     fn_val: &FunctionValue,
     iter: I,
-) -> Result<Option<usize>, EvalError>
+) -> Result<Option<usize>, OpError>
 where
     I: Iterator<Item = &'a serde_json::Value>,
 {
