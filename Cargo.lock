@@ -47,61 +47,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "handl-lib-bytes"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "handl-value",
- "serde_json",
-]
-
-[[package]]
-name = "handl-lib-cmp"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
-
-[[package]]
-name = "handl-lib-combinators"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
-
-[[package]]
-name = "handl-lib-error"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
-
-[[package]]
-name = "handl-lib-mood"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
-
-[[package]]
-name = "handl-lib-obj"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
-
-[[package]]
 name = "handl-lib-ops"
 version = "0.1.0"
 dependencies = [
@@ -116,15 +61,6 @@ version = "0.1.0"
 [[package]]
 name = "handl-lib-prim-handl"
 version = "0.1.0"
-
-[[package]]
-name = "handl-lib-type"
-version = "0.1.0"
-dependencies = [
- "handl-lib-ops",
- "handl-ops",
- "serde_json",
-]
 
 [[package]]
 name = "handl-ops"
@@ -313,6 +249,10 @@ name = "handl-kit-lang"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "handl-lib-obj"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "handl-lib-tar"
 version = "0.1.0"
 
@@ -322,10 +262,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "hnl-engine-lint"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "hnl-engine-fmt"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -345,6 +281,10 @@ name = "handl-plugin-lib-kv-hashmap"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "hnl-engine-fmt"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "handl-lib-url-rfc"
 version = "0.1.0"
 
@@ -357,6 +297,10 @@ name = "handl-lib-hex"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "handl-lib-cmp"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "handl-plugin-lib-lang-typecheck"
 version = "0.1.0"
 
@@ -365,7 +309,15 @@ name = "hnl-engine"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "handl-lib-error"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "handl-plugin-lib-serialize-yaml-c"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "handl-lib-mood"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -397,11 +349,11 @@ name = "hnl-engine-parse"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-lib-kv"
+name = "handl-plugin-lib-serialize-toml-c"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-lib-serialize-toml-c"
+name = "handl-plugin-lib-kv"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -418,6 +370,10 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-plugin-lib-char-native"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "handl-lib-type"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -626,6 +582,10 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "hnl-engine-exec-cranelift"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "handl-lib-bytes"
 version = "0.1.0"
 
 [[patch.unused]]

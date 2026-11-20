@@ -8,7 +8,7 @@
 | `handl_language::Ast` / `AstRef` | the arena and its handle |
 | `handl_value::Value` / `TaggedValue` | the tagged value representation |
 | `hnl_engine::LanguageView` | the object-safe view engines use (`handl-language` implements it) |
-| `handl_lib_*` packages | the floor libraries every host gets for free |
+| `lib-*` repos | the standard libraries, shipped as their own repos |
 
 ## Crate
 

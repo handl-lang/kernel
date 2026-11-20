@@ -1,13 +1,13 @@
 # kernel
 
-The arrow-calculus substrate: language schema, tagged values, extension ABI, floor libs.
+The arrow-calculus substrate: language schema, tagged values, extension ABI.
 
 ## What it is
 
 The kernel is the platform's smallest layer (ADR-0040): the `Language` data
 schema and staged `lex`/`parse`/`eval` dispatch signatures (ADR-0044, language as
-data), the tagged `Value` representation the engines share, the dynamic extension
-ABI (`hnl` extensions, ADR-0149), and the `handl-lib-*` floor packages.
+data), the tagged `Value` representation the engines share, and the dynamic extension
+ABI (`hnl` extensions, ADR-0149). Libraries live in their own `lib-*` repos.
 
 What is *not* kernel: engines, emitters, kits, plugins and hosts. They live in the
 `engine-*`/`compile-*`/`sdkgen-*`, `kit-*`, `ext-*` and `host`/`host-*` repos and
@@ -18,7 +18,7 @@ depend on the kernel, never the reverse.
 - `crates/handl-value` — the tagged `Value` representation shared by engines
 - `crates/handl-ext` — the shared ABI for dynamic `hnl` extensions (ADR-0149)
 - `crates/defining-handl` — self-hosting infrastructure (ADR-0044 phase 8)
-- `crates/{bytes,cmp,combinators,error,mood,obj,ops,prim,prim-handl,type}` — the `handl-lib-*` substrate packages
+- `crates/{combinators,handl-calculus,handl-ops,ops,prim,prim-handl,type}` — the calculus, ops, and primitive substrate crates
 
 
 ## Start here

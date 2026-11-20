@@ -7,14 +7,7 @@ members = [
     "crates/defining-handl",
     "crates/handl-language",
     "crates/handl-value",
-    "crates/bytes",
-    "crates/cmp",
-    "crates/combinators",
-    "crates/error",
-    "crates/mood",
-    "crates/obj",
     "crates/ops",
-    "crates/type",
     "crates/prim",
     "crates/prim-handl",
 ]
@@ -47,16 +40,9 @@ handl-ext = { path = "crates/handl-ext" }
 handl-ops = { path = "crates/handl-ops" }
 handl-language = { path = "crates/handl-language" }
 handl-value = { path = "crates/handl-value" }
-handl-lib-bytes = { path = "crates/bytes" }
-handl-lib-cmp = { path = "crates/cmp" }
-handl-lib-combinators = { path = "crates/combinators" }
-handl-lib-error = { path = "crates/error" }
-handl-lib-mood = { path = "crates/mood" }
-handl-lib-obj = { path = "crates/obj" }
 handl-lib-ops = { path = "crates/ops" }
 handl-lib-prim = { path = "crates/prim" }
 handl-lib-prim-handl = { path = "crates/prim-handl" }
-handl-lib-type = { path = "crates/type" }
 
 # --- ADR-0128 sibling-checkout patches: the member crates dep on the
 # handl-lang repos via `git` so they also build standalone; the
@@ -157,8 +143,14 @@ handl-kit-test = { path = "../kit-test/crates/kit-test" }
 [patch."https://github.com/handl-lang/lib-base64"]
 handl-lib-base64 = { path = "../lib-base64" }
 
+[patch."https://github.com/handl-lang/lib-bytes"]
+handl-lib-bytes = { path = "../lib-bytes" }
+
 [patch."https://github.com/handl-lang/lib-char-native"]
 handl-plugin-lib-char-native = { path = "../lib-char-native" }
+
+[patch."https://github.com/handl-lang/lib-cmp"]
+handl-lib-cmp = { path = "../lib-cmp" }
 
 [patch."https://github.com/handl-lang/lib-collections"]
 handl-lib-collections = { path = "../lib-collections" }
@@ -166,7 +158,8 @@ handl-lib-collections = { path = "../lib-collections" }
 [patch."https://github.com/handl-lang/lib-crypto"]
 handl-plugin-lib-crypto = { path = "../lib-crypto" }
 
-
+[patch."https://github.com/handl-lang/lib-error"]
+handl-lib-error = { path = "../lib-error" }
 
 [patch."https://github.com/handl-lang/lib-hello"]
 handl-lib-hello = { path = "../lib-hello" }
@@ -267,6 +260,9 @@ handl-plugin-ffi = { path = "../kit-ffi/modules/ffi" }
 [patch."https://github.com/handl-lang/lib-comb"]
 handl-lib-comb = { path = "../lib-comb" }
 
+[patch."https://github.com/handl-lang/lib-type"]
+handl-lib-type = { path = "../lib-type" }
+
 [patch."https://github.com/handl-lang/lib-desugar"]
 handl-lib-desugar = { path = "../lib-desugar" }
 
@@ -277,6 +273,11 @@ handl-lib-ffi = { path = "../lib-ffi" }
 [patch."https://github.com/handl-lang/lib-loader"]
 handl-lib-loader = { path = "../lib-loader" }
 
+[patch."https://github.com/handl-lang/lib-mood"]
+handl-lib-mood = { path = "../lib-mood" }
+
+[patch."https://github.com/handl-lang/lib-obj"]
+handl-lib-obj = { path = "../lib-obj" }
 
 [patch."https://github.com/handl-lang/lib-otlp-c"]
 handl-plugin-lib-otlp-c = { path = "../lib-otlp-c" }
