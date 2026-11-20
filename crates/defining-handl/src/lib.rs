@@ -7,12 +7,14 @@
 //! file loaded as a `Language` value, evaluated under itself. The bootstrap
 //! becomes `compile(handlLanguage, native)` via the cranelift engine."
 //!
-//! This crate produces a [`Language`] value that describes the **subset** of
-//! handl the data-driven engines can evaluate — the constructs migrated to
-//! the data-driven model in Phases 4–5 (value, var, the binary arithmetic /
-//! comparison ops, unary not, block bindings (`do { x = v; ... }`), if,
-//! ternary, function, call, pipe, paren, apply). It is the "handl defining
-//! handl": the language spec as data.
+//! This crate provides the **self-hosting corpus**: AST fixtures for the
+//! subset of handl the data-driven engines can evaluate — the constructs
+//! migrated to the data-driven model in Phases 4–5 (value, var, the binary
+//! arithmetic / comparison ops, unary not, block bindings
+//! (`do { x = v; ... }`), if, ternary, function, call, pipe, paren, apply).
+//! The `Language` value these fixtures run under is assembled by
+//! `handl-kit-data-prelude` (`assemble()`); the integration tests that
+//! exercise the corpus live in the `handl-lang/test` repo.
 //!
 //! ## Scope (honest deliverable)
 //!
@@ -29,14 +31,11 @@
 //! This crate does **not** attempt to describe the full handl language as
 //! data. Instead it:
 //!
-//! 1. Builds the **self-hosting infrastructure**: a [`Language`] value
-//!    describing the subset, assembled from the canonical YAML data files
-//!    via [`language`].
-//! 2. Provides a **self-hosting corpus** ([`corpus`]) of subset programs used
-//!    by the integration tests (`self_host.rs`, `bootstrap.rs`,
-//!    `futamura.rs`) to prove the self-hosting *mechanism*. ADR-0052 Phase D
-//!    adds an **arrow-authored corpus** ([`proc_corpus`]) demonstrating the
-//!    arrow-calculus authoring surface (`x ~> body`).
+//! 1. Provides a **self-hosting corpus** ([`corpus`]) of subset programs used
+//!    by the integration tests in `handl-lang/test` (`self_host.rs`,
+//!    `bootstrap.rs`, `futamura.rs`) to prove the self-hosting *mechanism*.
+//!    ADR-0052 Phase D adds an **arrow-authored corpus** ([`proc_corpus`])
+//!    demonstrating the arrow-calculus authoring surface (`x ~> body`).
 //!
 //! What is **proven**: a `Language` value can describe a language and be
 //! evaluated under itself (across all three eval engines: tree-walk,
@@ -51,26 +50,8 @@
 
 #![warn(missing_docs)]
 
-use handl_language::{Ast, AstNode, Language, Value};
+use handl_language::{Ast, AstNode, Value};
 use serde_json::json;
-
-/// The self-describing `Language` assembled from the canonical YAML data
-/// files.
-///
-/// This is the canonical data-driven language: the same `Language` produced by
-/// [`handl_kit_data_prelude::assemble`] — the full language (tokens, grammar,
-/// eval, AST shapes, capabilities) merged into one `Language` value from the
-/// 7 YAML files in `handl-kit-data-prelude/data/`. It is "handl defining
-/// handl" for the subset.
-pub fn language() -> Language {
-    // Delegate to the canonical data-driven kit assembly. This is the same
-    // merged Language used by the data-driven runtime path — the single
-    // source of truth for the subset.
-    handl_kit_data_prelude::assemble()
-        .expect("canonical data-driven kit must assemble")
-        .lang()
-        .clone()
-}
 
 // ---------------------------------------------------------------------------
 // Self-hosting corpus
@@ -1126,30 +1107,4 @@ pub fn proc_corpus() -> Vec<CorpusCase> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The corpus is non-empty and every case has a non-empty AST.
-    #[test]
-    fn corpus_is_nonempty() {
-        let c = corpus();
-        assert!(c.len() >= 38, "corpus should have at least 38 cases");
-        for case in &c {
-            assert!(!case.ast.is_empty(), "case '{}' has empty ast", case.name);
-        }
-    }
-
-    /// The arrow corpus is non-empty and every case has a non-empty AST.
-    #[test]
-    fn proc_corpus_is_nonempty() {
-        let c = proc_corpus();
-        assert!(!c.is_empty(), "arrow corpus should have at least one case");
-        for case in &c {
-            assert!(
-                !case.ast.is_empty(),
-                "arrow case '{}' has empty ast",
-                case.name
-            );
-        }
-    }
-}
+mod lib_test;
