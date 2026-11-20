@@ -25,13 +25,9 @@ repos. The kernel deps on `handl-lang/engine` (`hnl-engine`, git dep on
 `main`), so downstream repos can pin the substrate without pulling the host
 repo.
 
-It was extracted from the `handl-lang/host` workspace per the
-ADR-0128 repo-split pattern: `git subtree split` preserves each crate's
-history, grafted under `crates/`. Consumers take the crates as git deps
-on `handl-lang/kernel` (`branch = "main"`, float-on-main); for local
-development a sibling `../kernel` checkout is wired through the
-consumer's `[patch]` table (`scripts/dev-link.sh` in host
-regenerates it).
+Consumers take the crates as git deps on `handl-lang/kernel`
+(`branch = "main"`, float-on-main); for local development a sibling
+`../kernel` checkout is wired through the consumer's `[patch]` table.
 
 ## Documentation
 
