@@ -47,12 +47,5 @@ pub trait Fragment:
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::fragments::CapabilityDecl;
-
-    #[test]
-    fn capability_is_union() {
-        assert!(CapabilityDecl::UNION);
-    }
-}
+#[path = "fragment_test.rs"]
+mod fragment_test;
