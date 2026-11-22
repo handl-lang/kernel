@@ -43,9 +43,7 @@ pub fn require_one_arg(args: &[serde_json::Value]) -> Result<&serde_json::Value,
 }
 
 #[allow(dead_code)]
-pub fn require_one_array(
-    args: &[serde_json::Value],
-) -> Result<&[serde_json::Value], OpError> {
+pub fn require_one_array(args: &[serde_json::Value]) -> Result<&[serde_json::Value], OpError> {
     let arg = args.first().ok_or(OpError::TypeMismatch(format!(
         "expected {} args, got {}",
         1, 0,
@@ -84,9 +82,7 @@ pub fn require_function_and_array(
     Ok((fn_val, array))
 }
 
-pub fn require_functions(
-    args: &[serde_json::Value],
-) -> Result<Vec<FunctionValue>, OpError> {
+pub fn require_functions(args: &[serde_json::Value]) -> Result<Vec<FunctionValue>, OpError> {
     if args.is_empty() {
         return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
@@ -299,10 +295,7 @@ pub fn find_extremum_by<'a, T>(
 
 // ── type predicates (mood / type.*) ─────────────────────────────────
 
-pub fn require_arg_count(
-    args: &[serde_json::Value],
-    expected: usize,
-) -> Result<(), OpError> {
+pub fn require_arg_count(args: &[serde_json::Value], expected: usize) -> Result<(), OpError> {
     if args.len() != expected {
         return Err(OpError::TypeMismatch(format!(
             "expected {} args, got {}",
@@ -436,6 +429,19 @@ pub fn apply_fn2(
     ctx.eval_expr(&fn_val.body, &vars)
 }
 
+/// Require `arg` to be a callable value — an arrow-value
+/// (`{"__arrow__": true, …}`) or legacy `FunctionValue` JSON.
+pub fn require_callable(arg: &serde_json::Value) -> Result<(), OpError> {
+    if is_arrow_value(arg) || FunctionValue::from_json(arg).is_some() {
+        Ok(())
+    } else {
+        Err(OpError::TypeMismatch(format!(
+            "expected {}, got {}",
+            "function value", "non-function",
+        )))
+    }
+}
+
 /// Check if a value is an arrow-value (first-class function from the
 /// tree-walk engine).
 pub fn is_arrow_value(value: &serde_json::Value) -> bool {
@@ -467,6 +473,29 @@ pub fn apply_callable(
     }
 }
 
+/// Apply a callable value (arrow-value or FunctionValue) to a slice of
+/// arguments — the multi-arg generalization of [`apply_callable`].
+///
+/// Arrow-values go through `ctx.try_call_value`; legacy `FunctionValue`
+/// JSON falls back to positional parameter binding + `eval_expr`.
+pub fn apply_callable_args(
+    ctx: &mut dyn OpContext,
+    fn_arg: &serde_json::Value,
+    args: &[serde_json::Value],
+) -> Result<serde_json::Value, OpError> {
+    if is_arrow_value(fn_arg) {
+        ctx.try_call_value(fn_arg, args).unwrap_or_else(|| {
+            Err(OpError::TypeMismatch(
+                "call_value: no value callable set in context".to_string(),
+            ))
+        })
+    } else {
+        let fn_val = require_function_value(fn_arg)?;
+        let vars = bind_function_params(&fn_val, args)?;
+        ctx.eval_expr(&fn_val.body, &vars)
+    }
+}
+
 /// Apply a callable value to two args (for reduce-like combinators).
 pub fn apply_callable2(
     ctx: &mut dyn OpContext,
@@ -484,6 +513,60 @@ pub fn apply_callable2(
     } else {
         let fn_val = require_function_value(fn_arg)?;
         apply_fn2(ctx, &fn_val, a, b)
+    }
+}
+
+/// Call a callable with *named* bindings — the `combinators.match` handler
+/// shape, where a pattern destructures the scrutinee into `(name, value)`
+/// pairs.
+///
+/// Arrow-values take positional arguments, so bindings are re-ordered into
+/// the arrow's `params` declaration order (names absent from `params`
+/// bindings fall back to `Null`; when `params` is missing/empty the binding
+/// values are passed in declaration order). `FunctionValue` JSON keeps the
+/// legacy `(name, value)` binding + `eval_expr` path.
+pub fn call_with_bindings(
+    ctx: &mut dyn OpContext,
+    callee: &serde_json::Value,
+    bindings: &[(String, serde_json::Value)],
+) -> Result<serde_json::Value, OpError> {
+    if is_arrow_value(callee) {
+        let params: Vec<String> = callee
+            .as_object()
+            .and_then(|o| o.get("params"))
+            .and_then(|p| p.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|p| p.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let args: Vec<serde_json::Value> = if params.is_empty() {
+            bindings.iter().map(|(_, v)| v.clone()).collect()
+        } else {
+            params
+                .iter()
+                .map(|name| {
+                    bindings
+                        .iter()
+                        .find(|(n, _)| n == name)
+                        .map(|(_, v)| v.clone())
+                        .unwrap_or(serde_json::Value::Null)
+                })
+                .collect()
+        };
+        ctx.try_call_value(callee, &args).unwrap_or_else(|| {
+            Err(OpError::TypeMismatch(
+                "call_value: no value callable set in context".to_string(),
+            ))
+        })
+    } else {
+        let fn_val = require_function_value(callee)?;
+        let vars: Vec<(String, serde_json::Value)> = bindings
+            .iter()
+            .map(|(n, v)| (n.clone(), serde_json::Value::from(v.clone())))
+            .collect();
+        ctx.eval_expr(&fn_val.body, &vars)
     }
 }
 
