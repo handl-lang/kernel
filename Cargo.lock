@@ -217,23 +217,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[patch.unused]]
-name = "handl-kit-data-prelude"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-lang-compile"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-kit-core"
+name = "handl-plugin-lib-lang-run-compiled"
 version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-lib-transform"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-lang-run-compiled"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -250,10 +238,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-lib-obj"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-tar"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -281,19 +265,7 @@ name = "handl-plugin-lib-kv-hashmap"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-fmt"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-url-rfc"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "hnl-engine-exec-cranelift"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-hex"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -333,10 +305,6 @@ name = "handl-lib-ip"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-lib-tag"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "handl-lib-desugar"
 version = "0.1.0"
 
@@ -354,10 +322,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-plugin-lib-kv"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-base64"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -525,14 +489,6 @@ name = "handl-test-utils"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-pkg-vendor"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-json"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "handl-kit-server"
 version = "0.1.0"
 
@@ -569,11 +525,15 @@ name = "handl-lib-loader"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-lib-url-whatwg"
+name = "handl-lib-ffi"
 version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-lib-perlin"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "handl-plugin-lib-lang-eval"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -589,14 +549,6 @@ name = "handl-lib-bytes"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-lib-ffi"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-hello"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "hnl-engine-parse-pratt"
 version = "0.1.0"
 
@@ -609,57 +561,13 @@ name = "hnl-engine-transform-rewrite"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-ffi"
+name = "handl-kit-data-prelude"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-lib-lang-eval"
+name = "handl-plugin-lib-lang-compile"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-kit-arrow-lower"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-kit-data"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-pkg-vendor"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-platform"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-ext-diag"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-ext-fmt"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-ext-lint"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-handl"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-stdlib"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-tag"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-module"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-runtime"
+name = "handl-kit-core"
 version = "0.1.0"
