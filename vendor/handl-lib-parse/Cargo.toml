@@ -3,7 +3,7 @@ name = "handl-lib-parse"
 version = "0.1.0"
 edition = "2024"
 description = "parse: Handl stdlib port + the parser trait (ADR-0128 split)."
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/handl-lang/lib-parse"
 
 # Vendored at lib-parse@57dbb56 — the last rev that shipped the Rust

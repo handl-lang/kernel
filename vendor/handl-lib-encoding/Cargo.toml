@@ -3,7 +3,7 @@ name = "handl-lib-encoding"
 version = "0.1.0"
 edition = "2024"
 description = "encoding: Handl stdlib port + the Encoder/Decoder/Encoding trait (ADR-0128 split)."
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/handl-lang/lib-encoding"
 
 # Vendored at lib-encoding@bfe791e — the last rev that shipped the Rust
