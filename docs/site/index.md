@@ -14,11 +14,13 @@ What is *not* kernel: engines, emitters, kits, plugins and hosts. They live in t
 depend on the kernel, never the reverse.
 
 ## Modules
+- `crates/handl-calculus` — the arrow-calculus IR (`Term`/`TermData`, `Model`/`ModelCtx`)
 - `crates/handl-language` — the `Language` schema + staged lex/parse/eval dispatch signatures
 - `crates/handl-value` — the tagged `Value` representation shared by engines
+- `crates/handl-ops` — the op ABI (`Op`/`OpRegistry`/`OpContext`)
 - `crates/handl-ext` — the shared ABI for dynamic `hnl` extensions (ADR-0149)
-- `crates/defining-handl` — self-hosting infrastructure (ADR-0044 phase 8)
-- `crates/{combinators,handl-calculus,handl-ops,ops,prim,prim-handl,type}` — the calculus, ops, and primitive substrate crates
+- `crates/defining-handl` — the self-hosting corpus (ADR-0044 phase 8)
+- `crates/{ops,prim,prim-handl}` — the remaining `handl-lib-*` substrate packages
 
 
 ## Start here

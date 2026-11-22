@@ -119,7 +119,8 @@ the remaining gaps are enumerated as approximations in
 # The `Term` kernel {#sec-calculus}
 
 `Term` is the arrow-calculus kernel.  It is defined once, in
-`hnl-engine` (`handl-lang/engine`), and re-exported by
+`handl-calculus` (a kernel-workspace crate, split out of the former
+`hnl-engine` foundation), and re-exported by
 `handl-language` (`crates/handl-language/src/term.rs`): a `Term` is
 an engine-agnostic description of *what* to evaluate, not *how*.
 Engines interpret terms; the term itself is pure data — a
@@ -201,7 +202,7 @@ Two further constructors carry the effect layer (Sanada's `op` and
 
 ## Auxiliary constructors — honest accounting
 
-The `Term` enum in `hnl-engine` carries more than the eight forms
+The `Term` enum in `handl-calculus` carries more than the eight forms
 above, and this paper does not pretend otherwise.  The remaining
 variants are data-carrying auxiliaries, not new arrow *formers* —
 they add no new way to build an arrow, they move data the formers
@@ -384,10 +385,13 @@ concatenable:
 Because a `Language` is a value, assembling one is ordinary
 programming: the canonical eval-path fragment set is published as
 YAML data in `kit-prelude-lang`, and `defining-handl`
-(`crates/defining-handl`) goes further — it produces a `Language`
-value describing a subset of the host language itself and evaluates
-it under itself across the eval engines (the Futamura-projection
-sanity check [@futamura1999partial]).
+(`crates/defining-handl`) goes further — it ships the self-hosting
+*corpus*: AST fixtures for the subset of the host language the
+data-driven engines can evaluate. The `Language` value those fixtures
+run under is assembled by `handl-kit-data-prelude`; the corpus is
+evaluated under itself across the eval engines by the integration
+tests in `handl-lang/test` (the Futamura-projection sanity check
+[@futamura1999partial]).
 
 ## Engines dispatch on data
 
@@ -468,7 +472,7 @@ monads [@katsumata2014parametric], Kura's graded algebraic theories
 Orchard–Wadler–Eades [@orchard2020unifying]): sorts are value
 families, grades are capabilities, an operation is a graded arrow
 declaration, a `Term` is a term in the free arrow category over the
-signature, and a model is a `Model` — the trait in `hnl-engine` whose
+signature, and a model is a `Model` — the trait in `handl-calculus` whose
 `run(term, incoming, ctx)` interprets terms and whose
 `rewrite(source, target, witness, ...)` interprets rewrites.
 Dispatch is two-keyed: the *handler* is selected by grade coverage —
@@ -723,12 +727,14 @@ The kernel is `handl-lang/kernel`, a cargo workspace:
 
 | Crate | Contents |
 |---|---|
-| `handl-language` | the `Language` schema, `FragmentSet` merge, the `Ast` arena, `staged` dispatch signatures, `law_inference`, `quantified_laws`, `dynamic_handlers`, `instantiate`, `capabilities`, `token_classes`, `verdict`, `version` — plus the `Term`/`ArrSource`/`RewriteWitness` re-export from `hnl-engine` |
+| `handl-language` | the `Language` schema, `FragmentSet` merge, the `Ast` arena, `staged` dispatch signatures, `law_inference`, `quantified_laws`, `dynamic_handlers`, `instantiate`, `capabilities`, `token_classes`, `verdict`, `version` — plus the `Term`/`ArrSource`/`RewriteWitness` re-export from `handl-calculus` |
 | `handl-value` | `TaggedValue`, `Sym`, `TensorValue`, `ForeignResource`, JSON (`serde_json::Value`) conversions |
 | `handl-ext` | the extension ABI (`ExtensionManifest`, `ExtRequest`, `ExtResponse`, `export!`, discovery/loading) |
-| `handl-defining-handl` | self-hosting infrastructure: a `Language` value describing the language subset, plus the self-hosting corpus |
-| `handl-lib-*` floor-library crates (`handl-lib-bytes`, `handl-lib-cmp`, `handl-lib-combinators`, `handl-lib-error`, `handl-lib-mood`, `handl-lib-obj`, `handl-lib-ops`, `handl-lib-prim`, `handl-lib-prim-handl`, `handl-lib-type`) | substrate packages providing the base op/grade tables; they are kernel-workspace crates but depend on `handl-platform` and `handl-plugin-lib-handl` from `handl-lang/host` |
-| `hnl-engine` (dep, `handl-lang/engine`) | `Term`, `TermData`, `Model`, `ModelData`, `ModelCtx`, `CompositeModel`, `AstView`/`LanguageView` |
+| `handl-defining-handl` | self-hosting infrastructure: the self-hosting corpus (AST fixtures for the evaluable language subset); the `Language` value is assembled by `handl-kit-data-prelude` and the corpus is exercised by the `handl-lang/test` repo |
+| `handl-calculus` | the arrow-calculus IR (`Term`/`TermData`) and the pluggable model seam, split out of the former `hnl-engine` foundation |
+| `handl-ops` | the op ABI — `Op`/`OpRegistry`/`OpContext`, the registration surface native Handl operations implement |
+| `handl-lib-*` floor-library crates still in the workspace (`handl-lib-ops`, `handl-lib-prim`, `handl-lib-prim-handl`) | substrate packages providing the base op/grade tables; the remaining `handl-lib-*` packages (`bytes`, `cmp`, `combinators`, `error`, `mood`, `obj`, `type`) moved to their own `lib-*` repos |
+| `hnl-engine` (former dep, `handl-lang/engine`) | the `Term`/`Model` foundation types now live in-workspace in `handl-calculus`; the engine repo keeps the interpreters |
 
 : Kernel workspace map. {#tbl-crates}
 
