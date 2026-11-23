@@ -167,9 +167,11 @@ pub struct TokenStep {
     /// The token kinds this step accepts (one-of). The first listed kind is
     /// used in error messages.
     pub kinds: Vec<String>,
-    /// When set, the matched token's text is stored in the node's payload
-    /// under this key (e.g. `alias`). When `None`, the token is consumed
-    /// but not stored (e.g. a required keyword).
+    /// When set, the matched token's interpreted literal value is stored
+    /// in the node's payload under this key (e.g. `alias`, `path`) —
+    /// string kinds contribute their unquoted contents, `Raw` kinds their
+    /// text. When `None`, the token is consumed but not stored (e.g. a
+    /// required keyword).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     /// When true, the step is skipped if the next token does not match any
@@ -187,6 +189,15 @@ pub struct TokenStep {
     /// identifier as the alias.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub requires_prev_match: bool,
+    /// When true, the step matches only when the next token sits on the
+    /// same line as the last consumed token — a line break (a `layout`
+    /// token or trivia containing `\n`) between them ends the tail, so a
+    /// following statement's leading keyword is never absorbed. This is
+    /// the [`GrammarRow::same_line`] counterpart for tail forms, e.g.
+    /// `import <name> from "<path>"` where a newline before `from` means
+    /// the `from` opens a new `from "…" import …` statement instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub same_line: bool,
     /// When set, the matched token is the opening delimiter of a
     /// delimited block that is parsed and converted into the field value.
     /// The token text itself is not stored; instead the block's elements
