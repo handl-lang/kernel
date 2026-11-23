@@ -187,7 +187,7 @@ fn pass_opt(td: &TermData, field: &str) -> (Option<TermData>, bool) {
 ///
 /// Recurses into every child scheme of every variant: `Seq` (fst, snd),
 /// `First` (inner), `Choice` (l, r), `Loop` (body), `App` (callee + args),
-/// `Arr` (args), `Handle` (body, impl_). Then applies root rewrites to
+/// `Arr` (args), `Handle` (body, impl_, acc). Then applies root rewrites to
 /// fixpoint so a cascade like `Seq(First(id), First(id)) -> First(Seq(id,
 /// id)) -> First(id) -> id` completes within a single pass.
 fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
@@ -261,7 +261,13 @@ fn rewrite_pass_td(td: &TermData) -> (TermData, bool) {
         "Handle" => {
             let (b2, cb) = pass_req(td, "body");
             let (i2, ci) = pass_req(td, "impl_");
-            (with_children(td, &[("body", b2), ("impl_", i2)]), cb || ci)
+            // `acc` is the optional accumulator child (absent/null → none).
+            let (a2, ca) = pass_opt(td, "acc");
+            let mut children = vec![("body", b2), ("impl_", i2)];
+            if let Some(a) = a2 {
+                children.push(("acc", a));
+            }
+            (with_children(td, &children), cb || ci || ca)
         }
         "Rewrite" => {
             let (s2, cs) = pass_req(td, "source");
@@ -489,7 +495,11 @@ fn uses_first_td(td: &TermData) -> bool {
         }
         "Choice" => child_uses_first(td, "l") || child_uses_first(td, "r"),
         "Loop" => child_uses_first(td, "body"),
-        "Handle" => child_uses_first(td, "body") || child_uses_first(td, "impl_"),
+        "Handle" => {
+            child_uses_first(td, "body")
+                || child_uses_first(td, "impl_")
+                || child_uses_first(td, "acc")
+        }
         "Rewrite" => child_uses_first(td, "source") || child_uses_first(td, "target"),
         "Iter" => {
             child_uses_first(td, "fuel")

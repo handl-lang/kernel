@@ -438,12 +438,28 @@ impl TermData {
     }
 
     /// Construct a `Handle` (handler management).
+    ///
+    /// Emits `"acc": null` — records written before the `acc` role decode
+    /// identically (`null`/absent both mean no accumulator).
     pub fn handle(body: TermData, target: impl Into<String>, impl_: TermData) -> Self {
+        Self::handle_acc(body, target, impl_, None)
+    }
+
+    /// Construct a `Handle` carrying a handler accumulator — the `acc`
+    /// child role of `ast.handle`. `acc` is `null` in the record when
+    /// `None`, mirroring `lit`/`attrs` on `Op` records.
+    pub fn handle_acc(
+        body: TermData,
+        target: impl Into<String>,
+        impl_: TermData,
+        acc: Option<TermData>,
+    ) -> Self {
         TermData(json!({
             "__tag__": "Handle",
             "body": body.0,
             "target": target.into(),
-            "impl_": impl_.0
+            "impl_": impl_.0,
+            "acc": acc.map(|a| a.0).unwrap_or(Value::Null)
         }))
     }
 
@@ -679,11 +695,16 @@ fn term_to_value(term: &Term) -> Value {
             body,
             target,
             impl_,
+            acc,
         } => json!({
             "__tag__": "Handle",
             "body": term_to_value(body),
             "target": target,
-            "impl_": term_to_value(impl_)
+            "impl_": term_to_value(impl_),
+            "acc": acc
+                .as_ref()
+                .map(|a| term_to_value(a))
+                .unwrap_or(Value::Null)
         }),
         Term::Rewrite {
             source,
@@ -814,6 +835,10 @@ fn value_to_term(value: &Value) -> Result<Term, String> {
             body: Box::new(field_term(value, "body")?),
             target: field_str(value, "target")?.to_string(),
             impl_: Box::new(field_term(value, "impl_")?),
+            acc: match value.get("acc") {
+                Some(Value::Null) | None => None,
+                Some(v) => Some(Box::new(value_to_term(v)?)),
+            },
         }),
         "Rewrite" => Ok(Term::Rewrite {
             source: Box::new(field_term(value, "source")?),
@@ -1056,6 +1081,7 @@ mod tests {
                     body: boxed(c(1)),
                     target: "io".into(),
                     impl_: boxed(c(2)),
+                    acc: None,
                 },
             ),
             (
@@ -1123,6 +1149,38 @@ mod tests {
                 .to_term()
                 .unwrap_or_else(|e| panic!("{name}: to_term failed: {e}"));
             assert_eq!(back, term, "{name} did not round-trip through TermData");
+        }
+    }
+
+    #[test]
+    fn handle_acc_round_trips_and_legacy_records_decode() {
+        // An `acc` child round-trips through the tagged-record form.
+        let with_acc = Term::handle_acc(c(1), "io", c(2), c(0));
+        let data = TermData::from_term(&with_acc);
+        assert_eq!(data.tag(), "Handle");
+        assert!(data.get("acc").is_some_and(|v| !v.is_null()));
+        assert_eq!(data.to_term().unwrap(), with_acc);
+
+        // A record written before the `acc` role (no `acc` key) decodes
+        // with `acc = None`, and `acc: null` decodes the same way.
+        let legacy = TermData(json!({
+            "__tag__": "Handle",
+            "body": { "__tag__": "Const", "value": 1 },
+            "target": "io",
+            "impl_": { "__tag__": "Const", "value": 2 }
+        }));
+        match legacy.to_term().unwrap() {
+            Term::Handle { acc, .. } => assert!(acc.is_none()),
+            other => panic!("expected Handle, got {other:?}"),
+        }
+        let null_acc = TermData::handle(
+            TermData::const_value(1),
+            "io",
+            TermData::const_value(2),
+        );
+        match null_acc.to_term().unwrap() {
+            Term::Handle { acc, .. } => assert!(acc.is_none()),
+            other => panic!("expected Handle, got {other:?}"),
         }
     }
 

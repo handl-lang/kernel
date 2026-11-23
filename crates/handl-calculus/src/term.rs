@@ -154,6 +154,13 @@ pub enum Term {
         target: String,
         /// The handler implementation.
         impl_: Box<Term>,
+        /// Optional handler accumulator — the `acc` child role of
+        /// `ast.handle` (data/ast.yaml). `None` for the accumulator-free
+        /// form; old serialized payloads (no `acc` key) decode as `None`
+        /// and `None` is skipped on serialize, keeping the pre-`acc`
+        /// shape byte-identical.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        acc: Option<Box<Term>>,
     },
 
     /// `rewrite source ~> target` — a scheme rewrite step.
@@ -686,6 +693,18 @@ impl Term {
             body: Box::new(body),
             target: target.into(),
             impl_: Box::new(impl_),
+            acc: None,
+        }
+    }
+
+    /// Construct a `handle body with target = impl_` node carrying a
+    /// handler accumulator — the `acc` role of `ast.handle`.
+    pub fn handle_acc(body: Term, target: impl Into<String>, impl_: Term, acc: Term) -> Self {
+        Term::Handle {
+            body: Box::new(body),
+            target: target.into(),
+            impl_: Box::new(impl_),
+            acc: Some(Box::new(acc)),
         }
     }
 
@@ -751,10 +770,12 @@ impl Term {
                 body,
                 target,
                 impl_,
+                acc,
             } => Term::Handle {
                 body: Box::new(body.desugar()),
                 target: target.clone(),
                 impl_: Box::new(impl_.desugar()),
+                acc: acc.as_ref().map(|a| Box::new(a.desugar())),
             },
             Term::Rewrite {
                 source,
@@ -865,6 +886,7 @@ impl Term {
                 body,
                 target,
                 impl_,
+                ..
             } => {
                 let elim_body = body.eliminate_handlers();
                 let elim_impl = impl_.eliminate_handlers();
@@ -999,10 +1021,14 @@ fn substitute_capability(scheme: &Term, target: &str, impl_: &Term) -> Term {
             body,
             target: t,
             impl_: i,
+            acc,
         } => Term::Handle {
             body: Box::new(substitute_capability(body, target, impl_)),
             target: t.clone(),
             impl_: Box::new(substitute_capability(i, target, impl_)),
+            acc: acc
+                .as_ref()
+                .map(|a| Box::new(substitute_capability(a, target, impl_))),
         },
         Term::Rewrite {
             source,
@@ -1090,5 +1116,25 @@ mod tests {
         let j3 = serde_json::to_string(&t3).unwrap();
         let back3: Term = serde_json::from_str(&j3).unwrap();
         assert_eq!(t3, back3);
+    }
+
+    #[test]
+    fn handle_acc_serde_contract() {
+        // `acc: None` serializes byte-identically to the pre-acc shape,
+        // and old JSON (no `acc` key) parses with `acc = None`.
+        let t = Term::handle(Term::constant(1), "io", Term::constant(2));
+        let j = serde_json::to_string(&t).unwrap();
+        assert!(!j.contains("acc"), "None acc must not serialize: {j}");
+        let old =
+            r#"{"Handle":{"body":{"Const":{"value":1}},"target":"io","impl_":{"Const":{"value":2}}}}"#;
+        let back: Term = serde_json::from_str(old).unwrap();
+        assert_eq!(t, back);
+        assert!(matches!(back, Term::Handle { acc: None, .. }));
+
+        // An accumulator round-trips.
+        let t2 = Term::handle_acc(Term::constant(1), "io", Term::constant(2), Term::constant(0));
+        let j2 = serde_json::to_string(&t2).unwrap();
+        let back2: Term = serde_json::from_str(&j2).unwrap();
+        assert_eq!(t2, back2);
     }
 }

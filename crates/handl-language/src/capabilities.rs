@@ -87,6 +87,12 @@ fn collect_foreign_td(td: &TermData, out: &mut BTreeSet<String>) {
             let impl_ = td.get_term("impl_").expect("Handle: missing impl_");
             collect_foreign_td(&body, out);
             collect_foreign_td(&impl_, out);
+            // `acc` is the optional accumulator child (absent/null → none).
+            if let Some(acc) = td.get_term("acc") {
+                if !acc.as_value().is_null() {
+                    collect_foreign_td(&acc, out);
+                }
+            }
         }
         "Rewrite" => {
             let source = td.get_term("source").expect("Rewrite: missing source");
