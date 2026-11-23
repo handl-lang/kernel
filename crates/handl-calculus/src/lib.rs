@@ -9,7 +9,7 @@
 //! ([`LanguageView`], [`AstView`]) plus the [`Model`] / [`ModelData`]
 //! dispatch surface ([`CompositeModel`], [`CompositeDataModel`],
 //! [`ModelDataAdapter`]). Interpreters and rewrite engines (tree-walk,
-//! NBE, bytecode, cranelift) stay in `hnl-engine` and the engine-*
+//! NBE, bytecode, cranelift) stay in `hnl-engine` and the `tool-*`/`exec-*`
 //! crates; they consume this IR.
 
 pub mod term;

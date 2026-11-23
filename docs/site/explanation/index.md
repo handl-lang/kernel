@@ -10,7 +10,7 @@ dependency arrows all point downwards.
 
 ## Where it sits
 
-This crate is the substrate layer under the `engine-*`, `kit-*` and `host-*`
+This crate is the substrate layer under the `engine-*`/`tool-*`/`exec-*`, `kit-*` and `host-*`
 families. Engines, kits and hosts reach it through the kit's operation slot, so
 the engine can be swapped without touching a language definition.
 

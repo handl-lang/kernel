@@ -761,10 +761,10 @@ condensed from the working draft [@handl2026kernelpoc]:
   0-boundaries (objects) are not part of the value model, so
   $\circ_0$ is unchecked horizontal composition.
 - The axis slot is an expression position, not a literal-only slot:
-  the tree-walk engine (`hnl-engine-exec-tree-walk`) evaluates a
+  the tree-walk engine (`hnl-exec-tree-walk`) evaluates a
   non-literal axis term against the incoming value and errors if the
   result is not a natural number; the bytecode engine
-  (`hnl-engine-exec-bytecode`) rejects a dynamic axis on 1-cell
+  (`hnl-exec-bytecode`) rejects a dynamic axis on 1-cell
   operands at compile time, because it could resolve to `>>>` —
   sequential composition — which is not expressible as value-level
   composition.

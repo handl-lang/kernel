@@ -10,7 +10,7 @@ data), the tagged `Value` representation the engines share, and the dynamic exte
 ABI (`hnl` extensions, ADR-0149). Libraries live in their own `lib-*` repos.
 
 What is *not* kernel: engines, emitters, kits, plugins and hosts. They live in the
-`engine-*`/`compile-*`/`sdkgen-*`, `kit-*`, `ext-*` and `host`/`host-*` repos and
+`engine-*`/`tool-*`/`exec-*`, `kit-*`, `ext-*` and `host`/`host-*` repos and
 depend on the kernel, never the reverse.
 
 ## Modules

@@ -39,7 +39,7 @@ export RUST_TEST_THREADS="$JOBS"
 
 # ---------------------------------------------------------------------------
 # Layout plumbing — the committed [patch] tables are relative paths
-# (../engine-*, ../host, ../kit-*, ../lib-*), and sibling manifests reach
+# (../engine-*/tool-*/exec-*, ../host, ../kit-*, ../lib-*), and sibling manifests reach
 # this repo transitively as ../kernel (e.g. a lib crate's
 # `../../../kernel/crates/handl-value`). In a detached worktree recreate
 # the sibling layout in the worktree's parent: ../kernel -> this worktree

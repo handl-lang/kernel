@@ -69,7 +69,7 @@ pub use load::{DirScan, LoadFailure, LoadedExtension, is_extension_file, load_di
 
 /// A command an extension declares in its manifest.
 ///
-/// Multi-word surfaces (`compile js`, `sdkgen c`) stay the extension's own
+/// Multi-word surfaces (`compile js`, `codegen c`) stay the extension's own
 /// problem: the manifest declares the *first* word (`compile`), the rest
 /// arrives in [`ExtRequest::args`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

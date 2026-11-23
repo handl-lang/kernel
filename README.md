@@ -24,7 +24,7 @@ host primitives live in `handl-lang/host`.
   own `lib-*` repos.
 
 Engines, emitters, kits, plugins, and hosts are **not** kernel — they live in
-the sibling `engine-*`/`compile-*`/`sdkgen-*`, `kit-*`, `ext-*` and `host-*`
+the sibling `engine-*`/`tool-*`/`exec-*`, `kit-*`, `ext-*` and `host-*`
 repos. The workspace is self-contained: member crates resolve each
 other through the root `[patch]` table, so downstream repos can pin the
 substrate without pulling the host or engine repos.
