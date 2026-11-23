@@ -249,7 +249,7 @@ name = "handl-lib-transform"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-lex-pattern"
+name = "hnl-tool-lex-pattern"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -277,7 +277,7 @@ name = "handl-plugin-lib-otlp-std"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-lint"
+name = "hnl-tool-lint"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -309,11 +309,11 @@ name = "handl-kit-test"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-test"
+name = "hnl-tool-test"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-exec-cranelift"
+name = "hnl-exec-cranelift"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -361,7 +361,7 @@ name = "handl-lib-serialize"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-parse"
+name = "hnl-tool-parse"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -389,15 +389,15 @@ name = "handl-plugin-compile-term"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-exec-bytecode"
+name = "hnl-exec-bytecode"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-exec"
+name = "hnl-exec"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-typecheck"
+name = "hnl-tool-typecheck"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -573,7 +573,7 @@ name = "handl-kit-server"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-lex"
+name = "hnl-tool-lex"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -597,7 +597,7 @@ name = "handl-plugin-lib-otlp-c"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-exec-tree-walk"
+name = "hnl-exec-tree-walk"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -613,11 +613,11 @@ name = "handl-kit-prelude-lang"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-typecheck-nbe"
+name = "hnl-tool-typecheck-nbe"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-exec-cranelift"
+name = "hnl-exec-cranelift"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -629,15 +629,15 @@ name = "handl-plugin-lib-lang-eval"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-parse-pratt"
+name = "hnl-tool-parse-pratt"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-transform"
+name = "hnl-tool-transform"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "hnl-engine-transform-rewrite"
+name = "hnl-tool-transform-rewrite"
 version = "0.1.0"
 
 [[patch.unused]]
