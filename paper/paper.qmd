@@ -757,6 +757,71 @@ The kernel's power is what it excludes.  Explicitly:
   crosses the boundary opaquely; capability tracking is platform
   policy, not kernel semantics.
 
+# Equality as interval data {#sec-equality}
+
+The kernel itself carries no equality former — `types` is a fragment
+set of `synth`/`check` `Term`s and what counts as a type is a
+`Model` choice (@sec-not).  Equality lives one level up, in the
+`Language` data and the checkers that consume it, and the canonical
+type theory's equality fragment is now cubical — the
+Cohen–Coquand–Huber–Mörtberg construction
+[@cohen2016cubicaltt; @coquand2018hitt] under Huber's cubical-set
+model [@huber2016cubical], with `PathP`/`Glue`/computing univalence
+in the reading of the Univalent Foundations programme
+[@hottbook2013].  This is a migration, not a greenfield design: the
+surface fragment was intensional MLTT, and the legacy forms survive
+only where the migration has not yet reached (@sec-status notes).
+
+The foundation is the *interval sort* `I` (`type.interval` in the
+checker), with endpoint constants `i0`/`i1` and dimension variables,
+and a face lattice `Φ` of constraints — `i = 0`, `i = 1`, `~i`,
+`i ∨ j`, `i ∧ j`, and the constants `0`/`1` — that name the
+sub-cubes on which an open box is already determined.  Paths are
+then ordinary functions out of the interval:
+
+$$
+\mathsf{Path}\,A\,x\,y \;:=\; (i : I) \to A,
+\qquad
+\mathsf{PathP}\,A\,x\,y \;:=\; (i : I) \to A\,i
+$$
+
+for `A : I → Type`, so `Path` is the constant-family special case of
+`PathP` — the homogeneous/heterogeneous pair of cubical TT.  Both are
+`type.pi` nodes whose parameter is `type.interval` and whose `path`
+payload records the endpoints `x`/`y`; `refl x := λ i. x` is a
+one-line term, not a former.  Path algebra is a small closed set of
+operations on open boxes — `transp` (transport in a family
+`A : I → Type` along a dimension, backward from `i1` to `i0` in the
+Cubical-Agda convention), `hcomp` (homogeneous composition filling an
+open box under a face constraint), `comp`, and the derived
+`trans`/`sym` — checked in `typecheck_model.hnl`, with the Rust NBE
+checker (`tool-typecheck-nbe`) tracking the migration phase-by-phase.
+
+`Glue A φ T̂` is the type former that makes univalence compute:
+`type.glue` records the family, the face `φ`, and the partial section
+`T̂`, with `unglue` the projection and `isFibrant`/`fibrant` the
+structural fibrancy verdict (`type.fibrant`).  The univalence map is
+a derived former, not an axiom: `ua : (A ≃ B) → Path A B` is defined
+through `Glue`, so `transp (ua e)` *applies* the recorded equivalence
+`e` — including along dependent families, where the transport reads
+the `Glue` family through `fam_at_`.  In the HoTT-book reading
+[@hottbook2013] univalence is postulated; here $transp\,(ua\,e)
+\equiv e$ holds judgmentally, which is the whole point of the cubical route
+[@cohen2016cubicaltt].
+
+Three honest boundaries mark the current state.  First, `j` remains
+a primitive eliminator (`synth_j`) pending demotion to a derived
+`PathP` eliminator — `J` and computational univalence are different
+foundations, and the primitive is transitional scaffolding, not the
+destination.  Second, index-equality witnesses — the `eq_*` records
+that refine a match scrutinee's index per arm — are still
+`Path{frm,to}` records checked by substitution-based transport
+(`p # v` via `subst_index_`); cubical paths are type-level, and the
+index layer has not yet been re-grounded on `PathP`/`transp`.  Third,
+the approximations are named, not hidden: `Glue` partial-section
+checking is conservative rather than complete, and fibrancy of
+`Type` itself — universe resizing — is not addressed.
+
 # Implementation status {#sec-status}
 
 The kernel is `handl-lang/kernel`, a cargo workspace:
@@ -908,13 +973,18 @@ the unified dimension slot) [@handl2026adrs].
 - **Self-hosting is mechanism, not completion** — a subset corpus,
   not the whole surface language (@sec-status).
 
-On equality foundations, stated plainly: the current implementation
-is intensional MLTT — `Path` is the identity type with `J` — while
-`univalence`, `glue`, and `fibrant` are reserved surface forms whose
-cubical semantics (computing univalence via `Glue`/`transp`/`hcomp`)
-is the migration target.  `J` and computational univalence are
-different foundations; cubical is planned, not present, and this
-note will expand when it lands.
+On equality foundations (@sec-equality): the cubical layer —
+interval, `Path`/`PathP`, `transp`/`hcomp`/`comp`, `Glue`, and
+computing univalence — is the implemented foundation in the canonical
+`.hnl` checker, with the Rust NBE port tracking phase-by-phase.  What
+remains intensional is
+transitional: `j` is still a primitive eliminator pending demotion to
+a derived `PathP` eliminator; the `eq_*` index witnesses behind match
+refinement are still `Path{frm,to}` records with substitution-based
+transport; `Glue` partial-section checking is approximate; and
+fibrancy of `Type`/universe resizing is unaddressed.  `J` and
+computational univalence remain different foundations — the primitive
+`J` survives only as scaffolding the migration will remove.
 
 The claim that survives these limitations is the one this paper set
 out to check: computation and reasoning about computation — programs,
