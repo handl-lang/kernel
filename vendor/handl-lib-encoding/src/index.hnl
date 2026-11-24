@@ -20,9 +20,9 @@
 --- encoding.decode -- decode a value into a value using a named codec.
 cap "encoding.encode"
 cap "encoding.decode"
-op "encoding.encode" : (Value * Value) -> String
+op "encoding.encode" : (Value * Value) ~> String
   guarantee: True
-op "encoding.decode" : (Value * Value) -> Value
+op "encoding.decode" : (Value * Value) ~> Value
   guarantee: True
 handle "encoding.encode" with encode
 handle "encoding.decode" with decode

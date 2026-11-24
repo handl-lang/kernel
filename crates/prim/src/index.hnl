@@ -9,17 +9,17 @@
 
 --- prim.add -- integer addition.
 cap "prim.add"
-op "prim.add" : (Int * Int) -> Int
+op "prim.add" : (Int * Int) ~> Int
   guarantee: True
 --- prim.compare -- total ordering, returns -1/0/1.
 cap "prim.compare"
-op "prim.compare" : (a * b) -> Int
+op "prim.compare" : (a * b) ~> Int
   guarantee: Le(output, 1)
 --- prim.alloc -- allocate an empty list.
 cap "prim.alloc"
-op "prim.alloc" : Int -> List a
+op "prim.alloc" : Int ~> List a
   guarantee: LengthEq(output, 0)
 --- prim.or -- bitwise OR on integers (pure handl over `math.bit_or`).
 cap "prim.or"
-op "prim.or" : (Int * Int) -> Int
+op "prim.or" : (Int * Int) ~> Int
   guarantee: True

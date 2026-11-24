@@ -18,7 +18,7 @@
 --- ## Capability declarations (ADR-0077 Phase 4)
 --- parse.parse -- parse a string into a value using a named parser.
 cap "parse.parse"
-op "parse.parse" : (String * Value) -> Value
+op "parse.parse" : (String * Value) ~> Value
   guarantee: True
 handle "parse.parse" with parse
 
