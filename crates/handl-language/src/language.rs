@@ -353,7 +353,7 @@ impl Language {
         self.token_kind(kind).and_then(|d| d.doc.as_deref())
     }
 
-    /// Resolve a surface-syntax `label` (e.g. `"."`, `"::"`) to the id of the
+    /// Resolve a surface-syntax `label` (e.g. `"."`, `":="`) to the id of the
     /// token kind that declares it. Lets tooling ask "which kind is the
     /// member-access token?" without hardcoding canonical kind ids — a
     /// language that spells member access differently still answers.

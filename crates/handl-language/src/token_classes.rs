@@ -154,7 +154,7 @@ impl TokenClasses {
         self.pairs.get(kind).map(String::as_str)
     }
 
-    /// Resolve a surface-syntax `label` (e.g. `"."`, `"::"`) to the kind id
+    /// Resolve a surface-syntax `label` (e.g. `"."`, `":="`) to the kind id
     /// that declares it — the data-driven answer to "is this the dot token?".
     pub fn kind_for_label(&self, label: &str) -> Option<&str> {
         self.labels.get(label).map(String::as_str)
@@ -232,7 +232,7 @@ pub fn is_doc_comment_kind(kind: &str) -> bool {
 pub fn is_operator_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "token.bind"
+        "token.colon_equal"
             | "token.equal"
             | "token.plus"
             | "token.minus"
