@@ -64,9 +64,10 @@ The handl platform inverts that pressure twice, at two different
 levels, and the inversion is the subject of this paper:
 
 1. **The calculus is closed.**  Everything that executes is a `Term`
-   in a six-combinator arrow calculus — Hughes' arrows
-   [@hughes2000arrows] in the Lindley–Wadler–Yallop formulation
-   [@lindley2010arrow], extended with operations and handlers in
+   in a six-combinator arrow calculus — Hughes' arrow interface
+   extended by Paterson's `loop` [@hughes2000arrows;
+   @paterson2001arrows] in the Lindley–Wadler–Yallop formulation
+   [@lindley2010arrow], with operations and handlers added in
    Sanada's style [@sanada2024arrows].  New language features do not
    add new combinators; they are expressed as combinations,
    desugarings, or normalisations of the existing set.
@@ -78,9 +79,10 @@ levels, and the inversion is the subject of this paper:
    language construct is a data change; adding a calculus combinator
    is an engine edit; the two almost never happen together.
 
-Together these give a graded algebraic theory in the sense of
-Plotkin–Power [@plotkin2003algebraic], Katsumata
-[@katsumata2014parametric], and Kura [@kura2020graded]: a `Language`
+Together these give a graded algebraic theory — graded by the free
+commutative monoid of effect rows — in the sense of Plotkin–Power
+[@plotkin2003algebraic], Katsumata [@katsumata2014parametric], and
+Kura [@kura2020graded]: a `Language`
 is a signature, a `Term` is a term in the free arrow category over
 that signature, and an execution engine is a *model* of the theory —
 the Lindenbaum–Tarski reading in which syntax is data and semantics
@@ -143,15 +145,19 @@ terms target, and engines declare which versions they support.
 : The closed combinator set. {#tbl-combinators}
 
 These are the only arrow formers the kernel knows about.  With `op`
-and `handle` (@sec-gmsac) they are the classical six combinators of
-Hughes' arrow interface — a set that spans four typeclasses:
-`arr`/`>>>` give a category (`Arrow`), `first` gives product
-structure, `choice` sum routing (`ArrowChoice`), `loop` a trace
+and `handle` (@sec-gmsac) they span the typeclass vocabulary of
+Hughes' arrow interface extended by Paterson's `loop`: `arr`/`>>>`
+give a category (`Arrow`), `first` gives product structure,
+`choice` sum routing (`ArrowChoice`), `loop` a trace
 (`ArrowLoop`), and `app` closedness — the `ArrowApply` exponential
 that recovers monadic power, `ArrowApply` $\cong$ `Monad`
-[@hughes2000arrows], with the equational correspondence carried out
-in the arrow calculus itself by Lindley–Wadler–Yallop
-[@lindley2010arrow].
+[@hughes2000arrows].  Hughes' hierarchy covers `arr`, `>>>`, `first`,
+`choice`, and `app` (`Arrow`, `ArrowChoice`, `ArrowApply`); the trace
+combinator is Paterson's `ArrowLoop` contribution
+[@paterson2001arrows], and the Lindley–Wadler–Yallop calculus
+[@lindley2010arrow] spells out the equational laws of the
+`arr`/`>>>`/`first`/`app` fragment — `loop` is not part of that
+calculus.
 
 The typing rules, at the theory level, are the usual ones.  Writing
 $f : A \to B$ for a pure function and $a : A \rightsquigarrow B$ for
@@ -179,9 +185,25 @@ $$
 \mathrm{app} : (A \rightsquigarrow B) \times A \rightsquigarrow B
 $$
 
+The `loop` row is Paterson's `ArrowLoop.loop`
+[@paterson2001arrows]; categorically it is the trace of traced
+monoidal categories [@joyal1996traced].  A caveat worth stating: a
+trace is feedback, and the guarded-iteration idioms the surface
+encodes through it — the `{state}`/`{out}` early-exit protocol and
+`fold_step`'s left/right — are *iteration*, which is encodable as a
+trace only by folding termination into the state.  Whether `Loop`
+satisfies the trace axioms is itself part of the open coherence
+question (see Limitations and open questions).
+
 Every surface construct in every language on the platform lowers to
-combinations of these six — by an eval scheme declared in `Language`
-data (@sec-language), not by a case in an engine.
+combinations of these six *plus* requests through the open op
+registry — by an eval scheme declared in `Language` data
+(@sec-language), not by a case in an engine.  Constructs that would
+tempt a seventh combinator — `while`, `for`, `do-while`, `rec`,
+`return` — instead lower to `Native`-source `Op` requests
+(`eval_rec`, `eval_block`, `loop_step`, `fold_step`) in that
+registry: the kernel carries them as requests, which is exactly the
+`Op`/`Handle` design of @sec-gmsac.
 
 ## The effect pair: `Op` and `Handle`
 
@@ -454,6 +476,12 @@ empty row; an `Op` adds a grade; installing a handler removes one.
 Quotienting the multiset to a set gives the usual effect-row
 subtyping of Bauer–Pretnar [@bauer2014effect], restated in arrow
 terms: `A ~[(Query)]~> B` sits under `A ~[(Query, Clock)]~> B`.
+The grade structure is therefore the free commutative monoid on
+grade names under multiset union — an *effect-row* grading, not
+Sanada's category-graded theories [@sanada2023cateff], in which
+grades compose as morphisms of a grading category.  Multiplicity is
+reserved but currently unobserved: no subtyping rule distinguishes
+`~[(Query, Query)]~>` from `~[(Query)]~>`.
 
 The grade row is not decoration on top of the calculus: it *is* the
 `dim` slot (@sec-slots).  The unified slot is the kernel's answer to
@@ -467,9 +495,11 @@ boundary — a registry key, never a dimension.
 
 In the graded-algebraic-theory reading (Katsumata's parametric effect
 monads [@katsumata2014parametric], Kura's graded algebraic theories
-[@kura2020graded], Sanada's category-graded theories
-[@sanada2023cateff], and the category-graded monad unification of
-Orchard–Wadler–Eades [@orchard2020unifying]): sorts are value
+[@kura2020graded]; adjacent work in which grades are *category*
+morphisms rather than a free commutative monoid includes Sanada's
+category-graded theories [@sanada2023cateff] and the category-graded
+monad unification of Orchard–Wadler–Eades [@orchard2020unifying]):
+sorts are value
 families, grades are capabilities, an operation is a graded arrow
 declaration, a `Term` is a term in the free arrow category over the
 signature, and a model is a `Model` — the trait in `handl-calculus` whose
@@ -553,13 +583,19 @@ declared-dimension-2 scheme are 2-cells, so $k \geq 2$ is a
 dimension error there — an implementation boundary, stated honestly,
 not a metatheorem.
 
-The resulting structure is a *weak globular* presentation: higher
-laws are genuine higher cells (proof-relevant), not strict
-equalities, with the strict fragment kept as a fast path (below).
-Cubical Kan structure is deliberately deferred — it would arrive as
-a cube-diagram fragment over the same `Term`s, not a rewrite of the
-directed calculus.  For the $n$-categorical background see Leinster's
-survey [@leinster2002ncat].
+The resulting structure is best described as a *strict globular*
+$\omega$-graph whose laws are weak: $\circ_k$ (`>>>[k]`) is a total
+binary operation with boundary checks — the strict
+$\omega$-category presentation of Street's orientals
+[@street1987orientals] — while the laws are inhabited higher cells
+(proof-relevant), not strict equalities, with the strict fragment
+kept as a fast path (below).  Whether the inhabited cells satisfy
+the full weak $\omega$-category axioms is part of the open
+coherence question; the weak-$n$-categorical background is Batanin's
+globular operads [@batanin1998globular] and Leinster's survey
+[@leinster2002ncat].  Cubical Kan structure is deliberately deferred —
+it would arrive as a cube-diagram fragment over the same `Term`s,
+not a rewrite of the directed calculus.
 
 ## Laws are 2-morphisms — and therefore data
 
@@ -779,9 +815,17 @@ condensed from the working draft [@handl2026kernelpoc]:
 # Related work
 
 **Arrows.**  Hughes introduced arrows as a generalisation of monads
-[@hughes2000arrows]; Lindley, Wadler, and Yallop gave the arrow
-calculus its minimal form and the idiom/arrow/monad correspondence
-[@lindley2010arrow; @lindley2011idioms].  Our `Term` is that calculus
+[@hughes2000arrows]; Paterson extended the interface with the
+`loop`/`ArrowLoop` trace [@paterson2001arrows]; Lindley, Wadler,
+and Yallop gave the arrow calculus its minimal form and the
+idiom/arrow/monad correspondence [@lindley2010arrow;
+@lindley2011idioms].  Denotationally, arrows are Freyd categories:
+Jacobs, Heunen, and Hasuo give the Eilenberg–Moore and Kleisli
+semantics [@jacobs2009arrows], on the premonoidal foundation of
+Power and Robinson [@power1997premonoidal] and the closed
+$\kappa$-categories of Power and Thielecke [@power1999kappa], with
+Levy's call-by-push-value discipline [@levy2003cbpv] the
+value/computation reading underneath.  Our `Term` is that calculus
 realised as *data* — serializable, dispatched on, rewritten — rather
 than as a language's type class.
 
@@ -821,7 +865,8 @@ laws-as-data is load-bearing — the org's `eqsat` substrate realises
 the same cells-as-data pattern in stdlib-only Python, importing none
 of these crates [@eqsat2026substrate].  The higher-categorical
 backdrop for the dimension story is standard
-[@leinster2002ncat]; the Futamura reading of language-as-data is
+[@leinster2002ncat; @batanin1998globular; @street1987orientals];
+the Futamura reading of language-as-data is
 Futamura's [@futamura1999partial].
 
 **Within the org.**  The research prototype (`host/research/arrow-
@@ -851,11 +896,25 @@ the unified dimension slot) [@handl2026adrs].
   indexed by higher cells and dependent elimination (refining a
   scrutinee's index per match arm) need an equality type the kernel
   deliberately does not carry.
+- **Effects have two representations.**  `IO<sig>` signature records
+  and grade rows `~[names]~>` encode the same effect structure at two
+  levels; their correspondence is enforced checker-side under type
+  erasure, not by a kernel-level isomorphism.
+- **Universe discipline is unguarded.**  Universe stratification and
+  cumulativity are currently unchecked — an open item, not a design.
 - **The operational semantics' dimensional lift is partial.**  `Op`/
   `Handle` ride the unified dimension slot, but how Sanada's
   semantics lift through arbitrary dimensions is open.
 - **Self-hosting is mechanism, not completion** — a subset corpus,
   not the whole surface language (@sec-status).
+
+On equality foundations, stated plainly: the current implementation
+is intensional MLTT — `Path` is the identity type with `J` — while
+`univalence`, `glue`, and `fibrant` are reserved surface forms whose
+cubical semantics (computing univalence via `Glue`/`transp`/`hcomp`)
+is the migration target.  `J` and computational univalence are
+different foundations; cubical is planned, not present, and this
+note will expand when it lands.
 
 The claim that survives these limitations is the one this paper set
 out to check: computation and reasoning about computation — programs,
