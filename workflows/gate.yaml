@@ -1,0 +1,102 @@
+# workflows/gate.yaml — per-push gate for handl-lang/kernel.
+#
+# The repo's real gate is scripts/ci.sh (the bupha shell-runner
+# pipeline: cargo check + test over the workspace — see its header
+# for the stage list). This campaign is the
+# workflows/gate.yaml port of that contract: init → run → report.
+# scripts/ci.sh owns its own ensure_siblings()/CARGO_TARGET_DIR/env
+# plumbing, so no ensure-siblings node is needed here.
+#
+# Bupha/the fleet runner invokes:
+#
+#   GATE_REPO="$PWD" GATE_RESULTS="$PWD/.gate-results.jsonl" \
+#     peregrin campaign run workflows/gate.yaml --result .ci-result.json
+#
+# Verdict: .ci-result.json `.conclusion` == "success" (result: rules map
+# gate.pass/gate.fail + failure events).
+name: gate-kernel
+
+result:
+  - event: gate.pass
+    conclusion: success
+  - event: gate.fail
+    conclusion: failure
+  - event: gate.failed
+    conclusion: failure
+  - event: gate.init.failed
+    conclusion: failure
+  - event: gate.run.failed
+    conclusion: failure
+
+capabilities:
+  env:
+    - GATE_REPO
+    - GATE_RESULTS
+
+nodes:
+  # --- init: validate inputs, fresh results file --------------------
+  - id: gate.init
+    driver: shell
+    on: [start]
+    emits: [gate.due, gate.init.failed]
+    params:
+      cmd: >-
+        set -u;
+        REPO="${config.gate.repo:-${env("GATE_REPO","")}}";
+        [ -n "$REPO" ] || { echo "gate.repo is required — set GATE_REPO or config.gate.repo to an absolute checkout path"; exit 1; };
+        [ -d "$REPO" ] || { echo "no such directory: $REPO"; exit 1; };
+        [ -f "$REPO/scripts/ci.sh" ] || { echo "no scripts/ci.sh in $REPO — gate target moved?"; exit 1; };
+        RES="${config.gate.results:-${env("GATE_RESULTS","$HOME/.local/share/handl-gates/kernel.results.jsonl")}}";
+        mkdir -p "$(dirname "$RES")";
+        : > "$RES";
+        echo "gate-kernel: repo=$REPO results=$RES"
+      timeout: 60
+      emit:
+        "0": gate.due
+        default: gate.init.failed
+
+  # --- run: the repo's own ci.sh pipeline, verbatim ----------------
+  - id: gate.run
+    driver: shell
+    on: [gate.due]
+    emits: [gate.done, gate.failed]
+    params:
+      repo: '${config.gate.repo:-${env("GATE_REPO","")}}'
+      results: '${config.gate.results:-${env("GATE_RESULTS","$HOME/.local/share/handl-gates/kernel.results.jsonl")}}'
+      timeout: 7200
+      cmd: |
+        set -uo pipefail
+        REPO="${params.repo}"
+        RESULTS="${params.results}"
+        START=$(date +%s)
+        cd "$REPO" && REPO="$(pwd)" || { echo "no such directory: ${params.repo}"; exit 1; }
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
+        bash scripts/ci.sh
+        rc=$?
+        if [ -n "$RESULTS" ]; then
+          esc=$(printf '%s' "$REPO" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          printf '{"family":"rust","repo":"%s","rc":%s,"secs":%s}\n' "$esc" "$rc" "$(( $(date +%s) - START ))" >> "$RESULTS" 2>/dev/null || true
+        fi
+        exit $rc
+      emit:
+        "0": gate.done
+        default: gate.failed
+
+  # --- report: terminal verdict from the results record -------------
+  - id: gate.report
+    driver: shell
+    on: [gate.done, gate.failed]
+    emits: [gate.pass, gate.fail]
+    params:
+      cmd: >-
+        set -u;
+        F="${config.gate.results:-${env("GATE_RESULTS","$HOME/.local/share/handl-gates/kernel.results.jsonl")}}";
+        [ -s "$F" ] || { echo "no results record — gate produced nothing"; exit 1; };
+        line=$(tail -n 1 "$F");
+        rc=$(printf '%s' "$line" | sed -n 's/.*"rc":\([0-9][0-9]*\).*/\1/p');
+        echo "gate-kernel verdict: $line";
+        [ "${rc:-1}" = "0" ]
+      timeout: 60
+      emit:
+        "0": gate.pass
+        default: gate.fail
