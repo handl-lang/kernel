@@ -16,6 +16,7 @@ fn arrow(binds: Rc<FxHashMap<Rc<str>, TaggedValue>>) -> TaggedValue {
         body_def: Rc::new(TaggedValue::Null),
         binds,
         handlers: Rc::from(Vec::<TaggedValue>::new()),
+        sig: None,
     }
 }
 

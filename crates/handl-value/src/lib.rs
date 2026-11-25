@@ -561,7 +561,7 @@ pub enum TaggedValue {
     /// captured lexical environment, no process-local frame references.
     /// The JSON encoding is
     /// `{"__arrow__": true, "params": [...], "body_def": <tv>}` with
-    /// `rest`/`array_pattern`/`binds`/`handlers` emitted only when set.
+    /// `rest`/`array_pattern`/`binds`/`handlers`/`sig` emitted only when set.
     ///
     /// - `body_def` carries the body as explicit structure — a tagged
     ///   `{"__ast__": <serialized Ast>}` value (see
@@ -606,6 +606,13 @@ pub enum TaggedValue {
         /// Handlers carried by deep-handler attach (ADR-0076), as data.
         /// Serialized inline as `"handlers"` when non-empty.
         handlers: Rc<[TaggedValue]>,
+        /// Optional declared signature — the arrow's self-description
+        /// (P-013 T-148): host atoms minted by `wrap_dep_fn` carry the
+        /// op's type value here so eval-side introspection (e.g. the
+        /// `ffi.rust` resolver) can read `{fn, sig}` off the value.
+        /// Serialized as `"sig"` when `Some`; `None` on ordinary arrows.
+        /// Eval ignores it — application dispatches on `body_def` alone.
+        sig: Option<Rc<TaggedValue>>,
     },
     /// Opaque foreign resource (RAII handle). Wraps a raw C pointer + an
     /// optional finalizer that runs when the last `Rc` reference drops
@@ -712,6 +719,7 @@ impl Hash for TaggedValue {
                 body_def,
                 binds,
                 handlers,
+                sig,
             } => {
                 10u8.hash(state);
                 params.hash(state);
@@ -720,6 +728,7 @@ impl Hash for TaggedValue {
                 body_def.hash(state);
                 hash_map_entries(binds.iter().map(|(k, v)| (k.as_ref(), v)), state);
                 handlers.hash(state);
+                sig.hash(state);
             }
             TaggedValue::Resource(r) => {
                 11u8.hash(state);
@@ -909,6 +918,11 @@ fn object_to_tagged(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
             ),
             _ => Rc::from(Vec::<TaggedValue>::new()),
         };
+        // `sig` — the optional declared-signature payload (P-013 T-148).
+        // Unknown to older decoders it was simply dropped; now it round-trips.
+        let sig = o
+            .get("sig")
+            .map(|v| Rc::new(tagged_from(v.clone(), ctx)));
         return TaggedValue::Arrow {
             params,
             rest,
@@ -916,6 +930,7 @@ fn object_to_tagged(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
             body_def,
             binds,
             handlers,
+            sig,
         };
     }
     // Resource: {"__resource__": {"ptr": <address>}} — a debug-only JSON
@@ -1297,6 +1312,7 @@ pub fn with_self_ref_bind(value: &TaggedValue, name: &str) -> TaggedValue {
         body_def,
         binds,
         handlers,
+        sig,
     } = value
     {
         let mut m = (**binds).clone();
@@ -1308,6 +1324,7 @@ pub fn with_self_ref_bind(value: &TaggedValue, name: &str) -> TaggedValue {
             body_def: body_def.clone(),
             binds: Rc::new(m),
             handlers: handlers.clone(),
+            sig: sig.clone(),
         }
     } else {
         value.clone()
@@ -1387,12 +1404,16 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
             body_def,
             binds,
             handlers,
+            sig,
         } => {
             let mut v = serde_json::json!({
                 "__arrow__": true,
                 "params": params.iter().collect::<Vec<_>>(),
                 "body_def": tagged_to_value_ctx(body_def, ctx),
             });
+            if let Some(s) = sig {
+                v["sig"] = tagged_to_value_ctx(s, ctx);
+            }
             if let Some(r) = rest {
                 v["rest"] = Value::String(r.to_string());
             }
@@ -2510,6 +2531,15 @@ pub fn lt(a: &TaggedValue, b: &TaggedValue) -> Result<bool, String> {
     }
 }
 
+/// Structural equality of two optional arrow `sig` payloads.
+fn eq_opt_sig(a: &Option<Rc<TaggedValue>>, b: &Option<Rc<TaggedValue>>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(x), Some(y)) => eq(x, y),
+        _ => false,
+    }
+}
+
 /// Structural equality of two [`TaggedValue`]s.
 pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
     match (a, b) {
@@ -2546,6 +2576,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 body_def: d1,
                 binds: e1,
                 handlers: h1,
+                sig: s1,
             },
             TaggedValue::Arrow {
                 params: p2,
@@ -2554,6 +2585,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 body_def: d2,
                 binds: e2,
                 handlers: h2,
+                sig: s2,
             },
         ) => {
             r1 == r2
@@ -2561,6 +2593,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 && p1.len() == p2.len()
                 && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
                 && eq(d1, d2)
+                && eq_opt_sig(s1, s2)
                 && h1.len() == h2.len()
                 && h1.iter().zip(h2.iter()).all(|(a, b)| eq(a, b))
                 && {
