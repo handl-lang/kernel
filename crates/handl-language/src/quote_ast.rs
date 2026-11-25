@@ -176,6 +176,7 @@ fn reify_into(store: &MetaStore, lvl: Lvl, val: &Val, names: &[Rc<str>], ast: &m
                 body_def: Rc::new(a.body_def.clone()),
                 binds: Rc::new(binds),
                 handlers: Rc::from(Vec::new()),
+                sig: None,
             };
             push_lit(ast, tagged_to_value(&tv))
         }
