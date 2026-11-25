@@ -60,9 +60,7 @@ mod load;
 pub mod rt;
 
 pub use atoms::{atom_call_args, atom_failure, atom_result};
-pub use discovery::{
-    CandidateDir, DirSource, Discovery, candidate_dirs, discover, home_ext_dir,
-};
+pub use discovery::{CandidateDir, DirSource, Discovery, candidate_dirs, discover, home_ext_dir};
 pub use load::{DirScan, LoadFailure, LoadedExtension, is_extension_file, load_dir};
 
 // ---------------------------------------------------------------------------

@@ -107,8 +107,7 @@ mod tests {
 
     #[test]
     fn manifest_atoms_yaml_roundtrips() {
-        let m = crate::ExtensionManifest::new("p")
-            .atoms_yaml("module: x\natoms: []\n");
+        let m = crate::ExtensionManifest::new("p").atoms_yaml("module: x\natoms: []\n");
         let json = serde_json::to_string(&m).unwrap();
         assert!(json.contains("\"atoms_yaml\""));
         let back: crate::ExtensionManifest = serde_json::from_str(&json).unwrap();
@@ -152,7 +151,10 @@ mod tests {
     fn result_and_failure_shapes() {
         let ok = atom_result(&json!({"v": 42}));
         assert_eq!(ok.code, 0);
-        assert_eq!(serde_json::from_str::<Value>(&ok.stdout).unwrap(), json!({"v": 42}));
+        assert_eq!(
+            serde_json::from_str::<Value>(&ok.stdout).unwrap(),
+            json!({"v": 42})
+        );
         let bad = atom_failure("boom");
         assert_eq!(bad.code, 1);
         assert_eq!(bad.stderr, "boom");
