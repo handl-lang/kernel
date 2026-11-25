@@ -19,6 +19,10 @@
 
 #![warn(missing_docs)]
 
+mod providers;
+
+pub use providers::{kernel_atom_providers, KernelAtomImpl, KernelAtomProvider, KernelImplTable};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
