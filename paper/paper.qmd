@@ -809,15 +809,17 @@ the `Glue` family through `fam_at_`.  In the HoTT-book reading
 \equiv e$ holds judgmentally, which is the whole point of the cubical route
 [@cohen2016cubicaltt].
 
-Three honest boundaries mark the current state.  First, `j` remains
-a primitive eliminator (`synth_j`) pending demotion to a derived
-`PathP` eliminator — `J` and computational univalence are different
-foundations, and the primitive is transitional scaffolding, not the
-destination.  Second, index-equality witnesses — the `eq_*` records
-that refine a match scrutinee's index per arm — are still
-`Path{frm,to}` records checked by substitution-based transport
-(`p # v` via `subst_index_`); cubical paths are type-level, and the
-index layer has not yet been re-grounded on `PathP`/`transp`.  Third,
+Three honest boundaries mark the current state.  First, `j` is
+derived, not primitive: the surface `synth_j` is a thin shell that
+computes through the interval motive family `M(i) = P (p i) (p↾i)` —
+`J` survives as syntax but no longer as scaffolding, and it remains
+a different eliminative route from computational univalence
+(`J` via the motive family, univalence via `Glue`/`ua`).  Second,
+index-equality witnesses — the `eq_*` records that refine a match
+scrutinee's index per arm — remain `Path{frm,to}` records checked by
+substitution-based transport (`p # v` via `subst_index_`), accepted
+alongside cubical path-pi's; the index layer itself has not yet been
+re-grounded on `PathP`/`transp`.  Third,
 the approximations are named, not hidden: `Glue` partial-section
 checking is conservative rather than complete, and fibrancy of
 `Type` itself — universe resizing — is not addressed.
@@ -978,13 +980,14 @@ interval, `Path`/`PathP`, `transp`/`hcomp`/`comp`, `Glue`, and
 computing univalence — is the implemented foundation in the canonical
 `.hnl` checker, with the Rust NBE port tracking phase-by-phase.  What
 remains intensional is
-transitional: `j` is still a primitive eliminator pending demotion to
-a derived `PathP` eliminator; the `eq_*` index witnesses behind match
-refinement are still `Path{frm,to}` records with substitution-based
-transport; `Glue` partial-section checking is approximate; and
-fibrancy of `Type`/universe resizing is unaddressed.  `J` and
-computational univalence remain different foundations — the primitive
-`J` survives only as scaffolding the migration will remove.
+transitional: `j`'s surface syntax survives but now computes through
+the derived interval motive family — `J` is no longer a primitive
+eliminator; the `eq_*` index witnesses behind match refinement remain
+`Path{frm,to}` records with substitution-based transport, accepted
+alongside cubical path-pi's; `Glue` partial-section checking is
+approximate; and fibrancy of `Type`/universe resizing is unaddressed.
+`J` and computational univalence remain different eliminative routes —
+the derived `J` via the motive family, univalence via `Glue`/`ua`.
 
 The claim that survives these limitations is the one this paper set
 out to check: computation and reasoning about computation — programs,
