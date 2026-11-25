@@ -75,6 +75,24 @@ pub enum Term {
         /// `Language` fragment data (ADR-0044). Serialization of a term
         /// with `attrs: None` is byte-identical to the pre-attrs shape;
         /// old JSON parses with `attrs = None`.
+        ///
+        /// Reserved key [`OP_GRADE_ATTR`] (`"grade"`): when `attrs` is a
+        /// JSON object, the `"grade"` entry carries a *graded arrow's*
+        /// grade as a serialized [`Term`] (serde JSON, the same shape
+        /// [`Term::quote`] consumers deserialize via
+        /// `serde_json::from_value::<Term>`). This is the grade channel
+        /// parallel to [`Term::Op::dim`]: `dim` stays the globular
+        /// dimension index — consumed by `cell_boundary_`,
+        /// `law_inference`, `quantified_laws`, and globular projection —
+        /// while `attrs["grade"]` carries the `~[G]~>` grade payload, an
+        /// arbitrary Handl data expression. See
+        /// `host/project/design/graded-arrows.md` §9.5: ADR-0120 Phase 3
+        /// unified grade and dimension into `Op.dim`; the graded-arrow
+        /// surface splits them again — the grade must never enter `dim`
+        /// (a grade would mint a bogus `Const "Addable"` dimension and
+        /// misroute handler dispatch via [`Term::dim_label`]). Use
+        /// [`Term::with_op_grade`] / [`Term::op_grade`] to write and read
+        /// the channel.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         attrs: Option<Value>,
     },
@@ -267,6 +285,11 @@ pub enum RewriteWitness {
     /// A type or capability cast.
     Cast,
 }
+
+/// The reserved [`Term::Op::attrs`] key carrying a graded arrow's grade
+/// term (see the `attrs` field docs): `attrs` must be a JSON object and
+/// `attrs["grade"]` holds the grade [`Term`] in serde JSON form.
+pub const OP_GRADE_ATTR: &str = "grade";
 
 /// Default dimension for `Arr`/`Op` when not supplied (1).
 fn default_dim_value() -> Box<Term> {
@@ -633,6 +656,64 @@ impl Term {
                 attrs: Some(attrs.into()),
             },
             other => other,
+        }
+    }
+
+    /// Attach a grade term to an `Op`'s grade channel — the reserved
+    /// [`OP_GRADE_ATTR`] entry of `attrs` (graded arrows `~[G]~>`,
+    /// `host/project/design/graded-arrows.md` §9.5).
+    ///
+    /// `grade` is stored as serde JSON inside the `attrs` object: when
+    /// `attrs` is already an object its other keys are preserved; when it
+    /// is `None` a fresh `{"grade": …}` object is created; a non-object
+    /// `attrs` is replaced (the channel requires an object — non-object
+    /// attrs cannot carry named keys). Returns `self` unchanged for
+    /// non-`Op` terms. The grade term rides as *data* — like `attrs`
+    /// generally it is not desugared, handler-eliminated, or instantiated
+    /// by scheme machinery; populate it with an already-lowered `Term`.
+    pub fn with_op_grade(self, grade: Term) -> Self {
+        match self {
+            Term::Op {
+                dim,
+                name,
+                args,
+                source,
+                lit,
+                attrs,
+            } => {
+                let grade_json =
+                    serde_json::to_value(&grade).unwrap_or(Value::Null);
+                let mut map = match attrs {
+                    Some(Value::Object(map)) => map,
+                    _ => serde_json::Map::new(),
+                };
+                map.insert(OP_GRADE_ATTR.to_string(), grade_json);
+                Term::Op {
+                    dim,
+                    name,
+                    args,
+                    source,
+                    lit,
+                    attrs: Some(Value::Object(map)),
+                }
+            }
+            other => other,
+        }
+    }
+
+    /// Read an `Op`'s grade channel — the [`OP_GRADE_ATTR`] entry of
+    /// `attrs` deserialized back into a [`Term`]. Returns `None` for
+    /// non-`Op` terms, absent/malformed `attrs`, or a grade payload that
+    /// does not deserialize as a `Term`.
+    pub fn op_grade(&self) -> Option<Term> {
+        match self {
+            Term::Op {
+                attrs: Some(attrs),
+                ..
+            } => attrs
+                .get(OP_GRADE_ATTR)
+                .and_then(|v| serde_json::from_value::<Term>(v.clone()).ok()),
+            _ => None,
         }
     }
 
@@ -1116,6 +1197,38 @@ mod tests {
         let j3 = serde_json::to_string(&t3).unwrap();
         let back3: Term = serde_json::from_str(&j3).unwrap();
         assert_eq!(t3, back3);
+    }
+
+    #[test]
+    fn op_grade_channel_roundtrips() {
+        // The graded-arrow channel: `attrs["grade"]` carries a serialized
+        // `Term`, `dim` stays the dimension slot untouched.
+        let grade = Term::named_dim("Addable");
+        let t = Term::op_native("f", vec![]).with_op_grade(grade.clone());
+        assert_eq!(t.op_grade(), Some(grade));
+        // `dim` is untouched — the grade never enters the dimension slot.
+        assert_eq!(t.dim_label(), None);
+        assert_eq!(t.globular_dim(), 1);
+
+        // Serde round-trip preserves the channel (attrs is a `Value`).
+        let j = serde_json::to_string(&t).unwrap();
+        let back: Term = serde_json::from_str(&j).unwrap();
+        assert_eq!(back.op_grade(), Some(Term::named_dim("Addable")));
+
+        // Existing attrs keys survive `with_op_grade`.
+        let t2 = Term::op_native_attrs("g", vec![], serde_json::json!({"k": 1}))
+            .with_op_grade(Term::constant(2));
+        let attrs = match &t2 {
+            Term::Op { attrs: Some(a), .. } => a.clone(),
+            _ => panic!("expected attrs"),
+        };
+        assert_eq!(attrs["k"], serde_json::json!(1));
+        assert_eq!(t2.op_grade(), Some(Term::constant(2)));
+
+        // Non-Op terms pass through unchanged.
+        let c = Term::constant(1).with_op_grade(Term::constant(2));
+        assert!(matches!(c, Term::Const { .. }));
+        assert_eq!(c.op_grade(), None);
     }
 
     #[test]
