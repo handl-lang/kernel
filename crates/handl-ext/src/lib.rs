@@ -54,10 +54,12 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod atoms;
 mod discovery;
 mod load;
 pub mod rt;
 
+pub use atoms::{atom_call_args, atom_failure, atom_result};
 pub use discovery::{
     CandidateDir, DirSource, Discovery, candidate_dirs, discover, home_ext_dir,
 };
@@ -93,6 +95,16 @@ pub struct ExtensionManifest {
     /// Commands this extension serves.
     #[serde(default)]
     pub commands: Vec<CommandSpec>,
+    /// Atom-provider spec (P-013 phase-2c, proposal-0012): the extension's
+    /// own `atoms.yaml` text. `Some` marks the library as an atom provider
+    /// — atom hosts (e.g. `handl-plugin-lib-handl`'s dep binding) parse it
+    /// for the module names the provider claims and dispatch atom calls
+    /// through [`crate::LoadedExtension::dispatch`] per the
+    /// [`crate::atoms`] wire convention. `None`/absent = not an atom
+    /// provider. Optional and additive: manifests written before this
+    /// field existed simply deserialize with `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atoms_yaml: Option<String>,
 }
 
 impl ExtensionManifest {
@@ -102,6 +114,7 @@ impl ExtensionManifest {
             name: name.into(),
             version: String::new(),
             commands: Vec::new(),
+            atoms_yaml: None,
         }
     }
 
@@ -117,6 +130,14 @@ impl ExtensionManifest {
             name: name.into(),
             usage: usage.into(),
         });
+        self
+    }
+
+    /// Mark the extension as an atom provider carrying the given
+    /// `atoms.yaml` text (P-013 phase-2c). See [`crate::atoms`] for the
+    /// call wire convention.
+    pub fn atoms_yaml(mut self, yaml: impl Into<String>) -> Self {
+        self.atoms_yaml = Some(yaml.into());
         self
     }
 }
