@@ -2,6 +2,7 @@
 name = "handl-lib-prim-handl"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "prim-handl: Handl stdlib port (ADR-0128 split)."
 license.workspace = true
 repository = "https://github.com/handl-lang/lib-prim-handl"

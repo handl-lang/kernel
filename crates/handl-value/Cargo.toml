@@ -2,6 +2,7 @@
 name = "handl-value"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.85"
 description = "Fast tagged value representation for eval engines."
 license.workspace = true
 repository.workspace = true

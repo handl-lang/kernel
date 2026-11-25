@@ -2,6 +2,7 @@
 name = "handl-lib-ops"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 description = "Shared op helpers for handl lib-* crates (throwaway: vanishes when ops are handl)."
 license.workspace = true
 repository = "https://github.com/handl-lang/lib-ops"
