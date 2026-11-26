@@ -173,6 +173,7 @@ fn reify_into(store: &MetaStore, lvl: Lvl, val: &Val, names: &[Rc<str>], ast: &m
                 params: a.params.clone(),
                 rest: None,
                 array_pattern: false,
+                param_defs: None,
                 body_def: Rc::new(a.body_def.clone()),
                 binds: Rc::new(binds),
                 handlers: Rc::from(Vec::new()),

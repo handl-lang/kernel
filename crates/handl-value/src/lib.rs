@@ -592,6 +592,17 @@ pub enum TaggedValue {
         rest: Option<Rc<str>>,
         /// Whether the arrow's params are an array-destructuring pattern.
         array_pattern: bool,
+        /// Destructured parameter patterns as explicit data — a
+        /// `{"__ast__": <serialized Ast>}` value holding the params-node
+        /// subtree (`([x, y]) ~>`, `({a, b}) ~>`, `[x, [y, z]] ~>`).
+        /// `Some` exactly when the params are not plain `var`/`type-annot`
+        /// bindings: at apply time each top-level pattern is matched
+        /// against its argument via `pattern_match::try_pattern` instead
+        /// of the positional `params`/`rest` binding. `params` then holds
+        /// the flattened bound names (for capture exclusion and
+        /// introspection), not one name per argument. On the JSON side
+        /// the key is `"param_defs"` inside the `__arrow__` object.
+        param_defs: Option<Rc<TaggedValue>>,
         /// The arrow's body as explicit, serializable structure — a tagged
         /// `{"__ast__": <serialized Ast>}` value. Required: there is no
         /// process-local body fallback.
@@ -716,6 +727,7 @@ impl Hash for TaggedValue {
                 params,
                 rest,
                 array_pattern,
+                param_defs,
                 body_def,
                 binds,
                 handlers,
@@ -725,6 +737,7 @@ impl Hash for TaggedValue {
                 params.hash(state);
                 rest.hash(state);
                 array_pattern.hash(state);
+                param_defs.hash(state);
                 body_def.hash(state);
                 hash_map_entries(binds.iter().map(|(k, v)| (k.as_ref(), v)), state);
                 handlers.hash(state);
@@ -923,10 +936,17 @@ fn object_to_tagged(o: Map<String, Value>, ctx: &mut DeCtx) -> TaggedValue {
         let sig = o
             .get("sig")
             .map(|v| Rc::new(tagged_from(v.clone(), ctx)));
+        // `param_defs` — the destructured-params pattern arena (same
+        // `{"__ast__": …}` encoding as `body_def`). Absent on arrows minted
+        // before destructured params were supported.
+        let param_defs = o
+            .get("param_defs")
+            .map(|v| Rc::new(tagged_from(v.clone(), ctx)));
         return TaggedValue::Arrow {
             params,
             rest,
             array_pattern,
+            param_defs,
             body_def,
             binds,
             handlers,
@@ -1309,6 +1329,7 @@ pub fn with_self_ref_bind(value: &TaggedValue, name: &str) -> TaggedValue {
         params,
         rest,
         array_pattern,
+        param_defs,
         body_def,
         binds,
         handlers,
@@ -1321,6 +1342,7 @@ pub fn with_self_ref_bind(value: &TaggedValue, name: &str) -> TaggedValue {
             params: params.clone(),
             rest: rest.clone(),
             array_pattern: *array_pattern,
+            param_defs: param_defs.clone(),
             body_def: body_def.clone(),
             binds: Rc::new(m),
             handlers: handlers.clone(),
@@ -1401,6 +1423,7 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
             params,
             rest,
             array_pattern,
+            param_defs,
             body_def,
             binds,
             handlers,
@@ -1411,6 +1434,9 @@ fn tagged_to_value_ctx(v: &TaggedValue, ctx: &mut SerCtx) -> Value {
                 "params": params.iter().collect::<Vec<_>>(),
                 "body_def": tagged_to_value_ctx(body_def, ctx),
             });
+            if let Some(pd) = param_defs {
+                v["param_defs"] = tagged_to_value_ctx(pd, ctx);
+            }
             if let Some(s) = sig {
                 v["sig"] = tagged_to_value_ctx(s, ctx);
             }
@@ -2573,6 +2599,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 params: p1,
                 rest: r1,
                 array_pattern: ap1,
+                param_defs: pd1,
                 body_def: d1,
                 binds: e1,
                 handlers: h1,
@@ -2582,6 +2609,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
                 params: p2,
                 rest: r2,
                 array_pattern: ap2,
+                param_defs: pd2,
                 body_def: d2,
                 binds: e2,
                 handlers: h2,
@@ -2590,6 +2618,7 @@ pub fn eq(a: &TaggedValue, b: &TaggedValue) -> bool {
         ) => {
             r1 == r2
                 && ap1 == ap2
+                && eq_opt_sig(pd1, pd2)
                 && p1.len() == p2.len()
                 && p1.iter().zip(p2.iter()).all(|(a, b)| a == b)
                 && eq(d1, d2)

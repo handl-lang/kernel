@@ -647,6 +647,291 @@ impl Language {
             && self.has_variadic_role(&params_node.kind)
     }
 
+    /// Whether `node` in parameter position is a *plain* binding — the
+    /// shapes [`param_name`](Self::param_name) resolves: a `var` leaf, a
+    /// `type-annot` (or any `subject`-roled wrapper) around one, or a `rest`
+    /// of either. Anything else — `sequence`/`entries` destructuring,
+    /// tag (`call`) or literal patterns — requires pattern matching at
+    /// apply time.
+    ///
+    /// Dispatch is data-driven over `AstShapeDef::pattern_role` and child
+    /// roles (ADR-0081), never `kind ==` checks; shapes without the
+    /// metadata keep the `var`/`type-annot` legacy reading.
+    pub fn is_plain_param(&self, ast: &Ast, node: &AstNode) -> bool {
+        // `...rest` — plain iff its subject is.
+        if self.pattern_role_is(&node.kind, "rest") == Some(true) {
+            return self
+                .role_child(ast, node, "subject", 0)
+                .map(|(_, inner)| self.is_plain_param(ast, inner))
+                .unwrap_or(false);
+        }
+        // Leaf binder (`var`) — plain iff it carries a string payload.
+        // Shapes without `pattern_role` metadata keep the legacy reading:
+        // any string-payload node in param position is a binder, exactly
+        // like [`param_name`](Self::param_name) accepts it.
+        if self.pattern_role_is(&node.kind, "leaf") == Some(true)
+            || (self.pattern_role(&node.kind).is_none() && node.payload.as_str().is_some())
+        {
+            return node.payload.as_str().is_some();
+        }
+        // `subject`-roled wrapper (`type-annot`-like) — plain iff the
+        // subject is. `rest` was handled above (it also declares
+        // `subject`), and pattern nodes declare no `subject` role.
+        if let Ok(Some(subject_idx)) = self.child_role_index(&node.kind, "subject") {
+            return self
+                .role_child(ast, node, "subject", subject_idx)
+                .map(|(_, inner)| self.is_plain_param(ast, inner))
+                .unwrap_or(false);
+        }
+        false
+    }
+
+    /// The child node occupying `role` on `node` — resolved by the
+    /// declared child role (ADR-0081) with `fallback` for role-less
+    /// shapes. Returns the child's position and node.
+    fn role_child<'a>(
+        &self,
+        ast: &'a Ast,
+        node: &AstNode,
+        role: &str,
+        fallback: usize,
+    ) -> Option<(usize, &'a AstNode)> {
+        let pos = self
+            .child_role_index_for(node, role)
+            .ok()
+            .flatten()
+            .unwrap_or(fallback);
+        let idx = node
+            .payload
+            .get("children")
+            .and_then(|c| c.as_array())
+            .and_then(|a| a.get(pos))
+            .and_then(|v| v.as_u64())? as usize;
+        ast.at(AstRef::new(idx)).ok().map(|n| (pos, n))
+    }
+
+    /// Whether a params node's parameter list contains destructuring
+    /// patterns — i.e. whether [`param_names`](Self::param_names) cannot
+    /// resolve it to plain names.
+    ///
+    /// Mirrors `param_names`' traversal: a variadic-role params node
+    /// (`paren` list, `array`/`object` pattern) iterates its children as
+    /// params; anything else is a single param. A params node is
+    /// pattern-free when every param-position child is a plain binding
+    /// ([`is_plain_param`](Self::is_plain_param)) — so `[x, y] ~>` and
+    /// `(x, y) ~>` keep the positional path while `([x, y]) ~>`,
+    /// `({a, b}) ~>`, and `[x, [y, z]] ~>` report patterns.
+    pub fn param_contains_patterns(&self, ast: &Ast, params_node: &AstNode) -> bool {
+        if self.has_variadic_role(&params_node.kind) {
+            let Some(children) = params_node
+                .payload
+                .get("children")
+                .and_then(|c| c.as_array())
+            else {
+                return false;
+            };
+            children.iter().any(|entry| {
+                entry
+                    .as_u64()
+                    .and_then(|i| ast.at(AstRef::new(i as usize)).ok())
+                    .is_some_and(|child| !self.is_plain_param(ast, child))
+            })
+        } else {
+            !self.is_plain_param(ast, params_node)
+        }
+    }
+
+    /// The top-level parameter nodes of a params node, as arena refs:
+    /// the variadic children for a params list, or the node itself for a
+    /// single param/pattern.
+    ///
+    /// A `sequence`/`entries` params node (`[x, y] ~>`, `{a: x} ~>`) *is*
+    /// the pattern — its children are sub-patterns, not parameters — so
+    /// it yields itself. Everything else with a variadic role (`paren`
+    /// lists) yields its children; role-less shapes yield the node.
+    pub fn top_level_param_refs(
+        &self,
+        ast: &Ast,
+        params_ref: AstRef,
+    ) -> Result<Vec<AstRef>, LangError> {
+        let node = ast.at(params_ref)?;
+        let is_pattern = matches!(
+            self.pattern_role(&node.kind),
+            Some("sequence") | Some("entries")
+        );
+        if is_pattern || !self.has_variadic_role(&node.kind) {
+            return Ok(vec![params_ref]);
+        }
+        let children = node
+            .payload
+            .get("children")
+            .and_then(|c| c.as_array())
+            .ok_or_else(|| {
+                LangError::engine("closure: params missing children".to_string())
+            })?;
+        children
+            .iter()
+            .map(|entry| {
+                entry
+                    .as_u64()
+                    .map(|i| AstRef::new(i as usize))
+                    .ok_or_else(|| {
+                        LangError::engine("closure: param index must be a number".to_string())
+                    })
+            })
+            .collect()
+    }
+
+    /// Whether a params node is a *single* `sequence` pattern — the whole
+    /// params node (`[x, y] ~>`) or a params list wrapping exactly one
+    /// (`([x, y]) ~>`). Such arrows consume one array argument whole;
+    /// engines use this for the `array_pattern` call-site packing flag.
+    pub fn param_single_sequence(&self, ast: &Ast, params_ref: AstRef) -> bool {
+        let Ok(tops) = self.top_level_param_refs(ast, params_ref) else {
+            return false;
+        };
+        if tops.len() != 1 {
+            return false;
+        }
+        let Ok(node) = ast.at(tops[0]) else {
+            return false;
+        };
+        self.pattern_role_is(&node.kind, "sequence") == Some(true)
+    }
+
+    /// Every name a params node binds, flattening destructuring patterns.
+    ///
+    /// The binder-tracking counterpart of [`param_names`](Self::param_names)
+    /// for pattern params: walks the same `pattern_role` vocabulary the
+    /// match-pattern evaluator uses (`leaf`/`sequence`/`entries`/`entry`/
+    /// `rest`, plus `subject`/`callee` child roles for `type-annot`-like
+    /// wrappers and tag patterns) and collects every leaf binder name —
+    /// including names nested inside `sequence`/`entries` patterns and
+    /// `rest` subjects. Wildcard binders (`_`, `_*`; `__fresh_`-prefixed
+    /// desugar binders exempt) bind nothing and are skipped, matching
+    /// `pattern_match::try_pattern`.
+    ///
+    /// Used for closure capture exclusion: every name returned here is
+    /// bound at apply time and must not be substituted into `body_def`.
+    pub fn param_bound_names(
+        &self,
+        ast: &Ast,
+        params_node: &AstNode,
+    ) -> Result<Vec<String>, LangError> {
+        let mut out = Vec::new();
+        if self.has_variadic_role(&params_node.kind) {
+            let children = params_node
+                .payload
+                .get("children")
+                .and_then(|c| c.as_array())
+                .ok_or_else(|| {
+                    LangError::engine("closure: params missing children".to_string())
+                })?;
+            for entry in children {
+                let idx = entry.as_u64().ok_or_else(|| {
+                    LangError::engine("closure: param index must be a number".to_string())
+                })? as usize;
+                self.pattern_bound_names(ast, ast.at(AstRef::new(idx))?, &mut out)?;
+            }
+        } else {
+            self.pattern_bound_names(ast, params_node, &mut out)?;
+        }
+        Ok(out)
+    }
+
+    /// Recursive binder collection for [`param_bound_names`], dispatched
+    /// on the node's declared `pattern_role` (ADR-0081) — the same
+    /// vocabulary `pattern_match::try_pattern` binds through.
+    fn pattern_bound_names(
+        &self,
+        ast: &Ast,
+        node: &AstNode,
+        out: &mut Vec<String>,
+    ) -> Result<(), LangError> {
+        match self.pattern_role(&node.kind) {
+            Some("leaf") => {
+                if let Some(name) = node.payload.as_str()
+                    && !(name.starts_with('_') && !name.starts_with("__fresh_"))
+                {
+                    out.push(name.to_string());
+                }
+            }
+            Some("rest") => {
+                if let Some((_, inner)) = self.role_child(ast, node, "subject", 0) {
+                    self.pattern_bound_names(ast, inner, out)?;
+                }
+            }
+            Some("sequence") | Some("entries") => {
+                if let Some(children) = node.payload.get("children").and_then(|c| c.as_array()) {
+                    for entry in children {
+                        let idx = entry.as_u64().ok_or_else(|| {
+                            LangError::engine("closure: pattern child index is not a number".to_string())
+                        })? as usize;
+                        self.pattern_bound_names(ast, ast.at(AstRef::new(idx))?, out)?;
+                    }
+                }
+            }
+            Some("entry") => {
+                // Only the `value` child holds binders; `key` is literal.
+                if let Some((_, inner)) = self.role_child(ast, node, "value", 1) {
+                    self.pattern_bound_names(ast, inner, out)?;
+                }
+            }
+            _ => {
+                // Role-less leaf: a bare string payload on a shape with no
+                // `pattern_role` declaration is a binder — the same legacy
+                // reading `param_name` applies.
+                if self.pattern_role(&node.kind).is_none()
+                    && let Some(name) = node.payload.as_str()
+                {
+                    if !(name.starts_with('_') && !name.starts_with("__fresh_")) {
+                        out.push(name.to_string());
+                    }
+                    return Ok(());
+                }
+                // `type-annot`-like wrappers bind through their `subject`;
+                // tag patterns (`call`-shaped) bind through their non-callee
+                // children. Anything else is a literal pattern — no binders.
+                if self
+                    .child_role_index(&node.kind, "subject")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    if let Some((_, inner)) = self.role_child(ast, node, "subject", 0) {
+                        self.pattern_bound_names(ast, inner, out)?;
+                    }
+                } else if self
+                    .child_role_index(&node.kind, "callee")
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    let callee_pos = self
+                        .child_role_index_for(node, "callee")
+                        .ok()
+                        .flatten()
+                        .unwrap_or(0);
+                    if let Some(children) = node.payload.get("children").and_then(|c| c.as_array())
+                    {
+                        for (i, entry) in children.iter().enumerate() {
+                            if i == callee_pos {
+                                continue;
+                            }
+                            let idx = entry.as_u64().ok_or_else(|| {
+                                LangError::engine(
+                                    "closure: pattern child index is not a number".to_string(),
+                                )
+                            })? as usize;
+                            self.pattern_bound_names(ast, ast.at(AstRef::new(idx))?, out)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Extract the binding target name from a top-level binding node.
     ///
     /// A binding shape declares a `target` child role (e.g. `assign`)

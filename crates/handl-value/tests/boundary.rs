@@ -13,6 +13,7 @@ fn arrow(binds: Rc<FxHashMap<Rc<str>, TaggedValue>>) -> TaggedValue {
         params: Rc::from(vec!["x".to_string()]),
         rest: None,
         array_pattern: false,
+        param_defs: None,
         body_def: Rc::new(TaggedValue::Null),
         binds,
         handlers: Rc::from(Vec::<TaggedValue>::new()),
