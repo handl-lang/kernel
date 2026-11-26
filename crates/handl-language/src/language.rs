@@ -782,21 +782,25 @@ impl Language {
             .collect()
     }
 
-    /// Whether a params node is a *single* `sequence` pattern — the whole
-    /// params node (`[x, y] ~>`) or a params list wrapping exactly one
-    /// (`([x, y]) ~>`). Such arrows consume one array argument whole;
-    /// engines use this for the `array_pattern` call-site packing flag.
+    /// Whether a params node *is* a single `sequence` pattern — the
+    /// params node itself (`[x, y] ~>`, `[x, [y, z]] ~>`), not a params
+    /// list wrapping one.
+    ///
+    /// Such arrows consume the `proj_rest`-packed argument list whole:
+    /// engines use this for the `array_pattern` call-site packing flag,
+    /// which keeps the packed array intact instead of unpacking it into
+    /// per-argument values. A paren-wrapped pattern (`([x, y]) ~>`) is a
+    /// *params list* holding one pattern param — each top-level pattern
+    /// consumes exactly one call argument (the same reading
+    /// `param_contains_patterns`/`top_level_param_refs` and the
+    /// typechecker's `apply_destructured_arrow` give it), so the flag
+    /// must stay `false` there or `f([1, 2])` would match the pattern
+    /// against the packed argument *list* `[[1, 2]]` instead of the
+    /// array argument `[1, 2]`.
     pub fn param_single_sequence(&self, ast: &Ast, params_ref: AstRef) -> bool {
-        let Ok(tops) = self.top_level_param_refs(ast, params_ref) else {
-            return false;
-        };
-        if tops.len() != 1 {
-            return false;
-        }
-        let Ok(node) = ast.at(tops[0]) else {
-            return false;
-        };
-        self.pattern_role_is(&node.kind, "sequence") == Some(true)
+        ast.at(params_ref)
+            .map(|node| self.is_array_pattern(node))
+            .unwrap_or(false)
     }
 
     /// Every name a params node binds, flattening destructuring patterns.

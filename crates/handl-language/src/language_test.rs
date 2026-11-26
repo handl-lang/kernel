@@ -1,4 +1,5 @@
 use super::*;
+use crate::ChildRoleSpec;
 use crate::fragments::TypeRuleDef;
 use crate::fragments::ast_shape::{AstDesugarChild, AstDesugarCondition, AstDesugarRule};
 use crate::fragments::grammar::{AstShapeRef, GrammarPosition};
@@ -383,4 +384,105 @@ fn scheme_version_serializes() {
     assert!(j.contains("\"v2\""));
     let back: Language = serde_json::from_str(&j).unwrap();
     assert_eq!(back.scheme_version, SchemeVersion::v2());
+}
+
+/// Minimal pattern-params language: `var` leaf, `array` sequence,
+/// `object` entries, `paren` variadic params list — the same shape
+/// vocabulary `param_single_sequence`/`is_array_pattern` dispatch on.
+fn pattern_params_lang() -> Language {
+    let mut lang = Language::new();
+    let shape = |kind: &str, roles: Vec<ChildRoleSpec>| {
+        AstShapeDef::new(format!("ast.{kind}"), kind).with_children(roles)
+    };
+    let variadic = |role: &str| ChildRoleSpec {
+        role: role.into(),
+        variadic: true,
+        optional: false,
+    };
+    lang.ast
+        .merge(shape("var", vec![]).with_pattern_role("leaf"))
+        .unwrap();
+    lang.ast
+        .merge(
+            shape("array", vec![variadic("elements")]).with_pattern_role("sequence"),
+        )
+        .unwrap();
+    lang.ast
+        .merge(
+            shape("object", vec![variadic("entries")]).with_pattern_role("entries"),
+        )
+        .unwrap();
+    lang.ast.merge(shape("paren", vec![variadic("body")])).unwrap();
+    lang
+}
+
+fn params_ast(nodes: Vec<(&str, serde_json::Value)>) -> Ast {
+    let mut ast = Ast::new();
+    for (kind, payload) in nodes {
+        ast.push(AstNode::new(kind).with_payload(payload));
+    }
+    ast
+}
+
+/// `param_single_sequence` marks only a params node that *is* the
+/// sequence pattern (`[x, y] ~>`) for the `array_pattern` call-site
+/// packing flag. A paren-wrapped pattern (`([x, y]) ~>`) is a params
+/// list whose single entry is a pattern param consuming one call
+/// argument — keeping the packed argument list whole there made
+/// `f([1, 2])` match `[[1, 2]]` instead of `[1, 2]` (myco I-010).
+#[test]
+fn param_single_sequence_only_for_bare_sequence_params() {
+    let lang = pattern_params_lang();
+    let children = |idxs: &[usize]| {
+        serde_json::json!({"children": idxs.iter().map(|i| serde_json::json!(i)).collect::<Vec<_>>()})
+    };
+
+    // `[a, b] ~>` — params node IS the sequence pattern → true.
+    let ast = params_ast(vec![
+        ("var", serde_json::json!("a")),                  // 0
+        ("var", serde_json::json!("b")),                  // 1
+        ("array", children(&[0, 1])),                     // 2 — params node
+    ]);
+    assert!(lang.param_single_sequence(&ast, AstRef::new(2)));
+
+    // `([a, b]) ~>` — paren list wrapping one sequence pattern → false.
+    let ast = params_ast(vec![
+        ("var", serde_json::json!("a")),                  // 0
+        ("var", serde_json::json!("b")),                  // 1
+        ("array", children(&[0, 1])),                     // 2 — pattern
+        ("paren", children(&[2])),                       // 3 — params node
+    ]);
+    assert!(!lang.param_single_sequence(&ast, AstRef::new(3)));
+
+    // `(a, b) ~>` — plain paren list → false.
+    let ast = params_ast(vec![
+        ("var", serde_json::json!("a")),                  // 0
+        ("var", serde_json::json!("b")),                  // 1
+        ("paren", children(&[0, 1])),                    // 2 — params node
+    ]);
+    assert!(!lang.param_single_sequence(&ast, AstRef::new(2)));
+
+    // `{x, y} ~>` — entries pattern root → false (objects unpack to the
+    // single record argument, they do not consume the packed list).
+    let ast = params_ast(vec![
+        ("var", serde_json::json!("x")),                  // 0
+        ("var", serde_json::json!("y")),                  // 1
+        ("object", children(&[0, 1])),                    // 2 — params node
+    ]);
+    assert!(!lang.param_single_sequence(&ast, AstRef::new(2)));
+
+    // `[x, [y, z]] ~>` — nested sequence still a bare sequence root →
+    // true (the packed argument list is the destructuring scrutinee).
+    let ast = params_ast(vec![
+        ("var", serde_json::json!("x")),                  // 0
+        ("var", serde_json::json!("y")),                  // 1
+        ("var", serde_json::json!("z")),                  // 2
+        ("array", children(&[1, 2])),                     // 3 — inner [y, z]
+        ("array", children(&[0, 3])),                     // 4 — params node
+    ]);
+    assert!(lang.param_single_sequence(&ast, AstRef::new(4)));
+
+    // Out-of-bounds ref → false, not an error.
+    let ast = params_ast(vec![("var", serde_json::json!("a"))]);
+    assert!(!lang.param_single_sequence(&ast, AstRef::new(9)));
 }
