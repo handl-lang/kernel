@@ -175,11 +175,15 @@ impl Instantiate<'_> {
             match role {
                 "params" => {
                     // Copy the params node pattern-wise: binder leaves raw,
-                    // `x: T` annot subjects substituted.
+                    // `x: T` annot subjects substituted. `param_bound_names`
+                    // flattens destructuring patterns (`([x, y]) ~>`,
+                    // `({a, b}) ~>`) so every apply-time binder stays bound
+                    // over the body — `param_names` would `Err` and fall
+                    // back to over-binding every captured name.
                     params_pos[i] = true;
-                    match self.lang.param_names(self.src, child_node) {
-                        Ok((names, rest)) => {
-                            self.bind_over_body(&node, arity, &mut extra, names, rest.as_deref());
+                    match self.lang.param_bound_names(self.src, child_node) {
+                        Ok(names) => {
+                            self.bind_over_body(&node, arity, &mut extra, names, None);
                         }
                         // Unresolvable params: substitute nothing under the
                         // body — over-binding is the safe direction.
