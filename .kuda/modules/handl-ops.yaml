@@ -1,0 +1,98 @@
+name: handl-ops
+path: crates/handl-ops/Cargo.toml
+purpose: Op ABI — the registration surface for native Handl operations (Op, OpContext, OpRegistry).
+api:
+- name: Op
+  kind: trait
+  file: crates/handl-ops/src/lib.rs
+  line: 96
+  module: handl-ops
+- name: OpContext
+  kind: trait
+  file: crates/handl-ops/src/lib.rs
+  line: 70
+  module: handl-ops
+- name: OpError
+  kind: type
+  file: crates/handl-ops/src/lib.rs
+  line: 39
+  module: handl-ops
+- name: OpRegistry
+  kind: type
+  file: crates/handl-ops/src/lib.rs
+  line: 137
+  module: handl-ops
+- name: RuntimePredicateChecker
+  kind: trait
+  file: crates/handl-ops/src/lib.rs
+  line: 115
+  module: handl-ops
+- name: contains
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 197
+  module: handl-ops
+- name: get
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 174
+  module: handl-ops
+- name: get_checker
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 179
+  module: handl-ops
+- name: handl-ops
+  kind: module
+  file: crates/handl-ops/Cargo.toml
+  line: 1
+  module: handl-ops
+- name: is_empty
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 207
+  module: handl-ops
+- name: iter
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 184
+  module: handl-ops
+- name: len
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 202
+  module: handl-ops
+- name: new
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 144
+  module: handl-ops
+- name: register
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 150
+  module: handl-ops
+- name: register_with_checker
+  kind: function
+  file: crates/handl-ops/src/lib.rs
+  line: 156
+  module: handl-ops
+deps:
+- serde_json
+- thiserror
+- serde_json
+- thiserror
+notes: ''
+verify:
+- crates/handl-ops/Cargo.toml
+- crates/handl-ops/src/lib.rs
+provenance:
+  files:
+  - crates/handl-ops/Cargo.toml
+  - crates/handl-ops/src/lib.rs
+  hashes:
+  - 59aca0313b3c1cfdb72f362070b196ce00a1e0f0
+  - 73d59803ed72f57db188e806c58e433fba42e21b
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4

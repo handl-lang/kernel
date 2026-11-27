@@ -341,6 +341,10 @@ name = "handl-plugin-lib-serialize-yaml-c"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "handl-plugin-codegen-emitter-file"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "handl-kit-ffi"
 version = "0.1.0"
 
@@ -353,7 +357,7 @@ name = "handl-lib-mood"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-codegen-emitter-file"
+name = "handl-host-tensor"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -366,10 +370,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-lib-serialize"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "hnl-tool-parse-pratt"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -389,7 +389,7 @@ name = "handl-plugin-lib-serialize-toml-c"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-host-tensor"
+name = "hnl-tool-parse-pratt"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -413,7 +413,7 @@ name = "hnl-tool-fmt"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "compile-cuda"
+name = "tool-compile-cuda"
 version = "0.0.1"
 
 [[patch.unused]]
@@ -617,11 +617,11 @@ name = "handl-lib-comb"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-kit-pkg"
+name = "handl-plugin-lib-lang-lex"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-plugin-lib-lang-lex"
+name = "handl-kit-pkg"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -645,7 +645,7 @@ name = "handl-kit-prelude-lang"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "compile-triton"
+name = "tool-compile-triton"
 version = "0.0.1"
 
 [[patch.unused]]

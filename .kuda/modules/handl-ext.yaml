@@ -1,0 +1,239 @@
+name: handl-ext
+path: crates/handl-ext/Cargo.toml
+purpose: Shared ABI for `hnl` dynamic extensions — JSON over a C boundary (ADR-0149).
+api:
+- name: CandidateDir
+  kind: type
+  file: crates/handl-ext/src/discovery.rs
+  line: 53
+  module: handl-ext
+- name: CommandSpec
+  kind: type
+  file: crates/handl-ext/src/lib.rs
+  line: 76
+  module: handl-ext
+- name: DISPATCH_SYM
+  kind: const
+  file: crates/handl-ext/src/load.rs
+  line: 20
+  module: handl-ext
+- name: DirScan
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 199
+  module: handl-ext
+- name: DirSource
+  kind: type
+  file: crates/handl-ext/src/discovery.rs
+  line: 24
+  module: handl-ext
+- name: Discovery
+  kind: type
+  file: crates/handl-ext/src/discovery.rs
+  line: 110
+  module: handl-ext
+- name: DispatchFn
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 15
+  module: handl-ext
+- name: EX_SOFTWARE
+  kind: const
+  file: crates/handl-ext/src/rt.rs
+  line: 15
+  module: handl-ext
+- name: ExtError
+  kind: type
+  file: crates/handl-ext/src/lib.rs
+  line: 187
+  module: handl-ext
+- name: ExtRequest
+  kind: type
+  file: crates/handl-ext/src/lib.rs
+  line: 130
+  module: handl-ext
+- name: ExtResponse
+  kind: type
+  file: crates/handl-ext/src/lib.rs
+  line: 148
+  module: handl-ext
+- name: ExtensionManifest
+  kind: type
+  file: crates/handl-ext/src/lib.rs
+  line: 86
+  module: handl-ext
+- name: FREE_SYM
+  kind: const
+  file: crates/handl-ext/src/load.rs
+  line: 21
+  module: handl-ext
+- name: FreeFn
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 17
+  module: handl-ext
+- name: LoadFailure
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 190
+  module: handl-ext
+- name: LoadedExtension
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 27
+  module: handl-ext
+- name: MANIFEST_SYM
+  kind: const
+  file: crates/handl-ext/src/load.rs
+  line: 19
+  module: handl-ext
+- name: ManifestFn
+  kind: type
+  file: crates/handl-ext/src/load.rs
+  line: 13
+  module: handl-ext
+- name: c_str_arg
+  kind: function
+  file: crates/handl-ext/src/rt.rs
+  line: 107
+  module: handl-ext
+- name: candidate_dirs
+  kind: function
+  file: crates/handl-ext/src/discovery.rs
+  line: 72
+  module: handl-ext
+- name: command
+  kind: function
+  file: crates/handl-ext/src/lib.rs
+  line: 115
+  module: handl-ext
+- name: command_names
+  kind: function
+  file: crates/handl-ext/src/load.rs
+  line: 111
+  module: handl-ext
+- name: command_table
+  kind: function
+  file: crates/handl-ext/src/discovery.rs
+  line: 132
+  module: handl-ext
+- name: discover
+  kind: function
+  file: crates/handl-ext/src/discovery.rs
+  line: 151
+  module: handl-ext
+- name: discovery
+  kind: module
+  file: crates/handl-ext/src/lib.rs
+  line: 57
+  module: handl-ext
+- name: discovery_reports_missing_dirs_without_failing
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 182
+  module: handl-ext
+- name: dispatch
+  kind: function
+  file: crates/handl-ext/src/load.rs
+  line: 126
+  module: handl-ext
+- name: dispatch
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 52
+  module: handl-ext
+- name: dispatch_catches_panics
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 116
+  module: handl-ext
+- name: dispatch_inner
+  kind: function
+  file: crates/handl-ext/src/rt.rs
+  line: 81
+  module: handl-ext
+- name: dispatch_never_returns_null_on_bad_input
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 99
+  module: handl-ext
+- name: dispatch_propagates_error_code_and_stderr
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 92
+  module: handl-ext
+- name: dispatch_ptr
+  kind: function
+  file: crates/handl-ext/src/rt.rs
+  line: 43
+  module: handl-ext
+- name: dispatch_round_trips_request_and_response
+  kind: function
+  file: crates/handl-ext/tests/abi.rs
+  line: 75
+  module: handl-ext
+- name: error
+  kind: function
+  file: crates/handl-ext/src/lib.rs
+  line: 172
+  module: handl-ext
+- name: export
+  kind: macro
+  file: crates/handl-ext/src/lib.rs
+  line: 263
+  module: handl-ext
+- name: fallback_manifest
+  kind: function
+  file: crates/handl-ext/src/rt.rs
+  line: 141
+  module: handl-ext
+- name: find_command
+  kind: function
+  file: crates/handl-ext/src/discovery.rs
+  line: 124
+  module: handl-ext
+- name: fmt
+  kind: function
+  file: crates/handl-ext/src/load.rs
+  line: 40
+  module: handl-ext
+- name: free_ptr
+  kind: function
+  file: crates/handl-ext/src/rt.rs
+  line: 68
+  module: handl-ext
+api_omitted: 24
+deps:
+- libloading
+- serde
+- serde_json
+- thiserror
+- serde
+- discovery
+- load
+notes: ''
+verify:
+- crates/handl-ext/Cargo.toml
+- crates/handl-ext/src/discovery.rs
+- crates/handl-ext/src/lib.rs
+- crates/handl-ext/src/load.rs
+- crates/handl-ext/src/rt.rs
+- crates/handl-ext/tests/abi.rs
+provenance:
+  files:
+  - crates/handl-ext/Cargo.toml
+  - crates/handl-ext/src/discovery.rs
+  - crates/handl-ext/src/lib.rs
+  - crates/handl-ext/src/load.rs
+  - crates/handl-ext/src/rt.rs
+  - crates/handl-ext/tests/abi.rs
+  hashes:
+  - 1a2381e2713eb68dce508f37ab721c806161b007
+  - 066d41654c3fabf93d7540bbbe9840ba36ff390e
+  - d111932dddbee4eae2252214b2abe89e2346d029
+  - 7819e87b5f491367441b95714f79937e8a0acdde
+  - d1f27336930ba9bb4afcd0e2b4282037da2c9547
+  - 15d7b5ec2ce0cb4f5ca7836f5f1a82159ef8834f
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4

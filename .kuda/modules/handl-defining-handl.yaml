@@ -1,0 +1,61 @@
+name: handl-defining-handl
+path: crates/defining-handl/Cargo.toml
+purpose: The **self-hosting infrastructure** for ADR-0044 Phase 8.
+api:
+- name: CorpusCase
+  kind: type
+  file: crates/defining-handl/src/lib.rs
+  line: 63
+  module: handl-defining-handl
+- name: corpus
+  kind: function
+  file: crates/defining-handl/src/lib.rs
+  line: 148
+  module: handl-defining-handl
+- name: corpus_is_nonempty
+  kind: function
+  file: crates/defining-handl/src/lib_test.rs
+  line: 5
+  module: handl-defining-handl
+- name: handl-defining-handl
+  kind: module
+  file: crates/defining-handl/Cargo.toml
+  line: 1
+  module: handl-defining-handl
+- name: lib_test
+  kind: module
+  file: crates/defining-handl/src/lib.rs
+  line: 1110
+  module: handl-defining-handl
+- name: proc_corpus
+  kind: function
+  file: crates/defining-handl/src/lib.rs
+  line: 942
+  module: handl-defining-handl
+- name: proc_corpus_is_nonempty
+  kind: function
+  file: crates/defining-handl/src/lib_test.rs
+  line: 15
+  module: handl-defining-handl
+deps:
+- handl-language
+- serde_json
+- handl-language
+- serde_json
+notes: ''
+verify:
+- crates/defining-handl/Cargo.toml
+- crates/defining-handl/src/lib.rs
+- crates/defining-handl/src/lib_test.rs
+provenance:
+  files:
+  - crates/defining-handl/Cargo.toml
+  - crates/defining-handl/src/lib.rs
+  - crates/defining-handl/src/lib_test.rs
+  hashes:
+  - f6b7275b1863699bea652ed089bb11445c3c8e49
+  - 24174a5b436f27d7fc4bfdfe2d42c47e2d704f9b
+  - 7f0804829a84a4091a1f0155ac10c8546b26bb76
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4

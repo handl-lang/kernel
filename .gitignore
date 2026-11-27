@@ -1,2 +1,4 @@
 /target
 /project/
+.kuda/index.sqlite
+.kuda/meta.json

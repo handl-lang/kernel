@@ -1,0 +1,319 @@
+name: arrow-calculus-poc
+path: research/arrow-calculus-kernel-poc/Cargo.toml
+purpose: 'The arrow-calculus substrate of the Handl platform (ADR-0040): the'
+api:
+- name: ALLOC_BYTES
+  kind: const
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 25
+  module: arrow-calculus-poc
+- name: ALLOC_COUNT
+  kind: const
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 24
+  module: arrow-calculus-poc
+- name: ALL_OPS
+  kind: const
+  file: research/arrow-calculus-kernel-poc/src/effect_typing_tests.rs
+  line: 98
+  module: arrow-calculus-poc
+- name: ARITH_OPS
+  kind: const
+  file: research/arrow-calculus-kernel-poc/src/v0_1_surface.rs
+  line: 632
+  module: arrow-calculus-poc
+- name: AnalysisResult
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+  line: 234
+  module: arrow-calculus-poc
+- name: Analyzer
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 266
+  module: arrow-calculus-poc
+- name: Arrow
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+  line: 178
+  module: arrow-calculus-poc
+- name: ArrowComp
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/challenge13_tests.rs
+  line: 124
+  module: arrow-calculus-poc
+- name: ArrowComp
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/profunctor_structural_tests.rs
+  line: 125
+  module: arrow-calculus-poc
+- name: ArrowComp
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/structural_preservation_tests.rs
+  line: 119
+  module: arrow-calculus-poc
+- name: ArrowExpr
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/type_inference_tests.rs
+  line: 179
+  module: arrow-calculus-poc
+- name: ArrowLaw
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/decoupled_traits.rs
+  line: 119
+  module: arrow-calculus-poc
+- name: ArrowValue
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/main.rs
+  line: 95
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/evaluation_tests.rs
+  line: 32
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/liquid_types_comparison_tests.rs
+  line: 24
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/quantitative_comparison_tests.rs
+  line: 31
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/real_programs_tests.rs
+  line: 27
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/refinement_engine.rs
+  line: 32
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/refinement_inference_tests.rs
+  line: 31
+  module: arrow-calculus-poc
+- name: BaseTy
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/termination_analysis_tests.rs
+  line: 28
+  module: arrow-calculus-poc
+- name: Benchmark
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/quantitative_comparison_tests.rs
+  line: 420
+  module: arrow-calculus-poc
+- name: Binding
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/v0_1_surface.rs
+  line: 484
+  module: arrow-calculus-poc
+- name: Bundle
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/decoupled_traits.rs
+  line: 247
+  module: arrow-calculus-poc
+- name: BundleLaw
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/decoupled_traits.rs
+  line: 227
+  module: arrow-calculus-poc
+- name: CachingResolver
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/modules.rs
+  line: 232
+  module: arrow-calculus-poc
+- name: CatalogEntry
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/trait_catalog.rs
+  line: 739
+  module: arrow-calculus-poc
+- name: ChainResolver
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/modules.rs
+  line: 199
+  module: arrow-calculus-poc
+- name: Chunk
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 247
+  module: arrow-calculus-poc
+- name: ChunkTerm
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 235
+  module: arrow-calculus-poc
+- name: CleanGraph
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/type_level_effects.rs
+  line: 270
+  module: arrow-calculus-poc
+- name: Comp
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/effects_handlers_tests.rs
+  line: 123
+  module: arrow-calculus-poc
+- name: Comp
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/language_protocol_tests.rs
+  line: 113
+  module: arrow-calculus-poc
+- name: ComparisonRow
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+  line: 1283
+  module: arrow-calculus-poc
+- name: Computation
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+  line: 986
+  module: arrow-calculus-poc
+- name: Cons
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/type_level_effects.rs
+  line: 151
+  module: arrow-calculus-poc
+- name: Constraint
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/type_inference_tests.rs
+  line: 169
+  module: arrow-calculus-poc
+- name: Contract
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/modules.rs
+  line: 272
+  module: arrow-calculus-poc
+- name: ContractRegistry
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/modules.rs
+  line: 1392
+  module: arrow-calculus-poc
+- name: CountingAlloc
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  line: 27
+  module: arrow-calculus-poc
+- name: CountingResolver
+  kind: type
+  file: research/arrow-calculus-kernel-poc/src/modules.rs
+  line: 1208
+  module: arrow-calculus-poc
+api_omitted: 1783
+deps:
+- rusqlite
+- serde
+- serde_json
+- z3
+- trait_catalog
+- v0_1_surface
+- z3
+- modules
+- kernel
+- lexer
+- parser
+- decoupled_traits
+- rusqlite
+- bundled_effects
+- refinement_engine
+notes: ''
+verify:
+- research/arrow-calculus-kernel-poc/Cargo.toml
+- research/arrow-calculus-kernel-poc/src/main.rs
+- research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+- research/arrow-calculus-kernel-poc/src/arrow_apply_tests.rs
+- research/arrow-calculus-kernel-poc/src/bundled_effects.rs
+- research/arrow-calculus-kernel-poc/src/cascade_check.rs
+- research/arrow-calculus-kernel-poc/src/challenge13_tests.rs
+- research/arrow-calculus-kernel-poc/src/contract_inference_tests.rs
+- research/arrow-calculus-kernel-poc/src/decoupled_pipeline.rs
+- research/arrow-calculus-kernel-poc/src/decoupled_traits.rs
+provenance:
+  files:
+  - research/arrow-calculus-kernel-poc/Cargo.toml
+  - research/arrow-calculus-kernel-poc/src/ai_code_structure_tests.rs
+  - research/arrow-calculus-kernel-poc/src/arrow_apply_tests.rs
+  - research/arrow-calculus-kernel-poc/src/bundled_effects.rs
+  - research/arrow-calculus-kernel-poc/src/cascade_check.rs
+  - research/arrow-calculus-kernel-poc/src/challenge13_tests.rs
+  - research/arrow-calculus-kernel-poc/src/contract_inference_tests.rs
+  - research/arrow-calculus-kernel-poc/src/decoupled_pipeline.rs
+  - research/arrow-calculus-kernel-poc/src/decoupled_traits.rs
+  - research/arrow-calculus-kernel-poc/src/dynamic_handlers.rs
+  - research/arrow-calculus-kernel-poc/src/effect_typing_tests.rs
+  - research/arrow-calculus-kernel-poc/src/effects_handlers_tests.rs
+  - research/arrow-calculus-kernel-poc/src/evaluation_tests.rs
+  - research/arrow-calculus-kernel-poc/src/examples_check.rs
+  - research/arrow-calculus-kernel-poc/src/handle_elimination_tests.rs
+  - research/arrow-calculus-kernel-poc/src/higher_order_tests.rs
+  - research/arrow-calculus-kernel-poc/src/language_protocol_tests.rs
+  - research/arrow-calculus-kernel-poc/src/law_inference.rs
+  - research/arrow-calculus-kernel-poc/src/liquid_types_comparison_tests.rs
+  - research/arrow-calculus-kernel-poc/src/main.rs
+  - research/arrow-calculus-kernel-poc/src/modules.rs
+  - research/arrow-calculus-kernel-poc/src/poly_proof_graph_tests.rs
+  - research/arrow-calculus-kernel-poc/src/polymorphic_tests.rs
+  - research/arrow-calculus-kernel-poc/src/profunctor_structural_tests.rs
+  - research/arrow-calculus-kernel-poc/src/proof_graph_tests.rs
+  - research/arrow-calculus-kernel-poc/src/quantified_laws.rs
+  - research/arrow-calculus-kernel-poc/src/quantitative_comparison_tests.rs
+  - research/arrow-calculus-kernel-poc/src/real_programs_tests.rs
+  - research/arrow-calculus-kernel-poc/src/recursion_tests.rs
+  - research/arrow-calculus-kernel-poc/src/refinement_engine.rs
+  - research/arrow-calculus-kernel-poc/src/refinement_inference_tests.rs
+  - research/arrow-calculus-kernel-poc/src/speculative_compilation.rs
+  - research/arrow-calculus-kernel-poc/src/structural_preservation_tests.rs
+  - research/arrow-calculus-kernel-poc/src/termination_analysis_tests.rs
+  - research/arrow-calculus-kernel-poc/src/trait_catalog.rs
+  - research/arrow-calculus-kernel-poc/src/trait_catalog_sqlite.rs
+  - research/arrow-calculus-kernel-poc/src/type_inference_tests.rs
+  - research/arrow-calculus-kernel-poc/src/type_level_effects.rs
+  - research/arrow-calculus-kernel-poc/src/v0_1_surface.rs
+  - research/arrow-calculus-kernel-poc/src/v0_1_surface_tests.rs
+  hashes:
+  - 0c8317356b3253c656acf0a4ea33745e009a3d2e
+  - 26719e2a0f22da18e796de7fa121ea86ab860ba4
+  - 9b018207035fe1e235b484a359dda7ca62c9114f
+  - 5af0b9dc12e9f133f32e497d49f653d6923cdeac
+  - ab91f63ba73cb44deb5398575da9103692c2ac56
+  - 11520ca93d97f012ae68bd03a7716e50b3f433e2
+  - a7f777418fa00ed7aa9ff81ce748f2b603560980
+  - 073de532cb73439b73b8d6e2576eaee91bd49f8a
+  - ab42f81b0522a346b7c89f114268c9f45a969cfc
+  - 193cfc32d28779b4111f2e07822288671504dbb8
+  - e20dd9b6463c459057d991d4b31c70fda8d92648
+  - 24f201a5d6810e0f156252e5a6366c93367f98ce
+  - 69848ac27fda706f751f793f23723c86a7c2bc9e
+  - 1a042bc228823a95ade224bada4545153af06c89
+  - a2de20c9e6b6dc714bde9c4fc211ec2b36b54735
+  - 2b13e2ea90ac702329b2bd8918eef184795d7466
+  - f973fc8e20b305d3383ced74cb41d69e5b69eb71
+  - e6827d8415c22f2c0fe688ea3135ba173d30c348
+  - 00cf21980aa9f62d73374d91fb5dcd6fd61b5b8c
+  - 938fdad9647426f66213ac160cedd7984d24287f
+  - 7b74d48f3ac2f81f8a885f8da4bb891a3eb26e27
+  - 3e48760f2bb95fe28b3a7bea96f7fa145dc0bad6
+  - ac90229efc0d3ea86d19b74af6993e121898c171
+  - 3ec077f0fdadb29109a28be64bd0b0b3086a295d
+  - ec0494628078df0eab407089b36484f345dee9d1
+  - 72aa1e8d51ec10896d4effef55ed05768634a794
+  - b0b6756b3c579cb737fb499d1be580d1595bcc54
+  - 74c281fc8dcfc633cb97a5b80fa7454012bcb184
+  - a27af43b71f5c19c1bd9246d93750e5b4c598657
+  - d39f54644b455dd5a5c0fdb54f550e382791927c
+  - 341b9fe937a4d78e94a958f98c2c3026d2c5108c
+  - e1fc68811f7886789487999ec9b9c5e1dabacc91
+  - ac18d54a991e114bbe3c684e9cb5d06f2d74b1ea
+  - cdbb42ba4116294bc7cfa980ac5cc53a3c16cef4
+  - 4df7c522a14f93c3d31bd290461a72af125afaf2
+  - 8bdcd41aaad231e13df74e7fb885e78609055f94
+  - 577289cfd8a6530163b5651f2ca324c5677d4b83
+  - ba2dad20908c4cfa0b862c63992f7365b6ccf0d4
+  - f31a6c41f83b242d183c562801fbf983add71b67
+  - a5e516b8cbf77f61d35677fb0523d3fc80a76048
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4

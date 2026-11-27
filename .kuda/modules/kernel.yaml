@@ -1,13 +1,27 @@
 name: kernel
 path: Cargo.toml
-purpose: kernel
+purpose: 'The arrow-calculus substrate of the Handl platform (ADR-0040): the'
 api:
 - name: kernel
   kind: module
   file: Cargo.toml
   line: 1
   module: kernel
-deps: []
+deps:
+- Language
+- lex
+- parse
+- eval
+- Value
+- hnl
+- host
+- Term
+- TermData
+- Model
+- ModelCtx
+- Op
+- OpRegistry
+- OpContext
 notes: ''
 verify:
 - Cargo.toml
@@ -15,7 +29,7 @@ provenance:
   files:
   - Cargo.toml
   hashes:
-  - cd25fe16455d5172837a89ed7df7f961a63c993f
-  commit_sha: dca68a81fa9be7ac362ce26637155647fb7a70e3
-  generated_at: '1792281103'
-  generator: kuda-template/0.1.0
+  - b32c8bf55acf89fbb72dd983c6cb7938f7cafbe5
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4

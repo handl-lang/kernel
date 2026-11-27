@@ -1,0 +1,29 @@
+name: handl-lib-prim
+path: crates/prim/Cargo.toml
+purpose: 'prim: Handl stdlib port (ADR-0128 split).'
+api:
+- name: PRIM_HNL
+  kind: const
+  file: crates/prim/src/lib.rs
+  line: 5
+  module: handl-lib-prim
+- name: handl-lib-prim
+  kind: module
+  file: crates/prim/Cargo.toml
+  line: 1
+  module: handl-lib-prim
+deps: []
+notes: ''
+verify:
+- crates/prim/Cargo.toml
+- crates/prim/src/lib.rs
+provenance:
+  files:
+  - crates/prim/Cargo.toml
+  - crates/prim/src/lib.rs
+  hashes:
+  - 19b3c89408126756d1f1643f5eb754ab0ea215d6
+  - d03952339d2a292d3fd16fddb42b28d26676a73b
+  commit_sha: f5db48c491e9b221d0021f57fe2969363501a646
+  generated_at: '1795484422'
+  generator: kuda-template/0.1.4
