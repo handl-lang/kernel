@@ -1,11 +1,13 @@
 # workflows/gate.yaml — per-push gate for handl-lang/kernel.
 #
-# The repo's real gate is scripts/ci.sh (the bupha shell-runner
-# pipeline: cargo check + test over the workspace — see its header
-# for the stage list). This campaign is the
-# workflows/gate.yaml port of that contract: init → run → report.
-# scripts/ci.sh owns its own ensure_siblings()/CARGO_TARGET_DIR/env
-# plumbing, so no ensure-siblings node is needed here.
+# Composed entirely from the handl-gates bundle (handl-lang/workspace
+# workflows/): gate.init validates inputs → gate.ensure restores the
+# worktree sibling layout + shared CARGO_TARGET_DIR env file (no-op in
+# a main checkout) → gate.run is the lib/rust-check-test.node.yml
+# fragment — the faithful scripts/ci.sh "check + test" port (cargo
+# check --workspace --all-targets; cargo test --workspace
+# --no-fail-fast, memory-capped threads, sccache/auth env) →
+# gate.report reads the results record for the terminal verdict.
 #
 # Bupha/the fleet runner invokes:
 #
@@ -25,13 +27,17 @@ result:
     conclusion: failure
   - event: gate.init.failed
     conclusion: failure
-  - event: gate.run.failed
+  - event: ensure.failed
     conclusion: failure
 
 capabilities:
   env:
     - GATE_REPO
     - GATE_RESULTS
+    - CI_JOBS
+    - CI_BUILD_JOBS
+    - HANDL_TOKEN
+    - BUPHA_TOKEN
 
 nodes:
   # --- init: validate inputs, fresh results file --------------------
@@ -45,7 +51,7 @@ nodes:
         REPO="${config.gate.repo:-${env("GATE_REPO","")}}";
         [ -n "$REPO" ] || { echo "gate.repo is required — set GATE_REPO or config.gate.repo to an absolute checkout path"; exit 1; };
         [ -d "$REPO" ] || { echo "no such directory: $REPO"; exit 1; };
-        [ -f "$REPO/scripts/ci.sh" ] || { echo "no scripts/ci.sh in $REPO — gate target moved?"; exit 1; };
+        [ -f "$REPO/Cargo.toml" ] || { echo "no Cargo.toml in $REPO — gate target moved?"; exit 1; };
         RES="${config.gate.results:-${env("GATE_RESULTS","$HOME/.local/share/handl-gates/kernel.results.jsonl")}}";
         mkdir -p "$(dirname "$RES")";
         : > "$RES";
@@ -55,29 +61,25 @@ nodes:
         "0": gate.due
         default: gate.init.failed
 
-  # --- run: the repo's own ci.sh pipeline, verbatim ----------------
-  - id: gate.run
-    driver: shell
+  # --- ensure: sibling layout + shared cargo target env ------------
+  - include: tamias:handl-gates@0.3.5//lib/ensure-siblings.node.yml
+    id: gate.ensure
     on: [gate.due]
+    emits: [ensure.done, ensure.failed]
+    params:
+      repo: '${config.gate.repo:-${env("GATE_REPO","")}}'
+      emit:
+        "0": ensure.done
+        default: ensure.failed
+
+  # --- run: the ci.sh check+test lane, as a bundle fragment ---------
+  - include: tamias:handl-gates@0.3.5//lib/rust-check-test.node.yml
+    id: gate.run
+    on: [ensure.done]
     emits: [gate.done, gate.failed]
     params:
       repo: '${config.gate.repo:-${env("GATE_REPO","")}}'
       results: '${config.gate.results:-${env("GATE_RESULTS","$HOME/.local/share/handl-gates/kernel.results.jsonl")}}'
-      timeout: 7200
-      cmd: |
-        set -uo pipefail
-        REPO="${params.repo}"
-        RESULTS="${params.results}"
-        START=$(date +%s)
-        cd "$REPO" && REPO="$(pwd)" || { echo "no such directory: ${params.repo}"; exit 1; }
-        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin"
-        bash scripts/ci.sh
-        rc=$?
-        if [ -n "$RESULTS" ]; then
-          esc=$(printf '%s' "$REPO" | sed 's/\\/\\\\/g; s/"/\\"/g')
-          printf '{"family":"rust","repo":"%s","rc":%s,"secs":%s}\n' "$esc" "$rc" "$(( $(date +%s) - START ))" >> "$RESULTS" 2>/dev/null || true
-        fi
-        exit $rc
       emit:
         "0": gate.done
         default: gate.failed
